@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toItem, toItemPayload, uniqueTags, type ItemRow } from './mapRow'
+import { toItem, toItemInsert, toItemUpdate, uniqueTags, type ItemRow } from './mapRow'
 
 const baseRow: ItemRow = {
   id: 'i1',
@@ -42,8 +42,10 @@ describe('toItem', () => {
     expect(item.seasons).toEqual(['fall'])
   })
 
-  it('treats null arrays as empty', () => {
-    const item = toItem({ ...baseRow, colors: null, seasons: null, tags: null })
+  it('handles empty arrays', () => {
+    // Not null arrays: colors/seasons/tags are `not null default '{}'`, and the
+    // generated row types carry that through, so the empty case is the only one.
+    const item = toItem({ ...baseRow, colors: [], seasons: [], tags: [] })
     expect(item.colors).toEqual([])
     expect(item.seasons).toEqual([])
     expect(item.tags).toEqual([])
@@ -61,16 +63,16 @@ describe('toItem', () => {
   })
 })
 
-describe('toItemPayload', () => {
+describe('toItemInsert', () => {
   it('trims the title and stamps the owner', () => {
-    const payload = toItemPayload({ title: '  후드  ', categoryId: 'top.sweatshirt' }, 'u9')
+    const payload = toItemInsert({ title: '  후드  ', categoryId: 'top.sweatshirt' }, 'u9')
     expect(payload.title).toBe('후드')
     expect(payload.user_id).toBe('u9')
   })
 
   it('normalises blank optional text to null', () => {
     // "no brand" must have one representation, not two.
-    const payload = toItemPayload(
+    const payload = toItemInsert(
       { title: '후드', categoryId: 'top.sweatshirt', brand: '   ', memo: '' },
       'u9',
     )
@@ -79,7 +81,7 @@ describe('toItemPayload', () => {
   })
 
   it('defaults absent collections rather than sending undefined', () => {
-    const payload = toItemPayload({ title: '후드', categoryId: 'top.sweatshirt' }, 'u9')
+    const payload = toItemInsert({ title: '후드', categoryId: 'top.sweatshirt' }, 'u9')
     expect(payload.colors).toEqual([])
     expect(payload.seasons).toEqual([])
     expect(payload.tags).toEqual([])
@@ -88,11 +90,30 @@ describe('toItemPayload', () => {
 
   it('keeps a zero price instead of nulling it', () => {
     // Free garments are real — a gift or a hand-me-down.
-    const payload = toItemPayload(
+    const payload = toItemInsert(
       { title: '선물', categoryId: 'top.knit', price: 0 },
       'u9',
     )
     expect(payload.price).toBe(0)
+  })
+})
+
+describe('toItemUpdate', () => {
+  it('omits user_id so ownership cannot be reassigned', () => {
+    // Sending it would at best be a no-op and at worst trip the RLS check.
+    const payload = toItemUpdate({ title: '후드', categoryId: 'top.sweatshirt' })
+    expect(payload).not.toHaveProperty('user_id')
+  })
+
+  it('still writes the editable columns', () => {
+    const payload = toItemUpdate({
+      title: '후드',
+      categoryId: 'top.sweatshirt',
+      brand: '무신사',
+      price: 39000,
+    })
+    expect(payload.brand).toBe('무신사')
+    expect(payload.price).toBe(39000)
   })
 })
 

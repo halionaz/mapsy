@@ -4,9 +4,9 @@ import type { Item, ItemDraft, ItemStatus, ItemWithImages } from '@/types/item'
 import {
   toItem,
   toItemImage,
-  toItemPayload,
-  type ItemImageRow,
-  type ItemRow,
+  toItemInsert,
+  toItemUpdate,
+  type ItemImageInsert,
 } from './mapRow'
 
 /**
@@ -45,14 +45,14 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
   if (imagesResult.error) throw imagesResult.error
 
   const imagesByItem = new Map<string, ReturnType<typeof toItemImage>[]>()
-  for (const row of (imagesResult.data ?? []) as ItemImageRow[]) {
+  for (const row of imagesResult.data ?? []) {
     const image = toItemImage(row)
     const list = imagesByItem.get(image.itemId)
     if (list) list.push(image)
     else imagesByItem.set(image.itemId, [image])
   }
 
-  const items = ((itemsResult.data ?? []) as ItemRow[]).map((row) => ({
+  const items = (itemsResult.data ?? []).map((row) => ({
     ...toItem(row),
     images: imagesByItem.get(row.id) ?? [],
   }))
@@ -125,12 +125,12 @@ export async function createItem(
 
   const { data, error } = await supabase
     .from('items')
-    .insert(toItemPayload(draft, userId))
+    .insert(toItemInsert(draft, userId))
     .select(ITEM_COLUMNS)
     .single()
 
   if (error) throw error
-  const item = toItem(data as ItemRow)
+  const item = toItem(data)
 
   try {
     const images = await uploadPhotos(item.id, userId, photos)
@@ -166,7 +166,7 @@ async function uploadPhotos(
 ) {
   const supabase = getSupabase()
   const storage = supabase.storage.from(STORAGE_BUCKET)
-  const rows: Record<string, unknown>[] = []
+  const rows: ItemImageInsert[] = []
   const uploaded: string[] = []
 
   try {
@@ -204,7 +204,7 @@ async function uploadPhotos(
 
     const { data, error } = await supabase.from('item_images').insert(rows).select(IMAGE_COLUMNS)
     if (error) throw error
-    return ((data ?? []) as ItemImageRow[]).map(toItemImage)
+    return (data ?? []).map(toItemImage)
   } catch (uploadError) {
     if (uploaded.length > 0) {
       // Best effort: the upload failure is what the user needs to hear about,
@@ -253,21 +253,16 @@ export async function deleteItemImage(
   await supabase.storage.from(STORAGE_BUCKET).remove([paths.path, paths.thumbPath])
 }
 
-export async function updateItem(id: string, draft: ItemDraft, userId: string): Promise<Item> {
-  const payload = toItemPayload(draft, userId)
-  // user_id is immutable; sending it would be a no-op at best and a rejected
-  // RLS check at worst.
-  delete payload.user_id
-
+export async function updateItem(id: string, draft: ItemDraft): Promise<Item> {
   const { data, error } = await getSupabase()
     .from('items')
-    .update(payload)
+    .update(toItemUpdate(draft))
     .eq('id', id)
     .select(ITEM_COLUMNS)
     .single()
 
   if (error) throw error
-  return toItem(data as ItemRow)
+  return toItem(data)
 }
 
 export async function setFavorite(id: string, isFavorite: boolean): Promise<void> {

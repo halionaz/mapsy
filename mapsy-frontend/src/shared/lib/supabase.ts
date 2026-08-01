@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
+import type { Database } from '@/types/database'
+
 /**
  * Supabase client — the only backend mapsy talks to (PRD §8.3).
  *
@@ -23,9 +25,9 @@ const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
 export const isSupabaseConfigured = Boolean(url && publishableKey)
 
-let client: SupabaseClient | null = null
+let client: SupabaseClient<Database> | null = null
 
-export function getSupabase(): SupabaseClient {
+export function getSupabase(): SupabaseClient<Database> {
   // Checks the values directly rather than the boolean above, so the compiler
   // narrows them to `string` for the createClient call below. Going through
   // `isSupabaseConfigured` would leave them `string | undefined` and the guard
@@ -37,7 +39,7 @@ export function getSupabase(): SupabaseClient {
     )
   }
 
-  client ??= createClient(url, publishableKey, {
+  client ??= createClient<Database>(url, publishableKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,

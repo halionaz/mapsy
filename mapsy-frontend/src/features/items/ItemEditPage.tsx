@@ -28,7 +28,7 @@ export function ItemEditPage() {
   function handleSubmit({ photos: _photos, ...draft }: ItemFormValues) {
     if (!userId || !item) return
     update.mutate(
-      { id: item.id, draft, userId },
+      { id: item.id, draft },
       { onSuccess: () => navigate(`/items/${item.id}`, { replace: true }) },
     )
   }

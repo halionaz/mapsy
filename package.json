@@ -15,6 +15,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "test:db": "bash supabase/tests/run.sh"
+    "test:db": "bash supabase/tests/run.sh",
+    "types:gen": "supabase gen types typescript --linked > mapsy-frontend/src/types/database.ts"
   }
 }

@@ -1,6 +1,7 @@
 import { COLOR_IDS, type ColorId } from '@/shared/constants/colors'
 import { SEASON_IDS, type SeasonId } from '@/shared/constants/seasons'
 import { isSubcategoryId, type SubcategoryId } from '@/shared/constants/categories'
+import type { Database } from '@/types/database'
 import type { Item, ItemDraft, ItemImage, ItemStatus } from '@/types/item'
 
 /**
@@ -15,48 +16,27 @@ import type { Item, ItemDraft, ItemImage, ItemStatus } from '@/types/item'
  * type that promises they cannot exist.
  */
 
-export interface ItemRow {
-  id: string
-  user_id: string
-  title: string
-  category_id: string
-  brand: string | null
-  size: string | null
-  fit: string | null
-  colors: string[] | null
-  seasons: string[] | null
-  price: number | null
-  purchased_at: string | null
-  purchase_place: string | null
-  memo: string | null
-  tags: string[] | null
-  status: string
-  is_favorite: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface ItemImageRow {
-  id: string
-  item_id: string
-  user_id: string
-  path: string
-  thumb_path: string
-  sort_order: number
-  width: number | null
-  height: number | null
-  created_at: string
-}
+// Derived from the live schema (`pnpm types:gen`) rather than hand-written, so a
+// column rename becomes a compile error here instead of a runtime surprise.
+export type ItemRow = Database['public']['Tables']['items']['Row']
+export type ItemImageRow = Database['public']['Tables']['item_images']['Row']
+export type ItemInsert = Database['public']['Tables']['items']['Insert']
+export type ItemUpdate = Database['public']['Tables']['items']['Update']
+export type ItemImageInsert = Database['public']['Tables']['item_images']['Insert']
 
 const COLOR_SET = new Set<string>(COLOR_IDS)
 const SEASON_SET = new Set<string>(SEASON_IDS)
 
-function toColors(value: string[] | null): ColorId[] {
-  return (value ?? []).filter((c): c is ColorId => COLOR_SET.has(c))
+// The array columns are `not null default '{}'`, which the generated row types
+// carry through — so these take `string[]`, not `string[] | null`. Values are
+// still filtered: the database constrains membership, but a row written by a
+// build with a wider palette must not smuggle an unknown id into ColorId.
+function toColors(value: string[]): ColorId[] {
+  return value.filter((c): c is ColorId => COLOR_SET.has(c))
 }
 
-function toSeasons(value: string[] | null): SeasonId[] {
-  return (value ?? []).filter((s): s is SeasonId => SEASON_SET.has(s))
+function toSeasons(value: string[]): SeasonId[] {
+  return value.filter((s): s is SeasonId => SEASON_SET.has(s))
 }
 
 function toStatus(value: string): ItemStatus {
@@ -87,7 +67,7 @@ export function toItem(row: ItemRow): Item {
     purchasedAt: row.purchased_at,
     purchasePlace: row.purchase_place,
     memo: row.memo,
-    tags: row.tags ?? [],
+    tags: row.tags,
     status: toStatus(row.status),
     isFavorite: row.is_favorite,
     createdAt: row.created_at,
@@ -110,18 +90,14 @@ export function toItemImage(row: ItemImageRow): ItemImage {
 }
 
 /**
- * Insert/update payload for a draft.
+ * The columns a draft writes, shared by insert and update.
  *
  * Blank optional text becomes null rather than an empty string, so "no brand"
  * has one representation instead of two — otherwise filters and `is null`
  * queries have to check for both.
  */
-export function toItemPayload(
-  draft: ItemDraft,
-  userId: string,
-): Record<string, unknown> {
+function toItemFields(draft: ItemDraft) {
   return {
-    user_id: userId,
     title: draft.title.trim(),
     category_id: draft.categoryId,
     brand: blankToNull(draft.brand),
@@ -133,11 +109,24 @@ export function toItemPayload(
     purchased_at: blankToNull(draft.purchasedAt),
     purchase_place: blankToNull(draft.purchasePlace),
     memo: blankToNull(draft.memo),
-    // Tags are trimmed and de-duplicated here so the autocomplete built from
-    // `distinct unnest(tags)` doesn't offer "출근용" twice.
+    // Tags are trimmed and de-duplicated here so the autocomplete derived from
+    // the loaded collection doesn't offer "출근용" twice.
     tags: uniqueTags(draft.tags ?? []),
     is_favorite: draft.isFavorite ?? false,
   }
+}
+
+export function toItemInsert(draft: ItemDraft, userId: string): ItemInsert {
+  return { ...toItemFields(draft), user_id: userId }
+}
+
+/**
+ * `user_id` is intentionally absent: ownership is fixed at creation, and sending
+ * it on an update would at best be a no-op and at worst trip the RLS check.
+ * Leaving it out of the type is stronger than deleting the key afterwards.
+ */
+export function toItemUpdate(draft: ItemDraft): ItemUpdate {
+  return toItemFields(draft)
 }
 
 function blankToNull(value: string | null | undefined): string | null {

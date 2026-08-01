@@ -11,7 +11,7 @@ mapsy 내 옷장의 프론트엔드. Vite + React + TypeScript SPA이며 PWA로 
 pnpm install          # prepare 훅이 panda codegen까지 돌림
 
 cp mapsy-frontend/.env.example mapsy-frontend/.env.local
-# Supabase 대시보드(Project Settings → API)에서 값을 채운다
+# Supabase 대시보드(Project Settings → API Keys)에서 값을 채운다
 
 pnpm dev
 ```
@@ -36,6 +36,7 @@ UI를 그대로 만들 수 있다.
 | `pnpm codegen` | Panda CSS 재생성 |
 | `pnpm lint` | oxlint |
 | `pnpm test` | vitest (순수 로직) |
+| `pnpm types:gen` | Supabase 스키마에서 DB 타입 재생성 |
 
 ## 구조
 
@@ -59,9 +60,12 @@ src/
 **결정이 들어있는 로직은 순수 함수로 분리해 테스트한다** — 초성 검색, 필터·정렬, DB 행 매핑,
 이미지 리사이즈/크롭 기하. 이 부분은 Supabase 없이 돌아가고 실제로 검증돼 있다.
 
-**네트워크 경로(`api.ts`, `queries.ts`)와 화면은 테스트가 없다.** Supabase 프로젝트가 붙기
-전에는 end-to-end로 확인할 수 없어서, 타입 체크와 빌드까지만 통과한 상태다. 프로젝트를
-연결한 뒤 등록 → 조회 → 편집 → 삭제를 한 번 수동으로 밟아봐야 한다.
+**네트워크 경로(`api.ts`, `queries.ts`)와 화면은 자동 테스트가 없다.** 다만 행/삽입 타입은
+`src/types/database.ts`(실제 스키마에서 생성)에서 오므로 컬럼 이름과 nullability는 컴파일
+타임에 검증된다. 나머지는 손으로 밟아봐야 한다 — 등록 → 조회 → 편집 → 삭제.
+
+스키마를 바꾸면 `pnpm types:gen`으로 타입을 다시 생성한다. `src/types/database.ts`는
+생성물이니 직접 고치지 않는다.
 
 ## 스타일링
 
@@ -80,8 +84,6 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
 - **편집 화면에서 사진 교체·순서 변경 불가.** 스토리지에 이미 올라간 것과 대조해
   업로드·삭제·`sort_order`를 조정해야 해서 등록 흐름의 변형이 아니라 별도 작업이다.
 - 로그아웃 (설정 화면이 스텁)
-- Supabase 생성 타입 — `src/types/item.ts`는 아직 손으로 스키마를 미러링함.
-  프로젝트를 만든 뒤 `supabase gen types typescript`로 대체할 것
 - **PWA 아이콘이 SVG 하나뿐.** `manifest.icons`가 SVG라 Android 설치 배너 조건을 못 채울 수
   있고, iOS는 SVG `apple-touch-icon`을 무시하므로 아예 링크를 걸지 않았다. 192·512 PNG와
   maskable, 180 PNG(apple-touch-icon)가 필요하다.

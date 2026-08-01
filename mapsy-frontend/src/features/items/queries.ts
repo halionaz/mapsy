@@ -162,8 +162,8 @@ export function useUpdateItem() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (vars: { id: string; draft: ItemDraft; userId: string }) =>
-      api.updateItem(vars.id, vars.draft, vars.userId),
+    mutationFn: (vars: { id: string; draft: ItemDraft }) =>
+      api.updateItem(vars.id, vars.draft),
     onSuccess: (updated) => {
       patchCache(queryClient, (entries) =>
         entries.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)),
