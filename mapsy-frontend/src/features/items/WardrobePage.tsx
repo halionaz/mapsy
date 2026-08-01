@@ -6,6 +6,7 @@ import { hstack, vstack } from 'styled-system/patterns'
 import { CATEGORY_GROUPS, type CategoryGroupId } from '@/shared/constants/categories'
 import { applyFilters } from '@/features/filters/applyFilters'
 import { EMPTY_FILTERS, SORT_OPTIONS, type SortId } from '@/features/filters/model'
+import { errorMessage } from '@/shared/lib/errorMessage'
 import { chipStyle } from '@/shared/ui/chipStyle'
 import { ItemCard, PendingCard } from './ItemCard'
 import { usePendingUploads } from './pendingUploads'
@@ -144,7 +145,7 @@ export function WardrobePage() {
               옷장을 불러오지 못했어요.
             </p>
             <p className={css({ fontSize: 'xs', color: 'fg.muted' })}>
-              {error instanceof Error ? error.message : String(error)}
+              {errorMessage(error)}
             </p>
           </Centered>
         ) : entries.length === 0 && pending.length === 0 ? (

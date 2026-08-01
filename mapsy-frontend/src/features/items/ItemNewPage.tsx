@@ -10,9 +10,11 @@ import { useCreateItem } from './queries'
 /**
  * 옷 등록 (PRD §6.2).
  *
- * Submitting navigates straight back to the wardrobe: the card is already on the
- * grid from the optimistic cache entry, and the upload continues behind it. Only
- * the failure case needs the user's attention again, and the card carries that.
+ * Submitting navigates straight back to the wardrobe: the pending-upload store
+ * puts a card on the grid immediately and the upload continues behind it. Only
+ * the failure case needs the user's attention again, and the card carries that
+ * — including the reason, since a constraint violation fails the same way on
+ * every retry.
  */
 export function ItemNewPage() {
   const navigate = useNavigate()

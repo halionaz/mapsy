@@ -6,9 +6,17 @@
 -- does, which is what makes it usable as a pre-commit check.
 
 -- Roles are cluster-wide, so a second run in the same container finds them.
-do $$ begin
-  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
-  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
+-- `service_role` is included because migrations grant to it; leaving it out
+-- would make them fail here for a reason that does not exist on Supabase.
+do $$
+declare
+  r text;
+begin
+  foreach r in array array['anon', 'authenticated', 'service_role'] loop
+    if not exists (select 1 from pg_roles where rolname = r) then
+      execute format('create role %I', r);
+    end if;
+  end loop;
 end $$;
 
 create schema if not exists auth;

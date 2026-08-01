@@ -18,6 +18,11 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30 * 60 * 1000,
+      // Longer than staleTime on purpose. The default 5 minutes evicts the
+      // wardrobe while the registration form is open — taking and cropping five
+      // photos routinely takes longer — and a mutation landing against an
+      // evicted entry has nothing to patch.
+      gcTime: 60 * 60 * 1000,
       // Thumbnails are signed URLs with a finite life (see SIGNED_URL_TTL in
       // api.ts). Leaving focus refetch off meant a PWA left open long enough
       // came back to a grid of broken images with no way to recover short of a

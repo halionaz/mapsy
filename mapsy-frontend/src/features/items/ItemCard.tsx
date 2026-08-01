@@ -137,6 +137,11 @@ export function PendingCard({ pending, onRetry, onDiscard }: PendingCardProps) {
       {failed ? (
         <div className={vstack({ gap: '1', alignItems: 'stretch' })}>
           <p className={css({ fontSize: 'xs', color: 'danger' })}>업로드 실패</p>
+          {pending.error && (
+            <p className={css({ fontSize: '2xs', color: 'fg.muted', wordBreak: 'break-word' })}>
+              {pending.error}
+            </p>
+          )}
           <div className={hstack({ gap: '2' })}>
             <TextButton onClick={() => onRetry(pending.tempId)} tone="accent">
               재시도

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { errorMessage } from '@/shared/lib/errorMessage'
 import { isSupabaseConfigured } from '@/shared/lib/supabase'
 import type { ItemDraft, ItemStatus } from '@/types/item'
 import * as api from './api'
@@ -38,6 +39,14 @@ export function useWardrobe() {
   })
 }
 
+/**
+ * Patches the cached collection in place.
+ *
+ * Returning the input untouched when there is no cache entry is deliberate:
+ * react-query discards a write whose updater returns undefined, and inventing an
+ * array here would publish a "wardrobe" containing only the row we just touched.
+ * Callers that must not lose their write invalidate instead — see below.
+ */
 function patchCache(
   queryClient: ReturnType<typeof useQueryClient>,
   update: (entries: WardrobeItem[]) => WardrobeItem[],
@@ -58,17 +67,33 @@ export function useCreateItem() {
       addPending({ ...pending, state: 'uploading' })
     },
 
-    onSuccess: (created, { pending }) => {
-      // Prepend rather than invalidate: the server order is newest-first and
-      // this is the newest, so a round trip would only re-fetch what we hold.
+    onSuccess: async (created, { pending }) => {
+      // A plain prepend is not enough to guarantee the item stays visible.
+      // Two ways it disappears: the cache entry may have been garbage collected
+      // while the form was open (gcTime is 5 minutes and taking photos takes
+      // longer), in which case the write is dropped; or a refetch may already be
+      // in flight — now likelier, since this PR turned on refetchOnWindowFocus —
+      // and its response overwrites the prepend when it lands.
+      //
+      // Either way `removePending` then takes the card away, revoking the
+      // preview URLs with it, and the registration vanishes exactly as it did
+      // before the pending store existed.
+      //
+      // Cancelling first stops the in-flight response from winning; invalidating
+      // afterwards covers the cold-cache case by refetching for real.
+      await queryClient.cancelQueries({ queryKey: WARDROBE_KEY })
       patchCache(queryClient, (entries) => [created, ...entries])
       removePending(pending.tempId)
+      void queryClient.invalidateQueries({ queryKey: WARDROBE_KEY })
     },
 
-    onError: (_error, { pending }) => {
+    onError: (error, { pending }) => {
       // The entry stays visible rather than vanishing — the retry affordance has
       // to be attached to something the user can see, and its blobs stay with it.
-      markPendingState(pending.tempId, 'failed')
+      // The reason travels with it: a constraint violation ("메모가 너무 김")
+      // fails identically on every retry, and without the message the user has
+      // no way to know that retrying is pointless.
+      markPendingState(pending.tempId, 'failed', errorMessage(error))
     },
   })
 }
@@ -109,7 +134,11 @@ export function useSetFavorite() {
   return useMutation({
     mutationFn: (vars: { id: string; isFavorite: boolean }) =>
       api.setFavorite(vars.id, vars.isFavorite),
-    onMutate: ({ id, isFavorite }) => {
+    onMutate: async ({ id, isFavorite }) => {
+      // An in-flight fetch would land after this patch and undo it — the first
+      // line of react-query's own optimistic-update recipe, and reachable now
+      // that focus refetching is on.
+      await queryClient.cancelQueries({ queryKey: WARDROBE_KEY })
       const previous = queryClient.getQueryData<WardrobeItem[]>(WARDROBE_KEY)
       patchCache(queryClient, (entries) =>
         entries.map((entry) => (entry.id === id ? { ...entry, isFavorite } : entry)),

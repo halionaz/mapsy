@@ -17,6 +17,26 @@ import type { ItemDraft } from '@/types/item'
 import { MAX_PHOTOS, PhotoPicker } from './PhotoPicker'
 
 /**
+ * Mirrors the CHECK constraints in supabase/migrations.
+ *
+ * Not belt-and-braces: with photos uploading before the row is inserted, a
+ * violation is only discovered after every object has been transferred. The
+ * user waits through the whole upload, sees "업로드 실패", and retrying fails at
+ * exactly the same point. Catching it in the form costs nothing and turns a
+ * dead end into a corrected character count.
+ */
+const LIMITS = {
+  title: 100,
+  brand: 100,
+  size: 40,
+  fit: 40,
+  purchasePlace: 100,
+  memo: 2000,
+  tagLength: 40,
+  tagCount: 20,
+} as const
+
+/**
  * The registration and edit form — one component for both (PRD §6.2).
  *
  * Only the photo, title and category are required. Everything else sits behind a
@@ -100,13 +120,23 @@ export function ItemForm({
   const missingPhoto = showPhotos && photos.length === 0
   const missingTitle = title.trim().length === 0
   const missingCategory = categoryId === null
-  const invalid = missingPhoto || missingTitle || missingCategory
+  const parsedTags = useMemo(
+    () => tagText.split(',').map((t) => t.trim().replace(/^#/, '')).filter(Boolean),
+    [tagText],
+  )
+  const tagProblem =
+    parsedTags.length > LIMITS.tagCount
+      ? `태그는 최대 ${LIMITS.tagCount}개까지예요.`
+      : parsedTags.some((t) => t.length > LIMITS.tagLength)
+        ? `태그 하나는 ${LIMITS.tagLength}자를 넘을 수 없어요.`
+        : null
+
+  const invalid = missingPhoto || missingTitle || missingCategory || tagProblem !== null
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setTouched(true)
     if (invalid || pending || !categoryId) return
-    submitted.current = true
 
     // "abc" strips to "" and Number("") is 0 — which would store a typo as a
     // free garment, and mapRow deliberately keeps 0 rather than nulling it.
@@ -125,9 +155,13 @@ export function ItemForm({
       price: parsedPrice != null && Number.isFinite(parsedPrice) ? parsedPrice : null,
       purchasedAt: purchasedAt || null,
       purchasePlace: purchasePlace || null,
-      tags: tagText.split(',').map((t) => t.trim()).filter(Boolean),
+      tags: parsedTags,
       memo: memo || null,
     })
+
+    // Set after onSubmit, not before: the latch means "handed the blobs over",
+    // and a caller that bails out early has not taken them.
+    submitted.current = true
   }
 
   return (
@@ -143,6 +177,7 @@ export function ItemForm({
         <input
           id={`${uid}-title`}
           value={title}
+          maxLength={LIMITS.title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="예) 마산 플리스"
           className={inputStyle}
@@ -223,6 +258,7 @@ export function ItemForm({
                 <input
                   value={size}
                   onChange={(e) => setSize(e.target.value)}
+                  maxLength={LIMITS.size}
                   aria-label="사이즈 직접 입력"
                   placeholder="직접 입력"
                   className={inputStyle}
@@ -241,7 +277,13 @@ export function ItemForm({
           )}
 
           <Field label="브랜드" htmlFor={`${uid}-brand`}>
-            <input id={`${uid}-brand`} value={brand} onChange={(e) => setBrand(e.target.value)} className={inputStyle} />
+            <input
+              id={`${uid}-brand`}
+              value={brand}
+              maxLength={LIMITS.brand}
+              onChange={(e) => setBrand(e.target.value)}
+              className={inputStyle}
+            />
           </Field>
 
           <Field label="가격" htmlFor={`${uid}-price`} hint="원 단위">
@@ -269,6 +311,7 @@ export function ItemForm({
             <input
               id={`${uid}-purchase-place`}
               value={purchasePlace}
+              maxLength={LIMITS.purchasePlace}
               onChange={(e) => setPurchasePlace(e.target.value)}
               className={inputStyle}
             />
@@ -282,12 +325,14 @@ export function ItemForm({
               placeholder="출근용, 러닝"
               className={inputStyle}
             />
+            {tagProblem && <FieldError>{tagProblem}</FieldError>}
           </Field>
 
           <Field label="메모" htmlFor={`${uid}-memo`}>
             <textarea
               id={`${uid}-memo`}
               value={memo}
+              maxLength={LIMITS.memo}
               onChange={(e) => setMemo(e.target.value)}
               rows={3}
               className={css({ ...inputBase, resize: 'vertical' })}

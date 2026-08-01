@@ -118,9 +118,12 @@ select tests.eq(
   (select string_agg(path, ',' order by sort_order) from public.item_images),
   'p2,p0,p1,p3,p4', '전달한 순서대로 재배치됨');
 
+-- Asserting on sort_order alone would be a tautology: with 5 rows under
+-- `between 0 and 4` plus the unique constraint, the set is always {0,1,2,3,4}.
+-- The paths are what reveal whether the order actually moved.
 select tests.eq(
-  (select string_agg(sort_order::text, ',' order by sort_order) from public.item_images),
-  '0,1,2,3,4', 'sort_order가 0부터 연속');
+  (select count(distinct sort_order)::text from public.item_images), '5',
+  'sort_order에 중복이 없음');
 
 select tests.fails(
   $f$select public.reorder_item_images(
@@ -138,7 +141,7 @@ select tests.fails(
              'bbbb0000-0000-0000-0000-000000000001',
              'bbbb0000-0000-0000-0000-000000000003',
              'bbbb0000-0000-0000-0000-000000000004']::uuid[])$f$,
-  '중복', '중복 id는 개수가 맞아도 거부');
+  '중복된 이미지 id', '중복 id는 개수가 맞아도 거부');
 
 insert into public.items (id, user_id, title, category_id)
 values ('aaaa0000-0000-0000-0000-000000000002', :'A', '다른 아이템', 'top.knit');
@@ -154,12 +157,14 @@ select tests.fails(
              'bbbb0000-0000-0000-0000-000000000002',
              'bbbb0000-0000-0000-0000-000000000003',
              'cccc0000-0000-0000-0000-000000000001']::uuid[])$f$,
-  '중복', '다른 아이템의 id가 섞이면 거부');
+  '이 아이템의 이미지임', '다른 아이템의 id가 섞이면 거부 — 중복과 다른 메시지');
 
+-- Same tautology trap: a partially applied reorder still yields 0,1,2,3,4.
+-- Only the path order shows that the rejected call rolled back.
 select tests.eq(
-  (select string_agg(sort_order::text, ',' order by sort_order)
+  (select string_agg(path, ',' order by sort_order)
    from public.item_images where item_id = 'aaaa0000-0000-0000-0000-000000000001'),
-  '0,1,2,3,4', '거부된 재정렬은 아무것도 바꾸지 않음');
+  'p2,p0,p1,p3,p4', '거부된 재정렬은 아무것도 바꾸지 않음');
 
 -- A photo-less item reordering to nothing is a legitimate no-op; the previous
 -- version raised "대상 이미지를 찾지 못함" here.
@@ -259,6 +264,43 @@ select tests.fails(
   format($f$insert into public.items (user_id, title, category_id, tags)
             values (%L, '태그많음', 'top.knit', array(select 't'||g from generate_series(1,21) g))$f$, :'A'),
   'items_tags_limit', '태그 21개 거부');
+
+select tests.fails(
+  format($f$insert into public.items (user_id, title, category_id, tags)
+            values (%L, '긴 태그', 'top.knit', array[repeat('가', 41)])$f$, :'A'),
+  'items_tags_element_length', '41자 태그 원소 거부');
+
+\echo '── 함수 노출 ──'
+reset role;
+select tests.eq(
+  (select count(*)::text from pg_proc p
+   join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname in ('has_unique_elements', 'max_element_length')),
+  '0', 'CHECK 헬퍼는 public 스키마에 없음 — REST로 노출되지 않음');
+
+select tests.eq(
+  (select count(*)::text from pg_proc p
+   join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'private' and p.proname in ('has_unique_elements', 'max_element_length')),
+  '2', '헬퍼는 private 스키마에 있음');
+
+-- PUBLIC's entry has an empty grantee, so it is the element starting with '='.
+-- Matching '%=X/%' against the joined string would also hit
+-- "authenticated=X/postgres" and pass no matter what.
+select tests.eq(
+  (select bool_or(exists (select 1 from unnest(p.proacl) a where a::text like '=%'))::text
+   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname in ('reorder_item_images', 'delete_item_image')),
+  'false', 'RPC에 PUBLIC EXECUTE가 남아 있지 않음');
+
+select tests.eq(
+  (select bool_and(exists (select 1 from unnest(p.proacl) a where a::text like 'authenticated=%'))::text
+   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname in ('reorder_item_images', 'delete_item_image')),
+  'true', 'RPC는 authenticated에게만 명시적으로 부여됨');
+
+set role authenticated;
+set request.jwt.claim.sub = :'A';
 
 \echo '── 인덱스 ──'
 select tests.eq(

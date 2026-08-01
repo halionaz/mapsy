@@ -25,6 +25,8 @@ export interface PendingUpload {
   photos: ProcessedPhoto[]
   userId: string
   state: 'uploading' | 'failed'
+  /** Why the upload failed, so the card can say more than "실패". */
+  error?: string
 }
 
 let snapshot: PendingUpload[] = []
@@ -53,8 +55,12 @@ export function addPending(entry: PendingUpload): void {
   commit([entry, ...snapshot.filter((e) => e.tempId !== entry.tempId)])
 }
 
-export function markPendingState(tempId: string, state: PendingUpload['state']): void {
-  commit(snapshot.map((e) => (e.tempId === tempId ? { ...e, state } : e)))
+export function markPendingState(
+  tempId: string,
+  state: PendingUpload['state'],
+  error?: string,
+): void {
+  commit(snapshot.map((e) => (e.tempId === tempId ? { ...e, state, error } : e)))
 }
 
 /**

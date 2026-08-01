@@ -12,8 +12,15 @@ export function newId(): string {
   }
 
   // getRandomValues is available in insecure contexts; only randomUUID is not.
+  // The guard above already established that `crypto` exists at all, but re-read
+  // it through a local so this branch cannot throw ReferenceError if it doesn't.
+  const webcrypto = typeof crypto !== 'undefined' ? crypto : undefined
+  if (!webcrypto?.getRandomValues) {
+    throw new Error('이 브라우저에서는 안전한 id를 만들 수 없어요.')
+  }
+
   const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
+  webcrypto.getRandomValues(bytes)
   bytes[6] = (bytes[6] & 0x0f) | 0x40 // version 4
   bytes[8] = (bytes[8] & 0x3f) | 0x80 // variant 10
 

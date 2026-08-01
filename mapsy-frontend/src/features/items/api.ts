@@ -23,21 +23,29 @@ const IMAGE_COLUMNS = '*'
 
 /**
  * How long a thumbnail URL stays valid. The bucket is private, so grid images
- * are signed rather than public. A day is long enough that a session left open
- * overnight still renders, and short enough that a leaked URL expires.
+ * are signed rather than public.
+ *
+ * Four hours, paired with `refetchOnWindowFocus` so returning to a backgrounded
+ * PWA re-signs them. That covers the phone case; a tab left in the foreground
+ * past four hours without ever losing focus still needs a reload, which is the
+ * trade for not handing out day-long URLs to a private bucket.
  */
 const SIGNED_URL_TTL_SECONDS = 60 * 60 * 4
 
 /**
- * Explicit ceilings on the full-collection fetch.
+ * Ceilings on the full-collection fetch.
  *
- * PostgREST applies its own `max-rows` when one is configured, and the result is
- * a silently truncated array rather than an error — the client cannot tell a
- * short page from the whole table. Asking for a known number means the
- * truncation is detectable, which is what the warnings below do.
+ * PostgREST truncates to its configured `max-rows` silently — a short array, not
+ * an error. Setting our own `.limit()` does not reveal that: if the server caps
+ * at a smaller number, the response is under our limit and looks complete.
+ *
+ * `count: 'exact'` is what actually detects it. The response carries the total
+ * row count independently of how many rows came back, so comparing the two
+ * catches truncation from either source — and incidentally reports what the
+ * server's ceiling really is.
  *
  * PRD §8.4 puts the move to server-side filtering at ~1,000 garments, so these
- * sit just past that: hitting one means the client-side approach has been
+ * sit just past that: reaching one means the client-side approach has been
  * outgrown, not that something broke.
  */
 const ITEM_FETCH_LIMIT = 2000
@@ -55,12 +63,12 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
   const [itemsResult, imagesResult] = await Promise.all([
     supabase
       .from('items')
-      .select(ITEM_COLUMNS)
+      .select(ITEM_COLUMNS, { count: 'exact' })
       .order('created_at', { ascending: false })
       .limit(ITEM_FETCH_LIMIT),
     supabase
       .from('item_images')
-      .select(IMAGE_COLUMNS)
+      .select(IMAGE_COLUMNS, { count: 'exact' })
       .order('sort_order')
       .limit(IMAGE_FETCH_LIMIT),
   ])
@@ -68,8 +76,8 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
   if (itemsResult.error) throw itemsResult.error
   if (imagesResult.error) throw imagesResult.error
 
-  warnIfTruncated(itemsResult.data?.length ?? 0, ITEM_FETCH_LIMIT, '아이템')
-  warnIfTruncated(imagesResult.data?.length ?? 0, IMAGE_FETCH_LIMIT, '사진')
+  warnIfTruncated(itemsResult.data?.length ?? 0, itemsResult.count, '아이템')
+  warnIfTruncated(imagesResult.data?.length ?? 0, imagesResult.count, '사진')
 
   const imagesByItem = new Map<string, ReturnType<typeof toItemImage>[]>()
   for (const row of imagesResult.data ?? []) {
@@ -98,11 +106,11 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
   })
 }
 
-function warnIfTruncated(received: number, limit: number, what: string) {
-  if (received < limit) return
+function warnIfTruncated(received: number, total: number | null, what: string) {
+  if (total == null || received >= total) return
   console.warn(
-    `${what} ${limit}건에서 잘렸을 수 있음. 전량 로드 + 클라이언트 필터링의 한계에 도달했으므로 ` +
-      '서버 사이드 필터링으로 전환해야 함 (PRD §8.4).',
+    `${what} ${total}건 중 ${received}건만 받음. 전량 로드 + 클라이언트 필터링의 한계에 ` +
+      '도달했으므로 서버 사이드 필터링으로 전환해야 함 (PRD §8.4).',
   )
 }
 
@@ -155,8 +163,10 @@ function contentTypeOf(ext: ProcessedPhoto['ext']): string {
  * rollback fails. The result was a photo-less row that the grid renders as a
  * blank card with no way to tell what it refers to.
  *
- * Uploading first means a failure anywhere leaves nothing in the database at
- * all, and `uploadPhotos` removes whatever objects it already wrote.
+ * The window is much smaller now, though not zero: if the item row lands and
+ * the image rows do not, the same rollback problem applies to the delete below.
+ * That failure is reported rather than swallowed, because it is the one case
+ * that can still leave a photo-less row behind.
  */
 export async function createItem(
   draft: ItemDraft,
@@ -197,7 +207,17 @@ export async function createItem(
     } catch (imageError) {
       // The row exists but has no photos, which is the state this ordering is
       // meant to prevent — take it back out.
-      await supabase.from('items').delete().eq('id', itemId).eq('user_id', userId)
+      const { error: rollbackError } = await supabase
+        .from('items')
+        .delete()
+        .eq('id', itemId)
+        .eq('user_id', userId)
+      if (rollbackError) {
+        console.warn(
+          '사진 없는 아이템 행을 되돌리지 못함. 그리드에 빈 카드로 보일 수 있음:',
+          rollbackError.message,
+        )
+      }
       throw imageError
     }
   } catch (insertError) {

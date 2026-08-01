@@ -120,7 +120,7 @@ pnpm test:db
 ```
 
 Docker에 Postgres를 띄우고 `auth`/`storage` 스텁을 세운 뒤 **실제 마이그레이션을 적용해**
-제약·RLS·스토리지 정책·순서 변경 RPC를 검사한다. 42개 단언이 있고 하나라도 어긋나면
+제약·RLS·스토리지 정책·순서 변경 RPC·함수 노출 범위를 검사한다. 47개 단언이 있고 하나라도 어긋나면
 0이 아닌 코드로 끝난다. 마지막에 마이그레이션을 한 번 더 적용해 멱등성도 확인한다.
 
 `supabase start`가 있으면 그쪽이 더 충실하지만, 이 스크립트는 Docker만 있으면 돌아가서
@@ -152,8 +152,9 @@ select delete_item_image(<image_id>);
 ```
 
 `reorder_item_images`는 **해당 아이템의 모든 이미지 id를 순서대로** 받는다. 개수가 다르거나,
-중복 id가 있거나, 다른 아이템의 id가 섞이면 거부한다 — 갱신된 행 수를 요청 개수와 비교하기
-때문이다. 사진이 없는 아이템에 빈 배열을 넘기는 것은 정상 no-op이다.
+중복 id가 있거나, 다른 아이템의 id가 섞이면 거부하고 **세 경우가 서로 다른 메시지**를 낸다 —
+갱신된 행 수를 요청 개수와 비교하기 때문이다. 사진이 없는 아이템에 빈 배열을 넘기는 것은
+정상 no-op이다.
 
 `delete_item_image`는 삭제 후 남은 사진을 0..n-1로 재번호해서, 대표(0번)를 지워도 다음
 사진이 승격되고 카드가 비지 않는다.
@@ -167,6 +168,19 @@ select delete_item_image(<image_id>);
 반면 **카테고리는 그룹 접두사만 검증한다.** 소분류 추가는 흔한 제품 변경이라 마이그레이션을
 요구하지 않되, 존재하지 않는 그룹의 `category_id`는 모든 필터에서 조용히 빠지는 쓰레기 값이라
 막는다.
+
+### CHECK 헬퍼는 private 스키마에 있다
+
+`has_unique_elements` 같은 헬퍼를 `public`에 두면 PostgREST가 그대로 RPC 엔드포인트로
+노출한다. 그렇다고 `revoke execute`를 하면 **CHECK 평가 자체가 permission denied로 깨진다**
+— 제약식은 삽입하는 역할의 권한으로 평가되기 때문이다(PG 17에서 확인).
+
+그래서 헬퍼는 `private` 스키마에 둔다. PostgREST가 introspect하지 않으므로 노출되지 않고,
+`authenticated`에게 `usage`만 주면 제약은 정상 동작한다.
+
+RPC 두 개(`reorder_item_images`, `delete_item_image`)는 노출돼야 하는 것이 맞지만,
+Postgres가 기본으로 PUBLIC에 EXECUTE를 주고 `grant ... to authenticated`가 그걸 회수하지
+않는다. 명시적으로 `revoke ... from public`한 뒤 다시 부여한다.
 
 ### item_images는 복합 외래키를 쓴다
 

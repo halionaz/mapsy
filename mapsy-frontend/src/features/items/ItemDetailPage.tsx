@@ -7,6 +7,7 @@ import { useCurrentUserId } from '@/features/auth/useCurrentUserId'
 import { categoryLabel } from '@/shared/constants/categories'
 import { colorLabel } from '@/shared/constants/colors'
 import { seasonLabel } from '@/shared/constants/seasons'
+import { errorMessage } from '@/shared/lib/errorMessage'
 import { formatDate, formatPrice } from '@/shared/lib/format'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
 import { signPaths } from './api'
@@ -229,7 +230,7 @@ export function ItemDetailPage() {
           {remove.error && (
             <p role="alert" className={css({ fontSize: 'xs', color: 'danger', textAlign: 'center' })}>
               삭제하지 못했어요.{' '}
-              {remove.error instanceof Error ? remove.error.message : '잠시 후 다시 시도해주세요.'}
+              {errorMessage(remove.error, '잠시 후 다시 시도해주세요.')}
             </p>
           )}
         </div>
