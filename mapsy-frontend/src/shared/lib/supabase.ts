@@ -3,8 +3,14 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 /**
  * Supabase client — the only backend mapsy talks to (PRD §8.3).
  *
- * The anon key is public by design; every table and storage object is guarded by
- * row-level security keyed on `auth.uid()`, so the key alone grants nothing.
+ * The publishable key (`sb_publishable_...`) is designed to be shipped to the
+ * browser: it grants the `anon` Postgres role when signed out and `authenticated`
+ * once a session exists, and every table and storage object is guarded by RLS on
+ * top of that. Secrecy is not what protects the data, so bundling it is fine.
+ *
+ * Supabase's older `anon` JWT key does the same thing and still works, but is
+ * deprecated by the end of 2026 — hence the newer name here. The secret key
+ * (`sb_secret_...`) bypasses RLS and must never reach this file.
  *
  * The client is created lazily rather than at module load. Throwing at import
  * time would take the whole app down before it renders, which makes a missing
@@ -13,9 +19,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
  */
 
 const url = import.meta.env.VITE_SUPABASE_URL
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
-export const isSupabaseConfigured = Boolean(url && anonKey)
+export const isSupabaseConfigured = Boolean(url && publishableKey)
 
 let client: SupabaseClient | null = null
 
@@ -24,14 +30,14 @@ export function getSupabase(): SupabaseClient {
   // narrows them to `string` for the createClient call below. Going through
   // `isSupabaseConfigured` would leave them `string | undefined` and the guard
   // would only be a runtime convention.
-  if (!url || !anonKey) {
+  if (!url || !publishableKey) {
     throw new Error(
       'Supabase 환경변수가 없음. .env.example을 .env.local로 복사한 뒤 ' +
-        'VITE_SUPABASE_URL과 VITE_SUPABASE_ANON_KEY를 채워야 함.',
+        'VITE_SUPABASE_URL과 VITE_SUPABASE_PUBLISHABLE_KEY를 채워야 함.',
     )
   }
 
-  client ??= createClient(url, anonKey, {
+  client ??= createClient(url, publishableKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,

@@ -29,16 +29,32 @@ tests/
 
 ### 2. 환경변수
 
-Project Settings → API에서 두 값을 복사한다.
+Project Settings → **API Keys**에서 두 값을 복사한다.
 
 ```bash
 cp mapsy-frontend/.env.example mapsy-frontend/.env.local
-# VITE_SUPABASE_URL       ← Project URL
-# VITE_SUPABASE_ANON_KEY  ← anon / public key
+# VITE_SUPABASE_URL              ← Project URL
+# VITE_SUPABASE_PUBLISHABLE_KEY  ← Publishable key (sb_publishable_...)
 ```
 
-anon key는 브라우저에 그대로 나가도 되는 값이다. 실제 보호는 RLS가 한다.
-**`service_role` key는 절대 프론트엔드에 넣지 않는다** — RLS를 통째로 우회한다.
+**키 종류를 헷갈리지 말 것.**
+
+| 키 | 접두사 | 용도 |
+|---|---|---|
+| Publishable | `sb_publishable_` | 브라우저에 넣는 것. 이걸 쓴다 |
+| Secret | `sb_secret_` | 서버 전용. **RLS를 통째로 우회한다** |
+| ~~anon~~ (레거시 JWT) | `eyJ...` | 아직 동작하지만 2026년 말 deprecated |
+| ~~service_role~~ (레거시 JWT) | `eyJ...` | 위와 같음, 그리고 위험 |
+
+Publishable key는 브라우저에 그대로 나가도 되는 값이다 — 로그아웃 상태면 Postgres의
+`anon` 역할, 로그인하면 `authenticated` 역할을 부여하고, 실제 보호는 그 위의 RLS가 한다.
+레거시 `anon` 키와 동작이 동일해서 정책이나 마이그레이션은 손댈 게 없다.
+
+**`sb_secret_`로 시작하는 키는 절대 `.env.local`에 넣지 않는다.** `VITE_` 접두사가 붙은
+값은 전부 클라이언트 번들에 컴파일되어 들어간다.
+
+기존 프로젝트에 레거시 키가 이미 있다면 publishable/secret 키를 만들어도 **둘 다 동시에
+동작**하므로 점진적으로 옮기면 된다.
 
 ### 3. 마이그레이션 적용
 
