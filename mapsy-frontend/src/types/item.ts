@@ -32,7 +32,15 @@ export interface ItemImage {
   path: string
   /** Storage path of the 1:1 cropped thumbnail (400×400, WebP). */
   thumbPath: string
-  /** 0 is the cover shown in the grid — reordering is how the cover changes. */
+  /**
+   * 0 is the cover shown in the grid — reordering is how the cover changes.
+   *
+   * Constrained to 0–4 in the database, which is what enforces "at most 5
+   * photos". That CHECK is immediate, so a reorder must **not** park a row at a
+   * sentinel like 99 on the way through; swap the values directly inside one
+   * transaction and let the deferred unique constraint settle at commit. See
+   * supabase/README.md.
+   */
   sortOrder: number
   width: number | null
   height: number | null

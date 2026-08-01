@@ -63,8 +63,9 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
 
 - 아이템 CRUD와 사진 업로드 파이프라인 (등록/상세/편집 화면은 현재 스텁)
 - 필터 바텀시트, 검색, 정렬
-- Supabase 스키마와 RLS 마이그레이션 — 게이트는 붙었지만 로그인 후 읽을 테이블이 아직 없음
 - 로그아웃 (설정 화면이 스텁)
+- Supabase 생성 타입 — `src/types/item.ts`는 아직 손으로 스키마를 미러링함.
+  프로젝트를 만든 뒤 `supabase gen types typescript`로 대체할 것
 - **PWA 아이콘이 SVG 하나뿐.** `manifest.icons`가 SVG라 Android 설치 배너 조건을 못 채울 수
   있고, iOS는 SVG `apple-touch-icon`을 무시하므로 아예 링크를 걸지 않았다. 192·512 PNG와
   maskable, 180 PNG(apple-touch-icon)가 필요하다.
