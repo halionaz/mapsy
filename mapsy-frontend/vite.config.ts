@@ -20,8 +20,13 @@ export default defineConfig({
         start_url: '/',
         display: 'standalone',
         orientation: 'portrait',
+        // A manifest can only carry one pair, and index.html already varies
+        // theme-color per scheme for the browser tab. Both are kept on the light
+        // values so they agree with each other — a dark theme_color over a white
+        // background_color gives an installed app a black title bar above a
+        // white splash.
         background_color: '#FFFFFF',
-        theme_color: '#0C0A09',
+        theme_color: '#FFFFFF',
         icons: [
           {
             src: '/icon.svg',

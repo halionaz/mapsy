@@ -1,3 +1,5 @@
+import { token } from 'styled-system/tokens'
+
 /**
  * Clothing colour palette — PRD §5.3.
  *
@@ -5,10 +7,10 @@
  * "베이지 / 아이보리 / 크림 / 오트밀" into four unrelated values and the colour
  * filter stops meaning anything; exact shade nuance belongs in the title or memo.
  *
- * The hex values live in `panda.config.ts` under `colors.swatch.*` — this file
- * deliberately holds none, so there is exactly one source of truth. Swatch dots
- * read the generated CSS variable at runtime (see `cssVarOf`), which keeps the
- * value dynamic without Panda needing to statically see it.
+ * The hex values live in `panda.config.ts` under `colors.swatch.*`, and nothing
+ * in this file restates them. Labels are a `Record` keyed by `ColorId` rather
+ * than a hand-written array, so adding an id without a label is a compile error
+ * instead of a UI that renders the raw id.
  */
 
 export const COLOR_IDS = [
@@ -32,44 +34,53 @@ export const COLOR_IDS = [
 
 export type ColorId = (typeof COLOR_IDS)[number]
 
+const COLOR_LABELS: Record<ColorId, string> = {
+  black: '블랙',
+  white: '화이트',
+  gray: '그레이',
+  beige: '베이지',
+  brown: '브라운',
+  navy: '네이비',
+  blue: '블루',
+  sky: '스카이',
+  green: '그린',
+  khaki: '카키',
+  yellow: '옐로우',
+  orange: '오렌지',
+  red: '레드',
+  pink: '핑크',
+  purple: '퍼플',
+  multi: '멀티/패턴',
+}
+
 export interface ClothingColor {
   id: ColorId
   label: string
 }
 
-export const CLOTHING_COLORS: ClothingColor[] = [
-  { id: 'black', label: '블랙' },
-  { id: 'white', label: '화이트' },
-  { id: 'gray', label: '그레이' },
-  { id: 'beige', label: '베이지' },
-  { id: 'brown', label: '브라운' },
-  { id: 'navy', label: '네이비' },
-  { id: 'blue', label: '블루' },
-  { id: 'sky', label: '스카이' },
-  { id: 'green', label: '그린' },
-  { id: 'khaki', label: '카키' },
-  { id: 'yellow', label: '옐로우' },
-  { id: 'orange', label: '오렌지' },
-  { id: 'red', label: '레드' },
-  { id: 'pink', label: '핑크' },
-  { id: 'purple', label: '퍼플' },
-  { id: 'multi', label: '멀티/패턴' },
-]
+/** Display order follows COLOR_IDS — dark neutrals first, patterned last. */
+export const CLOTHING_COLORS: ClothingColor[] = COLOR_IDS.map((id) => ({
+  id,
+  label: COLOR_LABELS[id],
+}))
 
 /** A garment may carry at most this many colours; the first one is the primary. */
 export const MAX_COLORS_PER_ITEM = 3
 
-const LABEL_BY_ID = new Map(CLOTHING_COLORS.map((c) => [c.id, c.label]))
-
 export function colorLabel(id: ColorId): string {
-  return LABEL_BY_ID.get(id) ?? id
+  return COLOR_LABELS[id]
 }
 
 /**
- * The CSS variable Panda emits for a swatch token, e.g. `--colors-swatch-beige`.
- * Used to paint dots from data at runtime. This is a variable *name*, not a
- * Panda class, so building it from an id is safe — nothing needs extracting.
+ * `var(--colors-swatch-beige)` for a given id, used to paint dots from data at
+ * runtime.
+ *
+ * Delegates to Panda's generated `token.var` rather than assembling the variable
+ * name by hand. Hand-assembly happens to match today, but it silently encodes
+ * assumptions about Panda's naming — setting `prefix` in panda.config.ts would
+ * leave every dot transparent with no error anywhere. Asking the generated
+ * helper removes the assumption.
  */
-export function cssVarOf(id: ColorId): string {
-  return `--colors-swatch-${id}`
+export function swatchVar(id: ColorId): string {
+  return token.var(`colors.swatch.${id}`)
 }

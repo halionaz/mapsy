@@ -20,7 +20,11 @@ export const isSupabaseConfigured = Boolean(url && anonKey)
 let client: SupabaseClient | null = null
 
 export function getSupabase(): SupabaseClient {
-  if (!isSupabaseConfigured) {
+  // Checks the values directly rather than the boolean above, so the compiler
+  // narrows them to `string` for the createClient call below. Going through
+  // `isSupabaseConfigured` would leave them `string | undefined` and the guard
+  // would only be a runtime convention.
+  if (!url || !anonKey) {
     throw new Error(
       'Supabase 환경변수가 없음. .env.example을 .env.local로 복사한 뒤 ' +
         'VITE_SUPABASE_URL과 VITE_SUPABASE_ANON_KEY를 채워야 함.',

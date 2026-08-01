@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <!--
+      No apple-touch-icon yet: iOS ignores SVG here and would fall back to a
+      screenshot without telling anyone. It needs a real 180×180 PNG — see the
+      icon TODO in README.md.
+    -->
     <!--
       viewport-fit=cover lets the layout reach under the iOS home indicator;
       user-scalable is left alone so pinch-zoom on garment photos still works.

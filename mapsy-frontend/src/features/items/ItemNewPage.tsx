@@ -1,4 +1,4 @@
-import { ScreenStub } from '../../shared/ui/ScreenStub'
+import { ScreenStub } from '@/shared/ui/ScreenStub'
 
 export function ItemNewPage() {
   return (

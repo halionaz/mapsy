@@ -7,10 +7,11 @@
   },
   "scripts": {
     "dev": "pnpm --filter mapsy-frontend dev",
-    "build": "pnpm --filter mapsy-frontend build",
     "preview": "pnpm --filter mapsy-frontend preview",
-    "typecheck": "pnpm --filter mapsy-frontend typecheck",
-    "lint": "pnpm --filter mapsy-frontend lint",
-    "codegen": "pnpm --filter mapsy-frontend codegen"
+    "codegen": "pnpm --filter mapsy-frontend codegen",
+
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
   }
 }

@@ -1,13 +1,17 @@
 /**
  * Domain types mirroring the Supabase schema in PRD §4.1.
  *
+ * Types only — runtime values belong in `shared/constants` or the feature that
+ * owns them, so `import type` stays usable throughout.
+ *
  * Keep these in sync with the SQL by hand for now. Once the Supabase project
  * exists, `supabase gen types typescript` can generate the row types and these
  * become thin aliases over the generated ones.
  */
 
-import type { ColorId } from '../shared/constants/colors'
-import type { SeasonId } from '../shared/constants/seasons'
+import type { SubcategoryId } from '@/shared/constants/categories'
+import type { ColorId } from '@/shared/constants/colors'
+import type { SeasonId } from '@/shared/constants/seasons'
 
 /**
  * Sold, donated or discarded garments are hidden rather than deleted, so the
@@ -18,6 +22,12 @@ export type ItemStatus = 'owned' | 'disposed'
 export interface ItemImage {
   id: string
   itemId: string
+  /**
+   * Denormalised from the parent item. `item_images` carries its own `user_id`
+   * because the RLS policy is `user_id = auth.uid()` on the row itself — an
+   * insert that omits it is rejected, so it cannot be left off the type.
+   */
+  userId: string
   /** Storage path of the full-size image (long edge 1280, WebP). */
   path: string
   /** Storage path of the 1:1 cropped thumbnail (400×400, WebP). */
@@ -26,6 +36,7 @@ export interface ItemImage {
   sortOrder: number
   width: number | null
   height: number | null
+  createdAt: string
 }
 
 export interface Item {
@@ -33,13 +44,12 @@ export interface Item {
   userId: string
 
   title: string
-  /** Subcategory id, e.g. `top.tshirt_short`. */
-  categoryId: string
+  categoryId: SubcategoryId
 
   brand: string | null
   size: string | null
   fit: string | null
-  /** At most 3; the first is the primary colour shown on the card. */
+  /** At most MAX_COLORS_PER_ITEM; the first is the primary shown on the card. */
   colors: ColorId[]
   seasons: SeasonId[]
   /** KRW, whole won. */
@@ -80,48 +90,3 @@ export type ItemDraft = Pick<Item, 'title' | 'categoryId'> &
       | 'isFavorite'
     >
   >
-
-export const SORT_OPTIONS = [
-  { id: 'recent', label: '최근 등록순' },
-  { id: 'price_desc', label: '가격 높은순' },
-  { id: 'price_asc', label: '가격 낮은순' },
-  { id: 'title', label: '이름순' },
-] as const
-
-export type SortId = (typeof SORT_OPTIONS)[number]['id']
-
-/**
- * Active wardrobe filters.
- *
- * Values within one axis are OR'd, and the axes are AND'd together — so
- * `상의 AND (블랙 OR 네이비) AND 여름` (PRD §6.1).
- */
-export interface WardrobeFilters {
-  query: string
-  groupIds: string[]
-  categoryIds: string[]
-  colors: ColorId[]
-  seasons: SeasonId[]
-  sizes: string[]
-  fits: string[]
-  brands: string[]
-  tags: string[]
-  favoriteOnly: boolean
-  status: ItemStatus
-  sort: SortId
-}
-
-export const EMPTY_FILTERS: WardrobeFilters = {
-  query: '',
-  groupIds: [],
-  categoryIds: [],
-  colors: [],
-  seasons: [],
-  sizes: [],
-  fits: [],
-  brands: [],
-  tags: [],
-  favoriteOnly: false,
-  status: 'owned',
-  sort: 'recent',
-}

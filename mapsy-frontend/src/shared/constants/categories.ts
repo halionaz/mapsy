@@ -6,7 +6,10 @@
  * to exactly one subcategory, and its group is derived from the id prefix.
  *
  * Ids are stable storage keys and must not be renamed once data exists —
- * `items.category_id` holds the subcategory id verbatim.
+ * `items.category_id` holds the subcategory id verbatim. The table is declared
+ * `as const` so `SubcategoryId` is a literal union rather than plain `string`,
+ * which means a typo like `top.tshirtt` fails to compile instead of quietly
+ * becoming an unfilterable row.
  */
 
 export const CATEGORY_GROUP_IDS = [
@@ -22,19 +25,19 @@ export const CATEGORY_GROUP_IDS = [
 
 export type CategoryGroupId = (typeof CATEGORY_GROUP_IDS)[number]
 
-export interface Subcategory {
-  /** `${groupId}.${slug}` — e.g. `top.tshirt_short` */
-  id: string
-  label: string
+interface SubcategoryDef {
+  /** `${groupId}.${slug}` — the prefix is what `groupIdOf` reads. */
+  readonly id: `${CategoryGroupId}.${string}`
+  readonly label: string
 }
 
-export interface CategoryGroup {
-  id: CategoryGroupId
-  label: string
-  subcategories: Subcategory[]
+interface CategoryGroupDef {
+  readonly id: CategoryGroupId
+  readonly label: string
+  readonly subcategories: readonly SubcategoryDef[]
 }
 
-export const CATEGORY_GROUPS: CategoryGroup[] = [
+export const CATEGORY_GROUPS = [
   {
     id: 'top',
     label: '상의',
@@ -127,34 +130,49 @@ export const CATEGORY_GROUPS: CategoryGroup[] = [
     label: '기타',
     subcategories: [{ id: 'etc.etc', label: '기타' }],
   },
-]
+] as const satisfies readonly CategoryGroupDef[]
 
-const SUBCATEGORY_BY_ID = new Map(
-  CATEGORY_GROUPS.flatMap((group) => group.subcategories.map((sub) => [sub.id, sub])),
+export type CategoryGroup = (typeof CATEGORY_GROUPS)[number]
+export type Subcategory = CategoryGroup['subcategories'][number]
+export type SubcategoryId = Subcategory['id']
+
+const SUBCATEGORY_BY_ID = new Map<string, Subcategory>(
+  CATEGORY_GROUPS.flatMap((group) =>
+    group.subcategories.map((sub) => [sub.id, sub] as [string, Subcategory]),
+  ),
 )
 
-const GROUP_BY_ID = new Map(CATEGORY_GROUPS.map((group) => [group.id, group]))
+const GROUP_BY_ID = new Map<string, CategoryGroup>(
+  CATEGORY_GROUPS.map((group) => [group.id, group]),
+)
 
-/** Derives the group from a subcategory id. Returns undefined for unknown ids. */
+/** True for ids that exist in the table above — use before trusting DB strings. */
+export function isSubcategoryId(value: string): value is SubcategoryId {
+  return SUBCATEGORY_BY_ID.has(value)
+}
+
+/**
+ * Derives the group from a subcategory id.
+ *
+ * Takes a plain `string` rather than `SubcategoryId` on purpose: the input comes
+ * from the database, where an id written by an older build may no longer be in
+ * the table. Unknown ids return undefined instead of throwing.
+ */
 export function groupIdOf(categoryId: string): CategoryGroupId | undefined {
-  const prefix = categoryId.split('.')[0]
-  return GROUP_BY_ID.has(prefix as CategoryGroupId)
-    ? (prefix as CategoryGroupId)
-    : undefined
+  return GROUP_BY_ID.get(categoryId.split('.')[0])?.id
 }
 
 export function findSubcategory(categoryId: string): Subcategory | undefined {
   return SUBCATEGORY_BY_ID.get(categoryId)
 }
 
-export function findGroup(groupId: CategoryGroupId): CategoryGroup | undefined {
+export function findGroup(groupId: string): CategoryGroup | undefined {
   return GROUP_BY_ID.get(groupId)
 }
 
 /** "상의 · 반팔티" — used in the item detail view and search results. */
 export function categoryLabel(categoryId: string): string {
-  const groupId = groupIdOf(categoryId)
-  const group = groupId ? GROUP_BY_ID.get(groupId) : undefined
+  const group = GROUP_BY_ID.get(categoryId.split('.')[0])
   const sub = SUBCATEGORY_BY_ID.get(categoryId)
   if (!group || !sub) return categoryId
   return `${group.label} · ${sub.label}`

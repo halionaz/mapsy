@@ -1,5 +1,5 @@
 import { useParams } from 'react-router'
-import { ScreenStub } from '../../shared/ui/ScreenStub'
+import { ScreenStub } from '@/shared/ui/ScreenStub'
 
 export function ItemEditPage() {
   const { id } = useParams()

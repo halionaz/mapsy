@@ -14,18 +14,11 @@ import type { CategoryGroupId } from './categories'
 
 const APPAREL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'FREE']
 
+// 26–38 inches inclusive, per PRD §5.4. Every step is listed rather than
+// thinning out the odd sizes above 34 — the rare ones are exactly the ones a
+// user would otherwise have to type by hand.
 const BOTTOM_SIZES = [
-  '26',
-  '27',
-  '28',
-  '29',
-  '30',
-  '31',
-  '32',
-  '33',
-  '34',
-  '36',
-  '38',
+  ...Array.from({ length: 13 }, (_, i) => String(26 + i)),
   'S',
   'M',
   'L',

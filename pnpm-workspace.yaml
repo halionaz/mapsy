@@ -1,5 +1,7 @@
 packages:
-  - 'mapsy-frontend'
+  # Glob rather than a literal, so mapsy-server / mapsy-native join the
+  # workspace by existing instead of by remembering to edit this file.
+  - 'mapsy-*'
   - 'packages/*'
 
 # pnpm 10 blocks postinstall scripts by default. These need theirs to fetch/build

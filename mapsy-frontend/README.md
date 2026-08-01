@@ -8,7 +8,7 @@ mapsy 내 옷장의 프론트엔드. Vite + React + TypeScript SPA이며 PWA로 
 
 ```bash
 # 저장소 루트에서
-pnpm install          # postinstall이 panda codegen까지 돌림
+pnpm install          # prepare 훅이 panda codegen까지 돌림
 
 cp mapsy-frontend/.env.example mapsy-frontend/.env.local
 # Supabase 대시보드(Project Settings → API)에서 값을 채운다
@@ -16,8 +16,12 @@ cp mapsy-frontend/.env.example mapsy-frontend/.env.local
 pnpm dev
 ```
 
-`.env.local` 없이도 앱은 뜬다. 로그인 화면이 환경변수가 없다고 알려줄 뿐이라,
-Supabase 프로젝트를 만들기 전에도 UI를 볼 수 있다.
+`.env.local` 없이도 앱은 뜬다. 인증 게이트가 이 경우를 **미리보기 모드**로 취급해
+로그인을 요구하지 않고, 상단에 배너로 알려준다. Supabase 프로젝트를 만들기 전에도
+UI를 그대로 만들 수 있다.
+
+환경변수가 있으면 게이트가 정상 동작한다 — 미인증 방문자는 `/login`으로 보내지고,
+로그인 후엔 원래 열려던 경로로 돌아온다.
 
 ## 스크립트
 
@@ -59,5 +63,12 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
 
 - 아이템 CRUD와 사진 업로드 파이프라인 (등록/상세/편집 화면은 현재 스텁)
 - 필터 바텀시트, 검색, 정렬
-- Supabase 스키마와 RLS 마이그레이션
-- PWA 아이콘이 SVG 하나뿐 — 설치 경험을 위해 192/512 PNG와 maskable 아이콘 필요
+- Supabase 스키마와 RLS 마이그레이션 — 게이트는 붙었지만 로그인 후 읽을 테이블이 아직 없음
+- 로그아웃 (설정 화면이 스텁)
+- **PWA 아이콘이 SVG 하나뿐.** `manifest.icons`가 SVG라 Android 설치 배너 조건을 못 채울 수
+  있고, iOS는 SVG `apple-touch-icon`을 무시하므로 아예 링크를 걸지 않았다. 192·512 PNG와
+  maskable, 180 PNG(apple-touch-icon)가 필요하다.
+- 포매터·CI·테스트 없음. 코드 스타일(세미콜론 없음, 싱글쿼트)이 균일하지만 강제하는 게 없다.
+- 정적 호스팅 SPA 폴백(`_redirects` / `vercel.json`) 없음 — 서비스워커 설치 전 첫 방문에서
+  `/items/123` 새로고침은 호스트 rewrite 설정에 달려 있다.
+- 라우트 코드 스플리팅과 에러 바운더리 없음

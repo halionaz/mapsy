@@ -27,6 +27,27 @@ export default defineConfig({
           },
         },
 
+        sizes: {
+          // The phone-width column every screen is laid out in. Lives here
+          // rather than in each screen so the app can't end up two widths wide.
+          app: { value: '480px' },
+          // Comfortable max for a single form control on a wide screen.
+          field: { value: '320px' },
+          swatchSm: { value: '10px' },
+          swatchMd: { value: '16px' },
+        },
+
+        durations: {
+          // Short enough to feel immediate on a chip tap, long enough to read
+          // as a transition rather than a flicker.
+          fast: { value: '120ms' },
+        },
+
+        zIndex: {
+          header: { value: 10 },
+          fab: { value: 20 },
+        },
+
         colors: {
           // Neutral ramp — the only greys the UI chrome is allowed to draw from.
           neutral: {
@@ -161,6 +182,16 @@ export default defineConfig({
   },
 
   globalCss: {
+    ':root': {
+      // index.html sets viewport-fit=cover so the layout can reach under the
+      // notch and home indicator. That is only safe if anything anchored to a
+      // screen edge pads itself back out — otherwise the FAB sits beneath the
+      // home indicator. Exposing the insets as plain custom properties (with a
+      // 0px fallback, so non-notched devices and desktop are unaffected) lets
+      // any rule compose them into a calc().
+      '--safe-t': 'env(safe-area-inset-top, 0px)',
+      '--safe-b': 'env(safe-area-inset-bottom, 0px)',
+    },
     html: {
       // Lets native controls (scrollbars, form widgets, the URL bar) follow the
       // OS scheme too, so the chrome around our tokens doesn't fight them.
@@ -174,9 +205,6 @@ export default defineConfig({
       color: 'fg',
       fontFamily: 'body',
       WebkitFontSmoothing: 'antialiased',
-      // The wardrobe grid is the only thing that should scroll; rubber-banding
-      // the page behind it reads as broken on iOS.
-      overscrollBehaviorY: 'none',
     },
   },
 })

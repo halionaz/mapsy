@@ -1,6 +1,11 @@
+# Single ignore file for the whole workspace. Packages do not carry their own —
+# duplicated rules drift, and it stops being obvious which file owns what.
+
 node_modules/
 dist/
 dist-ssr/
+coverage/
+.vite/
 
 # Panda CSS codegen output — regenerate with `pnpm codegen`, never commit or hand-edit
 styled-system/
@@ -10,8 +15,12 @@ styled-system/
 .env.*
 !.env.example
 
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
 .DS_Store
+*.sw?
+
 *.log
-.vite/
-coverage/
 *.local

@@ -124,6 +124,13 @@ Reach for patterns before writing `display: flex` by hand. The whole point is th
 intent reads at a glance and stays consistent across screens — mapsy's item grid, filter chip
 row, and form sections should not each invent their own flex incantation.
 
+The exception is a **structural container whose job is to distribute height**, such as the app
+shell or a screen's `<main>`. `vstack` centres its children and adds a gap; expressing "fill
+the remaining height, stretch everything, no gap" through it means passing `alignItems` and
+`gap` purely to cancel what the pattern means. There, a plain `css({ display: 'flex',
+flexDirection: 'column' })` states the intent more honestly. Reserve that for containers, not
+for content rows — if you find yourself hand-rolling flex to lay out siblings, it's a pattern.
+
 ### Styles must stay statically analyzable
 
 Panda reads your source; it doesn't run it. Style objects must be literal enough for the

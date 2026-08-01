@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { css, cva } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
-import { CATEGORY_GROUPS, type CategoryGroupId } from '../../shared/constants/categories'
+import { CATEGORY_GROUPS, type CategoryGroupId } from '@/shared/constants/categories'
 
 /**
  * 내 옷장 — the home screen (PRD §6.1).
@@ -24,7 +24,8 @@ const chip = cva({
     cursor: 'pointer',
     borderWidth: '1px',
     borderStyle: 'solid',
-    transition: 'background-color 120ms, border-color 120ms, color 120ms',
+    transitionProperty: 'background-color, border-color, color',
+    transitionDuration: 'fast',
     _focusVisible: {
       outline: '2px solid',
       outlineColor: 'accent',
@@ -51,22 +52,38 @@ const chip = cva({
   },
 })
 
+const iconLink = css({
+  fontSize: 'lg',
+  color: 'fg.muted',
+  p: '2',
+  rounded: 'md',
+  transitionProperty: 'color',
+  transitionDuration: 'fast',
+  _hover: { color: 'fg' },
+  _focusVisible: {
+    outline: '2px solid',
+    outlineColor: 'accent',
+    outlineOffset: '2px',
+  },
+})
+
 export function WardrobePage() {
   const [activeGroup, setActiveGroup] = useState<CategoryGroupId | null>(null)
   const itemCount = 0
 
   return (
-    <div className={vstack({ gap: '0', alignItems: 'stretch' })}>
+    <div className={vstack({ gap: '0', alignItems: 'stretch', flex: '1' })}>
       <header
         className={css({
           position: 'sticky',
           top: '0',
-          zIndex: '10',
+          zIndex: 'header',
           bg: 'bg',
           borderBottomWidth: '1px',
           borderBottomStyle: 'solid',
           borderColor: 'border.subtle',
-          pt: '3',
+          // Clears the notch on devices where the layout runs under it.
+          pt: 'calc({spacing.3} + var(--safe-t))',
         })}
       >
         <div className={hstack({ justify: 'space-between', px: '4' })}>
@@ -76,17 +93,7 @@ export function WardrobePage() {
               {itemCount}
             </span>
           </h1>
-          <Link
-            to="/settings"
-            aria-label="설정"
-            className={css({
-              fontSize: 'lg',
-              color: 'fg.muted',
-              p: '2',
-              rounded: 'md',
-              _hover: { color: 'fg' },
-            })}
-          >
+          <Link to="/settings" aria-label="설정" className={iconLink}>
             ⚙
           </Link>
         </div>
@@ -94,6 +101,7 @@ export function WardrobePage() {
         <div className={css({ px: '4', pt: '3' })}>
           <input
             type="search"
+            aria-label="옷 검색"
             placeholder="옷 이름, 브랜드, 메모, 태그 검색"
             className={css({
               width: 'full',
@@ -103,19 +111,21 @@ export function WardrobePage() {
               px: '3.5',
               py: '2.5',
               fontSize: 'sm',
-              borderWidth: '1px',
-              borderStyle: 'solid',
-              borderColor: 'transparent',
               _placeholder: { color: 'fg.subtle' },
-              _focusVisible: { outline: 'none', borderColor: 'accent' },
+              // Same ring as the chips below — a 1px border swap would be a
+              // noticeably weaker focus signal than its immediate neighbours.
+              _focusVisible: {
+                outline: '2px solid',
+                outlineColor: 'accent',
+                outlineOffset: '2px',
+              },
             })}
           />
         </div>
 
         {/* Horizontally scrolling group chips; detailed axes live in the sheet. */}
         <div
-          className={css({
-            display: 'flex',
+          className={hstack({
             gap: '2',
             overflowX: 'auto',
             px: '4',
@@ -126,6 +136,7 @@ export function WardrobePage() {
         >
           <button
             type="button"
+            aria-pressed={activeGroup === null}
             className={chip({ active: activeGroup === null })}
             onClick={() => setActiveGroup(null)}
           >
@@ -135,6 +146,7 @@ export function WardrobePage() {
             <button
               key={group.id}
               type="button"
+              aria-pressed={activeGroup === group.id}
               className={chip({ active: activeGroup === group.id })}
               onClick={() => setActiveGroup(group.id)}
             >
@@ -144,12 +156,21 @@ export function WardrobePage() {
         </div>
       </header>
 
-      <main className={css({ flex: '1', px: '4', pb: '24' })}>
+      <main
+        className={css({
+          flex: '1',
+          display: 'flex',
+          flexDirection: 'column',
+          px: '4',
+          // Room for the floating CTA plus the home indicator beneath it.
+          pb: 'calc({spacing.24} + var(--safe-b))',
+        })}
+      >
         <div
           className={vstack({
             gap: '3',
             justify: 'center',
-            minHeight: '60dvh',
+            flex: '1',
             textAlign: 'center',
           })}
         >
@@ -169,10 +190,13 @@ export function WardrobePage() {
         aria-label="옷 등록"
         className={css({
           position: 'fixed',
-          bottom: '6',
+          // Sits above the home indicator rather than under it — index.html opts
+          // into viewport-fit=cover, so this padding is what makes that safe.
+          bottom: 'calc({spacing.6} + var(--safe-b))',
           left: '50%',
           translate: 'auto',
           translateX: '-1/2',
+          zIndex: 'fab',
           bg: 'accent',
           color: 'accent.fg',
           rounded: 'full',
@@ -181,7 +205,14 @@ export function WardrobePage() {
           fontSize: 'sm',
           fontWeight: 'semibold',
           boxShadow: 'lg',
+          transitionProperty: 'opacity',
+          transitionDuration: 'fast',
           _hover: { opacity: 0.92 },
+          _focusVisible: {
+            outline: '2px solid',
+            outlineColor: 'accent',
+            outlineOffset: '2px',
+          },
         })}
       >
         + 옷 등록

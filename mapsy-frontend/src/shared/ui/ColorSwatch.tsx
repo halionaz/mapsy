@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { cva } from 'styled-system/css'
-import { cssVarOf, colorLabel, type ColorId } from '../constants/colors'
+import { swatchVar, colorLabel, type ColorId } from '@/shared/constants/colors'
 
 /**
  * The colour dot shown on item cards and in the filter sheet.
@@ -12,7 +12,8 @@ import { cssVarOf, colorLabel, type ColorId } from '../constants/colors'
  * `style` attribute points that variable at the token Panda already generated.
  *
  * `multi` covers multi-colour and patterned garments. It has no single truthful
- * colour, so it renders as a conic sweep rather than a flat fill.
+ * colour, so it renders as a conic sweep — built from swatch token references
+ * rather than literal hex, so it follows the palette when the palette changes.
  */
 
 interface ColorSwatchProps {
@@ -32,31 +33,31 @@ const swatch = cva({
   },
   variants: {
     size: {
-      sm: { width: '10px', height: '10px' },
-      md: { width: '16px', height: '16px' },
+      sm: { width: 'swatchSm', height: 'swatchSm' },
+      md: { width: 'swatchMd', height: 'swatchMd' },
     },
     multi: {
       true: {
         background:
-          'conic-gradient(#DC2626, #FACC15, #16A34A, #2563EB, #7C3AED, #DC2626)',
+          'conic-gradient({colors.swatch.red}, {colors.swatch.yellow}, {colors.swatch.green}, {colors.swatch.blue}, {colors.swatch.purple}, {colors.swatch.red})',
       },
     },
   },
   defaultVariants: {
     size: 'sm',
+    multi: false,
   },
 })
 
-export function ColorSwatch({ color, size = 'sm' }: ColorSwatchProps) {
-  const label = colorLabel(color)
-
+export function ColorSwatch({ color, size }: ColorSwatchProps) {
   return (
     <span
       role="img"
-      aria-label={label}
-      title={label}
+      // aria-label alone: adding a matching `title` makes some screen readers
+      // announce the same string twice.
+      aria-label={colorLabel(color)}
       className={swatch({ size, multi: color === 'multi' })}
-      style={{ '--swatch': `var(${cssVarOf(color)})` } as CSSProperties}
+      style={{ '--swatch': swatchVar(color) } as CSSProperties}
     />
   )
 }

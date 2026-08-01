@@ -11,20 +11,24 @@ export const SEASON_IDS = ['spring', 'summer', 'fall', 'winter'] as const
 
 export type SeasonId = (typeof SEASON_IDS)[number]
 
+/** Keyed by SeasonId so a new season can't ship without its label. */
+const SEASON_LABELS: Record<SeasonId, string> = {
+  spring: '봄',
+  summer: '여름',
+  fall: '가을',
+  winter: '겨울',
+}
+
 export interface Season {
   id: SeasonId
   label: string
 }
 
-export const SEASONS: Season[] = [
-  { id: 'spring', label: '봄' },
-  { id: 'summer', label: '여름' },
-  { id: 'fall', label: '가을' },
-  { id: 'winter', label: '겨울' },
-]
-
-const LABEL_BY_ID = new Map(SEASONS.map((s) => [s.id, s.label]))
+export const SEASONS: Season[] = SEASON_IDS.map((id) => ({
+  id,
+  label: SEASON_LABELS[id],
+}))
 
 export function seasonLabel(id: SeasonId): string {
-  return LABEL_BY_ID.get(id) ?? id
+  return SEASON_LABELS[id]
 }

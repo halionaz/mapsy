@@ -19,8 +19,10 @@ export function ScreenStub({ title, note }: ScreenStubProps) {
       className={vstack({
         gap: '3',
         justify: 'center',
-        minHeight: '100dvh',
+        flex: '1',
         px: '8',
+        pt: 'calc({spacing.8} + var(--safe-t))',
+        pb: 'calc({spacing.8} + var(--safe-b))',
         textAlign: 'center',
       })}
     >
@@ -35,6 +37,12 @@ export function ScreenStub({ title, note }: ScreenStubProps) {
           fontSize: 'sm',
           color: 'accent',
           textDecoration: 'underline',
+          rounded: 'sm',
+          _focusVisible: {
+            outline: '2px solid',
+            outlineColor: 'accent',
+            outlineOffset: '2px',
+          },
         })}
       >
         내 옷장으로
