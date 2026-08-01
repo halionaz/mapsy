@@ -127,7 +127,6 @@ export type Database = {
     }
     Functions: {
       delete_item_image: { Args: { p_image_id: string }; Returns: undefined }
-      has_unique_elements: { Args: { arr: string[] }; Returns: boolean }
       reorder_item_images: {
         Args: { p_image_ids: string[]; p_item_id: string }
         Returns: undefined
