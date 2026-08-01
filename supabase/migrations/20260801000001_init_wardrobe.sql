@@ -148,7 +148,9 @@ create index if not exists items_user_category_idx
   on public.items (user_id, category_id);
 
 -- GIN over the array columns, so server-side filtering stays available for when
--- the collection outgrows client-side filtering (PRD §8.4).
+-- the collection outgrows client-side filtering (PRD §8.4). Tag and brand
+-- autocomplete does not need them — the client already holds the whole
+-- collection and derives those lists in memory.
 create index if not exists items_colors_gin  on public.items using gin (colors);
 create index if not exists items_seasons_gin on public.items using gin (seasons);
 create index if not exists items_tags_gin    on public.items using gin (tags);

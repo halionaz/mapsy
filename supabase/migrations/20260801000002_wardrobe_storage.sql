@@ -4,9 +4,27 @@
 -- every policy below keys off that first path segment — which is why the layout
 -- is a rule and not a convention.
 
-insert into storage.buckets (id, name, public)
-values ('wardrobe', 'wardrobe', false)
-on conflict (id) do nothing;
+-- The client always re-encodes to WebP (or JPEG where WebP encoding is
+-- unavailable) and caps the long edge at 1280px before uploading, so anything
+-- outside these bounds is a bug or an abuse — not a legitimate photo. The limit
+-- also protects the 1GB free-tier quota: without it a single session can fill
+-- the bucket, and RLS would happily allow it because the folder is the user's
+-- own.
+--
+-- `do update` rather than `do nothing`: re-running this migration should be able
+-- to tighten the limits on a bucket that already exists.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'wardrobe',
+  'wardrobe',
+  false,
+  5 * 1024 * 1024,
+  array['image/webp', 'image/jpeg']
+)
+on conflict (id) do update
+set public             = excluded.public,
+    file_size_limit    = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
 
 -- Policies have no CREATE ... IF NOT EXISTS, so they are dropped first, keeping
 -- this file re-runnable like the bucket insert above.

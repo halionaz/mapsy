@@ -60,15 +60,29 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
   // One signing call for every cover rather than one per item — the round trips
   // are what cost, not the number of paths.
   const coverPaths = items
-    .map((item) => item.images.find((image) => image.sortOrder === 0)?.thumbPath)
+    .map((item) => coverOf(item.images)?.thumbPath)
     .filter((path): path is string => Boolean(path))
 
   const signed = await signPaths(coverPaths)
 
   return items.map((item) => {
-    const cover = item.images.find((image) => image.sortOrder === 0)
+    const cover = coverOf(item.images)
     return { ...item, coverUrl: cover ? (signed.get(cover.thumbPath) ?? null) : null }
   })
+}
+
+/**
+ * The cover is the lowest sort_order, not literally 0.
+ *
+ * `delete_item_image` renumbers to a contiguous range so the two are normally
+ * the same, but reading it as "position 0 or nothing" turns any gap — an older
+ * row, a half-applied change — into a card with photos and a blank thumbnail.
+ */
+function coverOf<T extends { sortOrder: number }>(images: T[]): T | undefined {
+  return images.reduce<T | undefined>(
+    (lowest, image) => (!lowest || image.sortOrder < lowest.sortOrder ? image : lowest),
+    undefined,
+  )
 }
 
 /** Signs a batch of storage paths, returning path → URL for the ones that worked. */
@@ -135,6 +149,16 @@ export async function createItem(
   }
 }
 
+/**
+ * Uploads every photo, then records them in one insert.
+ *
+ * Objects are tracked as they land so a failure part-way through can delete
+ * them. Leaving that out orphans real files: the rows are written only at the
+ * end, so a failure on photo three means two photos are in storage with nothing
+ * in the database pointing at them — `deleteItem` reads paths from those rows,
+ * so it would find nothing to clean and the objects would bill against the quota
+ * forever.
+ */
 async function uploadPhotos(
   itemId: string,
   userId: string,
@@ -143,38 +167,90 @@ async function uploadPhotos(
   const supabase = getSupabase()
   const storage = supabase.storage.from(STORAGE_BUCKET)
   const rows: Record<string, unknown>[] = []
+  const uploaded: string[] = []
 
-  for (const [index, photo] of photos.entries()) {
-    const imageId = crypto.randomUUID()
-    const base = `${userId}/${itemId}/${imageId}`
-    const path = `${base}.${photo.ext}`
-    const thumbPath = `${base}_thumb.${photo.ext}`
-    const contentType = contentTypeOf(photo.ext)
+  try {
+    for (const [index, photo] of photos.entries()) {
+      const imageId = crypto.randomUUID()
+      const base = `${userId}/${itemId}/${imageId}`
+      const path = `${base}.${photo.ext}`
+      const thumbPath = `${base}_thumb.${photo.ext}`
+      const contentType = contentTypeOf(photo.ext)
 
-    const [full, thumb] = await Promise.all([
-      storage.upload(path, photo.full, { contentType }),
-      storage.upload(thumbPath, photo.thumb, { contentType }),
-    ])
-    if (full.error) throw full.error
-    if (thumb.error) throw thumb.error
+      const [full, thumb] = await Promise.all([
+        storage.upload(path, photo.full, { contentType }),
+        storage.upload(thumbPath, photo.thumb, { contentType }),
+      ])
+      // Recorded before the error check: when one of the pair succeeds and the
+      // other fails, the successful one still needs cleaning up.
+      if (!full.error) uploaded.push(path)
+      if (!thumb.error) uploaded.push(thumbPath)
+      if (full.error) throw full.error
+      if (thumb.error) throw thumb.error
 
-    rows.push({
-      id: imageId,
-      item_id: itemId,
-      user_id: userId,
-      path,
-      thumb_path: thumbPath,
-      sort_order: index,
-      width: photo.width,
-      height: photo.height,
-    })
+      rows.push({
+        id: imageId,
+        item_id: itemId,
+        user_id: userId,
+        path,
+        thumb_path: thumbPath,
+        sort_order: index,
+        width: photo.width,
+        height: photo.height,
+      })
+    }
+
+    if (rows.length === 0) return []
+
+    const { data, error } = await supabase.from('item_images').insert(rows).select(IMAGE_COLUMNS)
+    if (error) throw error
+    return ((data ?? []) as ItemImageRow[]).map(toItemImage)
+  } catch (uploadError) {
+    if (uploaded.length > 0) {
+      // Best effort: the upload failure is what the user needs to hear about,
+      // and a failed cleanup on top of it would only mask the real cause.
+      await storage.remove(uploaded).catch(() => {})
+    }
+    throw uploadError
   }
+}
 
-  if (rows.length === 0) return []
-
-  const { data, error } = await supabase.from('item_images').insert(rows).select(IMAGE_COLUMNS)
+/**
+ * Rewrites photo order. `imageIds` must list every photo of the item, cover
+ * first.
+ *
+ * Goes through a database function rather than a series of updates: each
+ * PostgREST request is its own transaction, so two updates would commit
+ * separately and the first one would violate the unique constraint on
+ * (item_id, sort_order). Parking a row at a sentinel value is no escape either —
+ * the sort_order CHECK is immediate and cannot be deferred.
+ */
+export async function reorderItemImages(itemId: string, imageIds: string[]): Promise<void> {
+  const { error } = await getSupabase().rpc('reorder_item_images', {
+    p_item_id: itemId,
+    p_image_ids: imageIds,
+  })
   if (error) throw error
-  return ((data ?? []) as ItemImageRow[]).map(toItemImage)
+}
+
+/**
+ * Deletes one photo and closes the gap in sort_order.
+ *
+ * The row goes first, then the objects — the opposite of `deleteItem`, and for
+ * the opposite reason. Here the caller already holds the paths, so nothing is
+ * lost by removing the row first, and a row that outlived its file would render
+ * as a broken image.
+ */
+export async function deleteItemImage(
+  imageId: string,
+  paths: { path: string; thumbPath: string },
+): Promise<void> {
+  const supabase = getSupabase()
+
+  const { error } = await supabase.rpc('delete_item_image', { p_image_id: imageId })
+  if (error) throw error
+
+  await supabase.storage.from(STORAGE_BUCKET).remove([paths.path, paths.thumbPath])
 }
 
 export async function updateItem(id: string, draft: ItemDraft, userId: string): Promise<Item> {
