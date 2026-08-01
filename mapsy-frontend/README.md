@@ -35,19 +35,33 @@ UI를 그대로 만들 수 있다.
 | `pnpm typecheck` | `tsc -b` |
 | `pnpm codegen` | Panda CSS 재생성 |
 | `pnpm lint` | oxlint |
+| `pnpm test` | vitest (순수 로직) |
 
 ## 구조
 
 ```
 src/
-├── app/          라우터, 프로바이더, 레이아웃 셸
-├── features/     auth · items · settings
+├── app/          라우터, 프로바이더, 레이아웃 셸 겸 인증 게이트
+├── features/
+│   ├── auth/       세션 훅, 로그인
+│   ├── filters/    필터 모델 + applyFilters (순수)
+│   ├── items/      api · queries · 폼 · 카드 · 화면
+│   └── settings/
 ├── shared/
 │   ├── constants/  카테고리·색상·사이즈·핏·계절 프리셋 (PRD §5)
-│   ├── lib/        supabase 클라이언트
+│   ├── lib/        supabase · 이미지 처리 · 초성 검색 · 포맷
 │   └── ui/         공용 컴포넌트
 └── types/        도메인 타입 (PRD §4 스키마 대응)
 ```
+
+## 테스트 범위
+
+**결정이 들어있는 로직은 순수 함수로 분리해 테스트한다** — 초성 검색, 필터·정렬, DB 행 매핑,
+이미지 리사이즈/크롭 기하. 이 부분은 Supabase 없이 돌아가고 실제로 검증돼 있다.
+
+**네트워크 경로(`api.ts`, `queries.ts`)와 화면은 테스트가 없다.** Supabase 프로젝트가 붙기
+전에는 end-to-end로 확인할 수 없어서, 타입 체크와 빌드까지만 통과한 상태다. 프로젝트를
+연결한 뒤 등록 → 조회 → 편집 → 삭제를 한 번 수동으로 밟아봐야 한다.
 
 ## 스타일링
 
@@ -61,15 +75,17 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
 
 ## 아직 없는 것
 
-- 아이템 CRUD와 사진 업로드 파이프라인 (등록/상세/편집 화면은 현재 스텁)
-- 필터 바텀시트, 검색, 정렬
+- **필터 바텀시트.** 검색·카테고리 칩·정렬은 붙었지만 색상·사이즈·계절·브랜드·태그를 고르는
+  시트가 없다. `applyFilters`는 이미 모든 축을 처리하므로 UI만 얹으면 된다.
+- **편집 화면에서 사진 교체·순서 변경 불가.** 스토리지에 이미 올라간 것과 대조해
+  업로드·삭제·`sort_order`를 조정해야 해서 등록 흐름의 변형이 아니라 별도 작업이다.
 - 로그아웃 (설정 화면이 스텁)
 - Supabase 생성 타입 — `src/types/item.ts`는 아직 손으로 스키마를 미러링함.
   프로젝트를 만든 뒤 `supabase gen types typescript`로 대체할 것
 - **PWA 아이콘이 SVG 하나뿐.** `manifest.icons`가 SVG라 Android 설치 배너 조건을 못 채울 수
   있고, iOS는 SVG `apple-touch-icon`을 무시하므로 아예 링크를 걸지 않았다. 192·512 PNG와
   maskable, 180 PNG(apple-touch-icon)가 필요하다.
-- 포매터·CI·테스트 없음. 코드 스타일(세미콜론 없음, 싱글쿼트)이 균일하지만 강제하는 게 없다.
+- 포매터·CI 없음. 코드 스타일(세미콜론 없음, 싱글쿼트)이 균일하지만 강제하는 게 없다.
 - 정적 호스팅 SPA 폴백(`_redirects` / `vercel.json`) 없음 — 서비스워커 설치 전 첫 방문에서
   `/items/123` 새로고침은 호스트 rewrite 설정에 달려 있다.
 - 라우트 코드 스플리팅과 에러 바운더리 없음

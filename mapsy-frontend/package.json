@@ -10,17 +10,16 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "codegen": "panda codegen",
-    "prepare": "panda codegen"
+    "prepare": "panda codegen",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.5.7",
     "@supabase/supabase-js": "^2.111.0",
     "@tanstack/react-query": "^5.101.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-hook-form": "^7.84.0",
-    "react-router": "^8.3.0",
-    "zod": "^4.4.3"
+    "react-router": "^8.3.0"
   },
   "devDependencies": {
     "@pandacss/dev": "^1.12.0",
@@ -31,6 +30,7 @@
     "oxlint": "^1.75.0",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
-    "vite-plugin-pwa": "^1.3.0"
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.10"
   }
 }
