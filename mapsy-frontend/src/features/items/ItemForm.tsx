@@ -14,7 +14,7 @@ import { sizePresetsFor } from '@/shared/constants/sizes'
 import type { ProcessedPhoto } from '@/shared/lib/image'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
 import type { ItemDraft } from '@/types/item'
-import { PhotoPicker } from './PhotoPicker'
+import { MAX_PHOTOS, PhotoPicker } from './PhotoPicker'
 
 /**
  * The registration and edit form — one component for both (PRD §6.2).
@@ -112,7 +112,7 @@ export function ItemForm({
   return (
     <form onSubmit={handleSubmit} className={vstack({ gap: '6', alignItems: 'stretch' })}>
       {showPhotos && (
-        <Field label="사진" required hint={`최대 ${5}장 · 첫 번째가 대표 사진`}>
+        <Field label="사진" required hint={`최대 ${MAX_PHOTOS}장 · 첫 번째가 대표 사진`}>
           <PhotoPicker photos={photos} onChange={setPhotos} />
           {touched && missingPhoto && <FieldError>사진을 한 장 이상 추가해주세요.</FieldError>}
         </Field>

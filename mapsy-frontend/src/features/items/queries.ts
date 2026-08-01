@@ -136,7 +136,6 @@ export function useRetryUpload() {
   const queryClient = useQueryClient()
 
   return {
-    canRetry: (tempId: string) => pendingUploads.has(tempId),
     retry: (tempId: string) => {
       const pending = pendingUploads.get(tempId)
       if (!pending) return

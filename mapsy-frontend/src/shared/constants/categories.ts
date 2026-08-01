@@ -162,14 +162,6 @@ export function groupIdOf(categoryId: string): CategoryGroupId | undefined {
   return GROUP_BY_ID.get(categoryId.split('.')[0])?.id
 }
 
-export function findSubcategory(categoryId: string): Subcategory | undefined {
-  return SUBCATEGORY_BY_ID.get(categoryId)
-}
-
-export function findGroup(groupId: string): CategoryGroup | undefined {
-  return GROUP_BY_ID.get(groupId)
-}
-
 /** "상의 · 반팔티" — used in the item detail view and search results. */
 export function categoryLabel(categoryId: string): string {
   const group = GROUP_BY_ID.get(categoryId.split('.')[0])
