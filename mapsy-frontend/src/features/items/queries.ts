@@ -56,8 +56,32 @@ function patchCache(
   )
 }
 
-export function useCreateItem() {
+/**
+ * The guard every mutation needs before touching the cache.
+ *
+ * A fetch already in flight holds a snapshot from before the mutation, and its
+ * response overwrites whatever was patched while it was travelling. Cancelling
+ * first stops that; invalidating afterwards re-syncs and covers the case where
+ * the cache entry was evicted and the patch had nothing to write to.
+ *
+ * `refetchOnWindowFocus` makes this reachable in ordinary use — the refetch
+ * fires the moment the app is foregrounded, which is exactly when someone
+ * resumes what they were doing.
+ */
+function useCachePatch() {
   const queryClient = useQueryClient()
+
+  return {
+    queryClient,
+    before: () => queryClient.cancelQueries({ queryKey: WARDROBE_KEY }),
+    after: () => {
+      void queryClient.invalidateQueries({ queryKey: WARDROBE_KEY })
+    },
+  }
+}
+
+export function useCreateItem() {
+  const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
     mutationFn: ({ pending }: { pending: PendingUpload }) =>
@@ -81,10 +105,10 @@ export function useCreateItem() {
       //
       // Cancelling first stops the in-flight response from winning; invalidating
       // afterwards covers the cold-cache case by refetching for real.
-      await queryClient.cancelQueries({ queryKey: WARDROBE_KEY })
+      await before()
       patchCache(queryClient, (entries) => [created, ...entries])
       removePending(pending.tempId)
-      void queryClient.invalidateQueries({ queryKey: WARDROBE_KEY })
+      after()
     },
 
     onError: (error, { pending }) => {
@@ -115,30 +139,29 @@ export function useDiscardUpload() {
 }
 
 export function useUpdateItem() {
-  const queryClient = useQueryClient()
+  const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
     mutationFn: (vars: { id: string; draft: ItemDraft }) =>
       api.updateItem(vars.id, vars.draft),
-    onSuccess: (updated) => {
+    onSuccess: async (updated) => {
+      await before()
       patchCache(queryClient, (entries) =>
         entries.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)),
       )
+      after()
     },
   })
 }
 
 export function useSetFavorite() {
-  const queryClient = useQueryClient()
+  const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
     mutationFn: (vars: { id: string; isFavorite: boolean }) =>
       api.setFavorite(vars.id, vars.isFavorite),
     onMutate: async ({ id, isFavorite }) => {
-      // An in-flight fetch would land after this patch and undo it — the first
-      // line of react-query's own optimistic-update recipe, and reachable now
-      // that focus refetching is on.
-      await queryClient.cancelQueries({ queryKey: WARDROBE_KEY })
+      await before()
       const previous = queryClient.getQueryData<WardrobeItem[]>(WARDROBE_KEY)
       patchCache(queryClient, (entries) =>
         entries.map((entry) => (entry.id === id ? { ...entry, isFavorite } : entry)),
@@ -148,31 +171,43 @@ export function useSetFavorite() {
     onError: (_error, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(WARDROBE_KEY, context.previous)
     },
+    // Completes the optimistic-update recipe: without it a star that the server
+    // rejected in some way the client did not model stays wrong until the next
+    // unrelated refetch.
+    onSettled: after,
   })
 }
 
 export function useSetStatus() {
-  const queryClient = useQueryClient()
+  const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
     mutationFn: (vars: { id: string; status: ItemStatus }) =>
       api.setStatus(vars.id, vars.status),
-    onSuccess: (_data, { id, status }) => {
+    onSuccess: async (_data, { id, status }) => {
+      await before()
       patchCache(queryClient, (entries) =>
         entries.map((entry) => (entry.id === id ? { ...entry, status } : entry)),
       )
+      after()
     },
   })
 }
 
 export function useDeleteItem() {
-  const queryClient = useQueryClient()
+  const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
     mutationFn: (vars: { id: string; userId: string }) =>
       api.deleteItem(vars.id, vars.userId),
-    onSuccess: (_data, { id }) => {
+    // The most visible of the five without this: an in-flight fetch holding a
+    // pre-delete snapshot puts the garment back on the grid, with no error and
+    // nothing to retry — the row really is gone, so it disappears again at the
+    // next refetch.
+    onSuccess: async (_data, { id }) => {
+      await before()
       patchCache(queryClient, (entries) => entries.filter((entry) => entry.id !== id))
+      after()
     },
   })
 }

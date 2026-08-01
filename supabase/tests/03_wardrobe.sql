@@ -118,12 +118,9 @@ select tests.eq(
   (select string_agg(path, ',' order by sort_order) from public.item_images),
   'p2,p0,p1,p3,p4', '전달한 순서대로 재배치됨');
 
--- Asserting on sort_order alone would be a tautology: with 5 rows under
--- `between 0 and 4` plus the unique constraint, the set is always {0,1,2,3,4}.
--- The paths are what reveal whether the order actually moved.
-select tests.eq(
-  (select count(distinct sort_order)::text from public.item_images), '5',
-  'sort_order에 중복이 없음');
+-- The path assertion above is the real check. A count of distinct sort_orders
+-- would be another tautology — the unique constraint guarantees 5 distinct
+-- values for 5 rows of one item no matter what the reorder did.
 
 select tests.fails(
   $f$select public.reorder_item_images(
@@ -284,20 +281,37 @@ select tests.eq(
    where n.nspname = 'private' and p.proname in ('has_unique_elements', 'max_element_length')),
   '2', '헬퍼는 private 스키마에 있음');
 
--- PUBLIC's entry has an empty grantee, so it is the element starting with '='.
--- Matching '%=X/%' against the joined string would also hit
--- "authenticated=X/postgres" and pass no matter what.
+-- Three separate things, because checking only the first two let an explicit
+-- `anon=X` grant — which is what Supabase's default privileges actually create —
+-- sail through. PUBLIC's entry has an empty grantee, so it starts with '='.
 select tests.eq(
   (select bool_or(exists (select 1 from unnest(p.proacl) a where a::text like '=%'))::text
    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname in ('reorder_item_images', 'delete_item_image')),
-  'false', 'RPC에 PUBLIC EXECUTE가 남아 있지 않음');
+  'false', 'RPC에 PUBLIC EXECUTE가 없음');
+
+select tests.eq(
+  (select bool_or(exists (select 1 from unnest(p.proacl) a where a::text like 'anon=%'))::text
+   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname in ('reorder_item_images', 'delete_item_image')),
+  'false', 'RPC에 anon EXECUTE가 없음 — 기본 권한이 심어둔 것까지 회수됨');
 
 select tests.eq(
   (select bool_and(exists (select 1 from unnest(p.proacl) a where a::text like 'authenticated=%'))::text
    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname in ('reorder_item_images', 'delete_item_image')),
-  'true', 'RPC는 authenticated에게만 명시적으로 부여됨');
+  'true', 'RPC는 authenticated에게 부여됨');
+
+-- The assertion that actually matters: can an anonymous session call it?
+reset role;
+set role anon;
+select tests.fails(
+  $f$select public.reorder_item_images('aaaa0000-0000-0000-0000-000000000001', array[]::uuid[])$f$,
+  'permission denied', 'anon은 순서 변경 RPC를 호출할 수 없음');
+select tests.fails(
+  $f$select public.delete_item_image('bbbb0000-0000-0000-0000-000000000000')$f$,
+  'permission denied', 'anon은 사진 삭제 RPC를 호출할 수 없음');
+reset role;
 
 set role authenticated;
 set request.jwt.claim.sub = :'A';

@@ -29,11 +29,17 @@ const LIMITS = {
   title: 100,
   brand: 100,
   size: 40,
-  fit: 40,
   purchasePlace: 100,
   memo: 2000,
   tagLength: 40,
   tagCount: 20,
+  /**
+   * `items.price` is a Postgres integer. One extra zero on a coat and the
+   * insert dies with "integer out of range" — after every photo has uploaded,
+   * and identically on every retry. Ten billion won is comfortably past any
+   * garment and comfortably inside int4.
+   */
+  price: 10_000_000_000,
 } as const
 
 /**
@@ -120,6 +126,13 @@ export function ItemForm({
   const missingPhoto = showPhotos && photos.length === 0
   const missingTitle = title.trim().length === 0
   const missingCategory = categoryId === null
+  // "abc" strips to "" and Number("") is 0 — which would store a typo as a free
+  // garment, and mapRow deliberately keeps 0 rather than nulling it.
+  const parsedPrice = useMemo(() => {
+    const digits = price.replace(/[^\d]/g, '')
+    return digits === '' ? null : Number(digits)
+  }, [price])
+
   const parsedTags = useMemo(
     () => tagText.split(',').map((t) => t.trim().replace(/^#/, '')).filter(Boolean),
     [tagText],
@@ -131,17 +144,16 @@ export function ItemForm({
         ? `태그 하나는 ${LIMITS.tagLength}자를 넘을 수 없어요.`
         : null
 
-  const invalid = missingPhoto || missingTitle || missingCategory || tagProblem !== null
+  const priceProblem =
+    parsedPrice != null && parsedPrice > LIMITS.price ? '가격이 너무 커요.' : null
+
+  const invalid =
+    missingPhoto || missingTitle || missingCategory || tagProblem !== null || priceProblem !== null
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setTouched(true)
     if (invalid || pending || !categoryId) return
-
-    // "abc" strips to "" and Number("") is 0 — which would store a typo as a
-    // free garment, and mapRow deliberately keeps 0 rather than nulling it.
-    const digits = price.replace(/[^\d]/g, '')
-    const parsedPrice = digits === '' ? null : Number(digits)
 
     onSubmit({
       photos,
@@ -161,6 +173,13 @@ export function ItemForm({
 
     // Set after onSubmit, not before: the latch means "handed the blobs over",
     // and a caller that bails out early has not taken them.
+    //
+    // This relies on onSubmit not unmounting this component synchronously.
+    // Navigation inside a React event handler is batched, so the unmount
+    // flushes after handleSubmit returns — but a flushSync-based navigation
+    // would run the cleanup with the latch still false, revoking preview URLs
+    // that the pending card is at that moment rendering. Keep navigation in
+    // onSubmit ordinary.
     submitted.current = true
   }
 
@@ -295,6 +314,7 @@ export function ItemForm({
               placeholder="220000"
               className={inputStyle}
             />
+            {priceProblem && <FieldError>{priceProblem}</FieldError>}
           </Field>
 
           <Field label="구매일" htmlFor={`${uid}-purchased-at`}>

@@ -5,13 +5,15 @@ describe('errorMessage', () => {
   it('reads a Supabase error, which is a plain object rather than an Error', () => {
     // This is the shape supabase-js returns on the non-throwOnError path.
     // `instanceof Error` is false for it, so String() rendered "[object Object]".
+    // Deliberately a message with no constraint mapping, so this asserts the
+    // plain-object read rather than the translation table.
     const supabaseError = {
-      message: 'new row violates check constraint "items_memo_length"',
+      message: 'TypeError: Failed to fetch',
       details: null,
       hint: null,
-      code: '23514',
+      code: '',
     }
-    expect(errorMessage(supabaseError)).toContain('items_memo_length')
+    expect(errorMessage(supabaseError)).toBe('TypeError: Failed to fetch')
   })
 
   it('reads a real Error', () => {
@@ -31,5 +33,26 @@ describe('errorMessage', () => {
 
   it('uses the caller-supplied fallback', () => {
     expect(errorMessage(null, '잠시 후 다시')).toBe('잠시 후 다시')
+  })
+})
+
+describe('errorMessage — 제약 위반', () => {
+  it('translates a constraint name into something actionable', () => {
+    expect(
+      errorMessage({
+        message: 'new row for relation "items" violates check constraint "items_memo_length"',
+        code: '23514',
+      }),
+    ).toBe('메모가 너무 길어요.')
+  })
+
+  it('falls back to the SQLSTATE when the constraint is unknown', () => {
+    expect(errorMessage({ message: 'value out of range', code: '22003' })).toBe(
+      '숫자가 너무 커요.',
+    )
+  })
+
+  it('keeps the original text when nothing matches', () => {
+    expect(errorMessage({ message: 'connection reset', code: 'XX000' })).toBe('connection reset')
   })
 })

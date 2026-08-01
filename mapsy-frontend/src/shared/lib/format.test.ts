@@ -34,6 +34,11 @@ describe('formatDate', () => {
     const original = env?.TZ
     if (env) env.TZ = 'America/New_York'
     try {
+      // Self-check first: if the TZ change stopped taking effect — a different
+      // worker isolation mode, a Node change — the assertion below would pass
+      // for the wrong reason and this guard would quietly become a tautology.
+      // This line also records what the old implementation did.
+      expect(new Date('2025-11-02').toLocaleDateString('ko-KR')).toBe('2025. 11. 1.')
       expect(formatDate('2025-11-02')).toBe('2025. 11. 2.')
     } finally {
       if (env) env.TZ = original

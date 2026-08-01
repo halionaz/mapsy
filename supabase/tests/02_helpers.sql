@@ -69,5 +69,7 @@ begin
 end;
 $$;
 
-grant usage on schema tests to authenticated;
-grant execute on all functions in schema tests to authenticated;
+-- anon too: some assertions run as an anonymous session to check what it is
+-- allowed to call.
+grant usage on schema tests to authenticated, anon;
+grant execute on all functions in schema tests to authenticated, anon;

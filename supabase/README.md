@@ -120,7 +120,7 @@ pnpm test:db
 ```
 
 Docker에 Postgres를 띄우고 `auth`/`storage` 스텁을 세운 뒤 **실제 마이그레이션을 적용해**
-제약·RLS·스토리지 정책·순서 변경 RPC·함수 노출 범위를 검사한다. 47개 단언이 있고 하나라도 어긋나면
+제약·RLS·스토리지 정책·순서 변경 RPC·함수 노출 범위를 검사한다. 49개 단언이 있고 하나라도 어긋나면
 0이 아닌 코드로 끝난다. 마지막에 마이그레이션을 한 번 더 적용해 멱등성도 확인한다.
 
 `supabase start`가 있으면 그쪽이 더 충실하지만, 이 스크립트는 Docker만 있으면 돌아가서
@@ -178,9 +178,18 @@ select delete_item_image(<image_id>);
 그래서 헬퍼는 `private` 스키마에 둔다. PostgREST가 introspect하지 않으므로 노출되지 않고,
 `authenticated`에게 `usage`만 주면 제약은 정상 동작한다.
 
-RPC 두 개(`reorder_item_images`, `delete_item_image`)는 노출돼야 하는 것이 맞지만,
-Postgres가 기본으로 PUBLIC에 EXECUTE를 주고 `grant ... to authenticated`가 그걸 회수하지
-않는다. 명시적으로 `revoke ... from public`한 뒤 다시 부여한다.
+RPC 두 개(`reorder_item_images`, `delete_item_image`)는 노출돼야 하는 것이 맞지만
+`authenticated` 전용이어야 한다. 여기에 함정이 두 겹 있다.
+
+1. Postgres가 기본으로 **PUBLIC**에 EXECUTE를 준다.
+2. Supabase가 프로젝트마다
+   `alter default privileges in schema public grant all on functions to postgres, anon,
+   authenticated, service_role`을 돌려놔서, `public`에 만든 함수는 **명시적 `anon=X`** 를
+   달고 태어난다.
+
+`revoke ... from public`은 1번만 지운다. 2번은 `from anon`을 함께 적어야 회수된다 —
+실제 프로젝트의 `supabase db dump`로 확인했다. 테스트 하네스(`00_bootstrap.sql`)도 같은
+`alter default privileges`를 실행하므로, 이 차이가 로컬에서 드러난다.
 
 ### item_images는 복합 외래키를 쓴다
 

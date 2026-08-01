@@ -63,3 +63,11 @@ as $$
 $$;
 
 grant usage on schema public, auth, storage to anon, authenticated;
+
+-- Supabase runs this on every new project, and leaving it out made the harness
+-- a *different* database rather than a simpler one: functions created in
+-- `public` are born with an explicit `anon=X` grant, which `revoke ... from
+-- public` does not remove. Without this line the ACL assertions below pass
+-- against a shape that does not exist in production.
+alter default privileges in schema public
+  grant all on functions to postgres, anon, authenticated, service_role;
