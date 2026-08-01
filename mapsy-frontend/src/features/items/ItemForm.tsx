@@ -105,7 +105,6 @@ export function ItemForm({
       purchasePlace: purchasePlace || null,
       tags: tagText.split(',').map((t) => t.trim()).filter(Boolean),
       memo: memo || null,
-      isFavorite: initial?.isFavorite ?? false,
     })
   }
 

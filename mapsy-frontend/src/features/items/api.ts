@@ -1,4 +1,5 @@
 import { getSupabase, STORAGE_BUCKET } from '@/shared/lib/supabase'
+import { newId } from '@/shared/lib/id'
 import type { ProcessedPhoto } from '@/shared/lib/image'
 import type { Item, ItemDraft, ItemStatus, ItemWithImages } from '@/types/item'
 import {
@@ -111,10 +112,17 @@ function contentTypeOf(ext: ProcessedPhoto['ext']): string {
 /**
  * Creates an item and uploads its photos.
  *
- * The row is inserted first so the photos have an item id to live under. If any
- * upload then fails the row is deleted again — a wardrobe entry with no photo is
- * worse than no entry, because the grid is entirely visual and the user would
- * have no idea what the card refers to.
+ * Photos go up **before** the row. The item id is generated client-side so the
+ * storage paths can be built without the database having seen anything yet.
+ *
+ * The previous order — insert, upload, delete-on-failure — left a ghost behind
+ * whenever the rollback failed too. That is not a rare pairing: the usual reason
+ * an upload fails is that the network went away, which is also the reason the
+ * rollback fails. The result was a photo-less row that the grid renders as a
+ * blank card with no way to tell what it refers to.
+ *
+ * Uploading first means a failure anywhere leaves nothing in the database at
+ * all, and `uploadPhotos` removes whatever objects it already wrote.
  */
 export async function createItem(
   draft: ItemDraft,
@@ -122,56 +130,74 @@ export async function createItem(
   userId: string,
 ): Promise<WardrobeItem> {
   const supabase = getSupabase()
+  const itemId = newId()
 
-  const { data, error } = await supabase
-    .from('items')
-    .insert(toItemInsert(draft, userId))
-    .select(ITEM_COLUMNS)
-    .single()
-
-  if (error) throw error
-  const item = toItem(data)
+  const pending = await uploadPhotos(itemId, userId, photos)
 
   try {
-    const images = await uploadPhotos(item.id, userId, photos)
-    const covers = await signPaths(images.length ? [images[0].thumbPath] : [])
-    return {
-      ...item,
-      images,
-      coverUrl: images.length ? (covers.get(images[0].thumbPath) ?? null) : null,
+    const { data, error } = await supabase
+      .from('items')
+      .insert({ ...toItemInsert(draft, userId), id: itemId })
+      .select(ITEM_COLUMNS)
+      .single()
+    if (error) throw error
+
+    const item = toItem(data)
+
+    try {
+      const { data: imageRows, error: imageError } = await supabase
+        .from('item_images')
+        .insert(pending.rows)
+        .select(IMAGE_COLUMNS)
+      if (imageError) throw imageError
+
+      const images = (imageRows ?? []).map(toItemImage)
+      const cover = coverOf(images)
+      const signed = await signPaths(cover ? [cover.thumbPath] : [])
+
+      return {
+        ...item,
+        images,
+        coverUrl: cover ? (signed.get(cover.thumbPath) ?? null) : null,
+      }
+    } catch (imageError) {
+      // The row exists but has no photos, which is the state this ordering is
+      // meant to prevent — take it back out.
+      await supabase.from('items').delete().eq('id', itemId).eq('user_id', userId)
+      throw imageError
     }
-  } catch (uploadError) {
-    await deleteItem(item.id, userId).catch(() => {
-      // Swallow: the upload failure is the one worth reporting, and a failed
-      // cleanup would otherwise mask it.
-    })
-    throw uploadError
+  } catch (insertError) {
+    await removeObjects(pending.paths)
+    throw insertError
   }
 }
 
+/** Best-effort storage cleanup; never masks the error that triggered it. */
+async function removeObjects(paths: string[]): Promise<void> {
+  if (paths.length === 0) return
+  const { error } = await getSupabase().storage.from(STORAGE_BUCKET).remove(paths)
+  if (error) console.warn('스토리지 정리 실패, 고아 객체가 남았을 수 있음:', error.message)
+}
+
 /**
- * Uploads every photo, then records them in one insert.
+ * Uploads every photo and returns the rows that will describe them.
  *
- * Objects are tracked as they land so a failure part-way through can delete
- * them. Leaving that out orphans real files: the rows are written only at the
- * end, so a failure on photo three means two photos are in storage with nothing
- * in the database pointing at them — `deleteItem` reads paths from those rows,
- * so it would find nothing to clean and the objects would bill against the quota
- * forever.
+ * Writes nothing to the database — the caller inserts, so that a failure here
+ * leaves no trace at all. Objects are tracked as they land, and a failure
+ * part-way through removes the ones already written rather than orphaning them.
  */
 async function uploadPhotos(
   itemId: string,
   userId: string,
   photos: ProcessedPhoto[],
-) {
-  const supabase = getSupabase()
-  const storage = supabase.storage.from(STORAGE_BUCKET)
+): Promise<{ rows: ItemImageInsert[]; paths: string[] }> {
+  const storage = getSupabase().storage.from(STORAGE_BUCKET)
   const rows: ItemImageInsert[] = []
-  const uploaded: string[] = []
+  const paths: string[] = []
 
   try {
     for (const [index, photo] of photos.entries()) {
-      const imageId = crypto.randomUUID()
+      const imageId = newId()
       const base = `${userId}/${itemId}/${imageId}`
       const path = `${base}.${photo.ext}`
       const thumbPath = `${base}_thumb.${photo.ext}`
@@ -183,8 +209,8 @@ async function uploadPhotos(
       ])
       // Recorded before the error check: when one of the pair succeeds and the
       // other fails, the successful one still needs cleaning up.
-      if (!full.error) uploaded.push(path)
-      if (!thumb.error) uploaded.push(thumbPath)
+      if (!full.error) paths.push(path)
+      if (!thumb.error) paths.push(thumbPath)
       if (full.error) throw full.error
       if (thumb.error) throw thumb.error
 
@@ -200,17 +226,9 @@ async function uploadPhotos(
       })
     }
 
-    if (rows.length === 0) return []
-
-    const { data, error } = await supabase.from('item_images').insert(rows).select(IMAGE_COLUMNS)
-    if (error) throw error
-    return (data ?? []).map(toItemImage)
+    return { rows, paths }
   } catch (uploadError) {
-    if (uploaded.length > 0) {
-      // Best effort: the upload failure is what the user needs to hear about,
-      // and a failed cleanup on top of it would only mask the real cause.
-      await storage.remove(uploaded).catch(() => {})
-    }
+    await removeObjects(paths)
     throw uploadError
   }
 }
@@ -245,12 +263,10 @@ export async function deleteItemImage(
   imageId: string,
   paths: { path: string; thumbPath: string },
 ): Promise<void> {
-  const supabase = getSupabase()
-
-  const { error } = await supabase.rpc('delete_item_image', { p_image_id: imageId })
+  const { error } = await getSupabase().rpc('delete_item_image', { p_image_id: imageId })
   if (error) throw error
 
-  await supabase.storage.from(STORAGE_BUCKET).remove([paths.path, paths.thumbPath])
+  await removeObjects([paths.path, paths.thumbPath])
 }
 
 export async function updateItem(id: string, draft: ItemDraft): Promise<Item> {
@@ -281,9 +297,14 @@ export async function setStatus(id: string, status: ItemStatus): Promise<void> {
 /**
  * Deletes an item, its image rows and its storage objects.
  *
- * Storage is emptied first. The database cascade removes the rows the moment the
- * item goes, and without their paths the objects would be unreachable orphans
- * billing against the storage quota forever.
+ * Paths are read first, then the row goes, then the objects.
+ *
+ * Emptying storage first looks tidier — the cascade takes the paths with it, so
+ * they have to be captured beforehand either way — but it fails in the worse
+ * direction. If the objects are removed and the row delete then fails, the
+ * photos are gone for good and the item is left rendering broken images. The
+ * other order can only leave orphaned objects, and those are recoverable: the
+ * bucket can be listed and reconciled against the rows.
  */
 export async function deleteItem(id: string, userId: string): Promise<void> {
   const supabase = getSupabase()
@@ -294,16 +315,12 @@ export async function deleteItem(id: string, userId: string): Promise<void> {
     .eq('item_id', id)
   if (listError) throw listError
 
-  const paths = (data ?? []).flatMap((row) => [
-    row.path as string,
-    row.thumb_path as string,
-  ])
-
-  if (paths.length > 0) {
-    const { error: removeError } = await supabase.storage.from(STORAGE_BUCKET).remove(paths)
-    if (removeError) throw removeError
-  }
+  const paths = (data ?? []).flatMap((row) => [row.path, row.thumb_path])
 
   const { error } = await supabase.from('items').delete().eq('id', id).eq('user_id', userId)
   if (error) throw error
+
+  // Not fatal: the row is gone, which is what was asked for. A leftover object
+  // costs quota, and failing here would tell the user the delete did not work.
+  await removeObjects(paths)
 }

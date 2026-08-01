@@ -17,12 +17,12 @@ export function ItemEditPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const userId = useCurrentUserId()
-  const { data, isPending } = useWardrobe()
+  const { data, isLoading } = useWardrobe()
   const update = useUpdateItem()
 
   const item = data?.find((entry) => entry.id === id)
 
-  if (isPending) return <ScreenHeader title="옷 편집">불러오는 중…</ScreenHeader>
+  if (isLoading) return <ScreenHeader title="옷 편집">불러오는 중…</ScreenHeader>
   if (!item) return <ScreenHeader title="옷 편집">이 옷을 찾을 수 없어요.</ScreenHeader>
 
   function handleSubmit({ photos: _photos, ...draft }: ItemFormValues) {

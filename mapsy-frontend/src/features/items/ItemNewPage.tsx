@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router'
 
+import { newId } from '@/shared/lib/id'
+
 import { useCurrentUserId } from '@/features/auth/useCurrentUserId'
 import { ItemForm, type ItemFormValues } from './ItemForm'
 import { ScreenHeader } from './ScreenHeader'
@@ -19,7 +21,9 @@ export function ItemNewPage() {
 
   function handleSubmit({ photos, ...draft }: ItemFormValues) {
     if (!userId) return
-    create.mutate({ tempId: crypto.randomUUID(), pending: { draft, photos, userId } })
+    create.mutate({
+      pending: { tempId: newId(), draft, photos, userId, state: 'uploading' },
+    })
     navigate('/', { replace: true })
   }
 

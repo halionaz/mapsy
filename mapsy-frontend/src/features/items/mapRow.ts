@@ -112,18 +112,23 @@ function toItemFields(draft: ItemDraft) {
     // Tags are trimmed and de-duplicated here so the autocomplete derived from
     // the loaded collection doesn't offer "출근용" twice.
     tags: uniqueTags(draft.tags ?? []),
-    is_favorite: draft.isFavorite ?? false,
   }
 }
 
 export function toItemInsert(draft: ItemDraft, userId: string): ItemInsert {
-  return { ...toItemFields(draft), user_id: userId }
+  return { ...toItemFields(draft), user_id: userId, is_favorite: draft.isFavorite ?? false }
 }
 
 /**
- * `user_id` is intentionally absent: ownership is fixed at creation, and sending
- * it on an update would at best be a no-op and at worst trip the RLS check.
- * Leaving it out of the type is stronger than deleting the key afterwards.
+ * Writes only what the edit form owns.
+ *
+ * `user_id` is absent because ownership is fixed at creation — sending it would
+ * at best be a no-op and at worst trip the RLS check, and leaving it out of the
+ * type is stronger than deleting the key afterwards.
+ *
+ * `is_favorite` is absent for a different reason: the star lives on the detail
+ * screen, not in this form. Including it meant opening the edit screen, starring
+ * the item elsewhere, then saving — and silently un-starring it.
  */
 export function toItemUpdate(draft: ItemDraft): ItemUpdate {
   return toItemFields(draft)

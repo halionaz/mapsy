@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { css } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
@@ -23,7 +23,7 @@ export function ItemDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const userId = useCurrentUserId()
-  const { data, isPending } = useWardrobe()
+  const { data, isLoading } = useWardrobe()
 
   const setFavorite = useSetFavorite()
   const setStatus = useSetStatus()
@@ -32,17 +32,28 @@ export function ItemDetailPage() {
   const item = data?.find((entry) => entry.id === id)
   const [fullUrls, setFullUrls] = useState<string[]>([])
 
+  // Depends on the paths, not on `item`. Every cache patch — starring the item,
+  // for instance — produces a new object, and keying the effect on that
+  // identity re-signed all the URLs and remounted every <img>, so the photos
+  // flickered on each tap of the star.
+  const photoPaths = useMemo(
+    () =>
+      [...(item?.images ?? [])]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((image) => image.path)
+        .join('\n'),
+    [item?.images],
+  )
+
   useEffect(() => {
     // Only the thumbnail is signed by the list query; the full-size photos are
     // signed here so the grid isn't paying for URLs nobody opens.
-    if (!item || item.images.length === 0) {
+    if (!photoPaths) {
       setFullUrls([])
       return
     }
     let active = true
-    const paths = [...item.images]
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((image) => image.path)
+    const paths = photoPaths.split('\n')
 
     void signPaths(paths).then((signed) => {
       if (active) setFullUrls(paths.map((p) => signed.get(p)).filter((u): u is string => !!u))
@@ -50,9 +61,9 @@ export function ItemDetailPage() {
     return () => {
       active = false
     }
-  }, [item])
+  }, [photoPaths])
 
-  if (isPending) return <ScreenHeader title="옷 상세">불러오는 중…</ScreenHeader>
+  if (isLoading) return <ScreenHeader title="옷 상세">불러오는 중…</ScreenHeader>
 
   if (!item) {
     return (
@@ -83,8 +94,14 @@ export function ItemDetailPage() {
   async function handleDelete() {
     if (!userId || !item) return
     if (!window.confirm(`'${item.title}'을(를) 삭제할까요? 되돌릴 수 없어요.`)) return
-    await remove.mutateAsync({ id: item.id, userId })
-    navigate('/', { replace: true })
+    try {
+      await remove.mutateAsync({ id: item.id, userId })
+      navigate('/', { replace: true })
+    } catch {
+      // Swallowed here so it isn't an unhandled rejection; the message is
+      // rendered from `remove.error` below. Without that the button looked
+      // simply broken — nothing happened and nothing was said.
+    }
   }
 
   return (
@@ -177,10 +194,17 @@ export function ItemDetailPage() {
                 status: item.status === 'owned' ? 'disposed' : 'owned',
               })
             }
+            disabled={setStatus.isPending}
             className={actionButton}
           >
             {item.status === 'owned' ? '처분 처리' : '다시 보유로'}
           </button>
+
+          {(setStatus.error || setFavorite.error) && (
+            <p role="alert" className={css({ fontSize: 'xs', color: 'danger', textAlign: 'center' })}>
+              변경 사항을 저장하지 못했어요.
+            </p>
+          )}
           <button
             type="button"
             onClick={() => void handleDelete()}
@@ -201,6 +225,13 @@ export function ItemDetailPage() {
           >
             {remove.isPending ? '삭제 중…' : '삭제'}
           </button>
+
+          {remove.error && (
+            <p role="alert" className={css({ fontSize: 'xs', color: 'danger', textAlign: 'center' })}>
+              삭제하지 못했어요.{' '}
+              {remove.error instanceof Error ? remove.error.message : '잠시 후 다시 시도해주세요.'}
+            </p>
+          )}
         </div>
       </div>
     </ScreenHeader>

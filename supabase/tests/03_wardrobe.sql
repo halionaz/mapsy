@@ -128,6 +128,50 @@ select tests.fails(
        array['bbbb0000-0000-0000-0000-000000000000']::uuid[])$f$,
   '5 개 중 1 개만 전달됨', '일부만 전달하면 거부 — 구멍이 생김');
 
+-- The count check alone let these through: FOUND is true as soon as one row
+-- updates, so a subset was silently applied and reported as success.
+select tests.fails(
+  $f$select public.reorder_item_images(
+       'aaaa0000-0000-0000-0000-000000000001',
+       array['bbbb0000-0000-0000-0000-000000000000',
+             'bbbb0000-0000-0000-0000-000000000000',
+             'bbbb0000-0000-0000-0000-000000000001',
+             'bbbb0000-0000-0000-0000-000000000003',
+             'bbbb0000-0000-0000-0000-000000000004']::uuid[])$f$,
+  '중복', '중복 id는 개수가 맞아도 거부');
+
+insert into public.items (id, user_id, title, category_id)
+values ('aaaa0000-0000-0000-0000-000000000002', :'A', '다른 아이템', 'top.knit');
+insert into public.item_images (id, item_id, user_id, path, thumb_path, sort_order)
+values ('cccc0000-0000-0000-0000-000000000001',
+        'aaaa0000-0000-0000-0000-000000000002', :'A', 'z0', 'z0t', 0);
+
+select tests.fails(
+  $f$select public.reorder_item_images(
+       'aaaa0000-0000-0000-0000-000000000001',
+       array['bbbb0000-0000-0000-0000-000000000000',
+             'bbbb0000-0000-0000-0000-000000000001',
+             'bbbb0000-0000-0000-0000-000000000002',
+             'bbbb0000-0000-0000-0000-000000000003',
+             'cccc0000-0000-0000-0000-000000000001']::uuid[])$f$,
+  '중복', '다른 아이템의 id가 섞이면 거부');
+
+select tests.eq(
+  (select string_agg(sort_order::text, ',' order by sort_order)
+   from public.item_images where item_id = 'aaaa0000-0000-0000-0000-000000000001'),
+  '0,1,2,3,4', '거부된 재정렬은 아무것도 바꾸지 않음');
+
+-- A photo-less item reordering to nothing is a legitimate no-op; the previous
+-- version raised "대상 이미지를 찾지 못함" here.
+insert into public.items (id, user_id, title, category_id)
+values ('aaaa0000-0000-0000-0000-000000000003', :'A', '사진 없는 아이템', 'top.knit');
+select public.reorder_item_images('aaaa0000-0000-0000-0000-000000000003', array[]::uuid[]);
+\echo '  ok  빈 배열은 오류가 아님 (사진 0장 아이템)'
+
+delete from public.items where id in (
+  'aaaa0000-0000-0000-0000-000000000002',
+  'aaaa0000-0000-0000-0000-000000000003');
+
 \echo '── 사진 삭제 시 재번호 ──'
 select public.delete_item_image('bbbb0000-0000-0000-0000-000000000002');
 
@@ -194,6 +238,33 @@ select tests.eq(
 select tests.eq(
   (select array_to_string(allowed_mime_types, ',') from storage.buckets where id = 'wardrobe'),
   'image/webp,image/jpeg', '허용 MIME 타입이 클라이언트 인코딩과 일치');
+
+\echo '── 배열·텍스트 제약 ──'
+select tests.fails(
+  format($f$insert into public.items (user_id, title, category_id, seasons)
+            values (%L, '중복 계절', 'top.knit', array['summer','summer'])$f$, :'A'),
+  'items_seasons_distinct', '계절 중복 거부');
+
+select tests.fails(
+  format($f$insert into public.items (user_id, title, category_id, colors)
+            values (%L, '중복 색', 'top.knit', array['black','black'])$f$, :'A'),
+  'items_colors_distinct', '색상 중복 거부');
+
+select tests.fails(
+  format($f$insert into public.items (user_id, title, category_id)
+            values (%L, repeat('가', 101), 'top.knit')$f$, :'A'),
+  'items_title_length', '101자 이름 거부');
+
+select tests.fails(
+  format($f$insert into public.items (user_id, title, category_id, tags)
+            values (%L, '태그많음', 'top.knit', array(select 't'||g from generate_series(1,21) g))$f$, :'A'),
+  'items_tags_limit', '태그 21개 거부');
+
+\echo '── 인덱스 ──'
+select tests.eq(
+  (select count(*)::text from pg_indexes
+   where tablename = 'item_images' and indexdef like '%(item_id, sort_order)%'),
+  '1', '(item_id, sort_order) 인덱스는 하나뿐 — UNIQUE 제약과 중복 없음');
 
 \echo '── 캐스케이드 ──'
 delete from public.items;

@@ -11,7 +11,9 @@
 set -euo pipefail
 
 CONTAINER="${MAPSY_PG_CONTAINER:-mapsy-pg-test}"
-IMAGE="${MAPSY_PG_IMAGE:-postgres:16-alpine}"
+# Matches the major version Supabase provisions for new projects; see
+# supabase/.temp/postgres-version after `supabase link`.
+IMAGE="${MAPSY_PG_IMAGE:-postgres:17-alpine}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS="$HERE/../migrations"
 

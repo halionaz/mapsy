@@ -7,7 +7,8 @@ import { CATEGORY_GROUPS, type CategoryGroupId } from '@/shared/constants/catego
 import { applyFilters } from '@/features/filters/applyFilters'
 import { EMPTY_FILTERS, SORT_OPTIONS, type SortId } from '@/features/filters/model'
 import { chipStyle } from '@/shared/ui/chipStyle'
-import { ItemCard } from './ItemCard'
+import { ItemCard, PendingCard } from './ItemCard'
+import { usePendingUploads } from './pendingUploads'
 import { useDiscardUpload, useRetryUpload, useWardrobe } from './queries'
 
 /**
@@ -19,8 +20,9 @@ import { useDiscardUpload, useRetryUpload, useWardrobe } from './queries'
  * already handles those axes, so it is a UI addition rather than a rewrite.
  */
 export function WardrobePage() {
-  const { data, isPending, error } = useWardrobe()
-  const { retry } = useRetryUpload()
+  const { data, isLoading, error } = useWardrobe()
+  const pending = usePendingUploads()
+  const retry = useRetryUpload()
   const discard = useDiscardUpload()
 
   const [query, setQuery] = useState('')
@@ -29,25 +31,17 @@ export function WardrobePage() {
 
   const entries = useMemo(() => data ?? [], [data])
 
-  // Items still uploading have no server row yet, so they are pinned to the top
-  // and held out of the filtered set — hiding one behind a category chip would
-  // read as data loss, and leaving them in both lists would render them twice.
-  const uploading = useMemo(() => entries.filter((e) => e.upload), [entries])
-
   const visible = useMemo(
     () =>
-      applyFilters(
-        entries.filter((e) => !e.upload),
-        {
-          ...EMPTY_FILTERS,
-          query,
-          groupIds: activeGroup ? [activeGroup] : [],
-          sort,
-        },
-      ),
+      applyFilters(entries, {
+        ...EMPTY_FILTERS,
+        query,
+        groupIds: activeGroup ? [activeGroup] : [],
+        sort,
+      }),
     [entries, query, activeGroup, sort],
   )
-  const ownedCount = entries.filter((e) => e.status === 'owned' && !e.upload).length
+  const ownedCount = entries.filter((e) => e.status === 'owned').length
 
   return (
     <div className={vstack({ gap: '0', alignItems: 'stretch', flex: '1' })}>
@@ -142,7 +136,7 @@ export function WardrobePage() {
           pb: 'calc({spacing.24} + var(--safe-b))',
         })}
       >
-        {isPending ? (
+        {isLoading ? (
           <Centered>불러오는 중…</Centered>
         ) : error ? (
           <Centered>
@@ -153,7 +147,7 @@ export function WardrobePage() {
               {error instanceof Error ? error.message : String(error)}
             </p>
           </Centered>
-        ) : entries.length === 0 ? (
+        ) : entries.length === 0 && pending.length === 0 ? (
           <Centered>
             <p className={css({ fontSize: 'md', fontWeight: 'medium' })}>
               아직 등록한 옷이 없어요
@@ -206,14 +200,22 @@ export function WardrobePage() {
                 m: '0',
               })}
             >
-              {[...uploading, ...visible].map((entry) => (
-                <li key={entry.id}>
-                  <ItemCard entry={entry} onRetry={retry} onDiscard={discard} />
+              {/* Pending registrations are pinned to the top and sit outside
+                  the filters — hiding one behind a category chip would read as
+                  data loss while its photos are still uploading. */}
+              {pending.map((entry) => (
+                <li key={entry.tempId}>
+                  <PendingCard pending={entry} onRetry={retry} onDiscard={discard} />
+                </li>
+              ))}
+              {visible.map((item) => (
+                <li key={item.id}>
+                  <ItemCard item={item} />
                 </li>
               ))}
             </ul>
 
-            {visible.length === 0 && uploading.length === 0 && (
+            {visible.length === 0 && pending.length === 0 && (
               <p
                 className={css({
                   py: '10',

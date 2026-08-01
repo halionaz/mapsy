@@ -1,9 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
+import { isSupabaseConfigured } from '@/shared/lib/supabase'
 import type { ItemDraft, ItemStatus } from '@/types/item'
 import * as api from './api'
 import type { WardrobeItem } from './api'
+import {
+  addPending,
+  getPending,
+  markPendingState,
+  removePending,
+  type PendingUpload,
+} from './pendingUploads'
 
 /**
  * Query layer for the wardrobe.
@@ -12,84 +19,31 @@ import type { WardrobeItem } from './api'
  * there is a single cache entry every screen reads from. Mutations patch that
  * entry directly instead of refetching, which is what keeps a tap on the
  * favourite star instant.
+ *
+ * In-flight registrations deliberately do *not* live in this cache — see
+ * `pendingUploads.ts` for why.
  */
 
 export const WARDROBE_KEY = ['wardrobe'] as const
 
-/**
- * A cached item, possibly one that has not finished uploading.
- *
- * Registration puts the card on the grid before the photos are stored (PRD §8.5)
- * — standing in front of a wardrobe, waiting on an upload before you can add the
- * next garment is the thing that makes people stop logging them.
- */
-export interface WardrobeEntry extends WardrobeItem {
-  upload?: 'uploading' | 'failed'
-}
-
-interface PendingUpload {
-  draft: ItemDraft
-  photos: ProcessedPhoto[]
-  userId: string
-}
-
-/**
- * Payloads for optimistic entries that have not landed yet, so a failed upload
- * can be retried from the grid. Module-level because the form that started the
- * upload has already navigated away by the time it fails.
- *
- * Lives only as long as the tab: full offline queueing is explicitly out of
- * scope (PRD §8.5), and persisting Blobs to IndexedDB is that feature, not this
- * one.
- */
-const pendingUploads = new Map<string, PendingUpload>()
-
 export function useWardrobe() {
-  // Typed as WardrobeEntry rather than the fetch's return type: the cache also
-  // holds optimistic entries that mutations put there, and consumers have to see
-  // the `upload` field to render them.
-  return useQuery<WardrobeEntry[]>({
+  return useQuery<WardrobeItem[]>({
     queryKey: WARDROBE_KEY,
     queryFn: api.fetchWardrobe,
+    // Preview mode has no backend to ask. Without this the query runs anyway,
+    // `getSupabase()` throws, and the home screen shows a retry-backed error
+    // card — contradicting the documented promise that the UI is browsable
+    // before a Supabase project exists.
+    enabled: isSupabaseConfigured,
   })
-}
-
-function optimisticEntry(tempId: string, pending: PendingUpload): WardrobeEntry {
-  const now = new Date().toISOString()
-  const { draft, photos, userId } = pending
-  return {
-    id: tempId,
-    userId,
-    title: draft.title.trim(),
-    categoryId: draft.categoryId,
-    brand: draft.brand ?? null,
-    size: draft.size ?? null,
-    fit: draft.fit ?? null,
-    colors: draft.colors ?? [],
-    seasons: draft.seasons ?? [],
-    price: draft.price ?? null,
-    purchasedAt: draft.purchasedAt ?? null,
-    purchasePlace: draft.purchasePlace ?? null,
-    memo: draft.memo ?? null,
-    tags: draft.tags ?? [],
-    status: 'owned',
-    isFavorite: draft.isFavorite ?? false,
-    createdAt: now,
-    updatedAt: now,
-    images: [],
-    // The locally generated thumbnail stands in until the signed URL exists, so
-    // the card is never a grey box.
-    coverUrl: photos[0]?.previewUrl ?? null,
-    upload: 'uploading',
-  }
 }
 
 function patchCache(
   queryClient: ReturnType<typeof useQueryClient>,
-  update: (entries: WardrobeEntry[]) => WardrobeEntry[],
+  update: (entries: WardrobeItem[]) => WardrobeItem[],
 ) {
-  queryClient.setQueryData<WardrobeEntry[]>(WARDROBE_KEY, (entries) =>
-    update(entries ?? []),
+  queryClient.setQueryData<WardrobeItem[]>(WARDROBE_KEY, (entries) =>
+    entries ? update(entries) : entries,
   )
 }
 
@@ -97,35 +51,24 @@ export function useCreateItem() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (vars: { tempId: string; pending: PendingUpload }) => {
-      const { draft, photos, userId } = vars.pending
-      return api.createItem(draft, photos, userId)
+    mutationFn: ({ pending }: { pending: PendingUpload }) =>
+      api.createItem(pending.draft, pending.photos, pending.userId),
+
+    onMutate: ({ pending }) => {
+      addPending({ ...pending, state: 'uploading' })
     },
 
-    onMutate: ({ tempId, pending }) => {
-      pendingUploads.set(tempId, pending)
-      patchCache(queryClient, (entries) => [optimisticEntry(tempId, pending), ...entries])
+    onSuccess: (created, { pending }) => {
+      // Prepend rather than invalidate: the server order is newest-first and
+      // this is the newest, so a round trip would only re-fetch what we hold.
+      patchCache(queryClient, (entries) => [created, ...entries])
+      removePending(pending.tempId)
     },
 
-    onSuccess: (created, { tempId }) => {
-      const pending = pendingUploads.get(tempId)
-      pendingUploads.delete(tempId)
-      patchCache(queryClient, (entries) =>
-        entries.map((entry) => (entry.id === tempId ? created : entry)),
-      )
-      // The preview object URLs have been replaced by signed ones; holding the
-      // blobs any longer just leaks them.
-      pending?.photos.forEach(releasePreview)
-    },
-
-    onError: (_error, { tempId }) => {
-      // The entry stays on the grid rather than vanishing — the retry affordance
-      // has to be attached to something the user can see.
-      patchCache(queryClient, (entries) =>
-        entries.map((entry) =>
-          entry.id === tempId ? { ...entry, upload: 'failed' } : entry,
-        ),
-      )
+    onError: (_error, { pending }) => {
+      // The entry stays visible rather than vanishing — the retry affordance has
+      // to be attached to something the user can see, and its blobs stay with it.
+      markPendingState(pending.tempId, 'failed')
     },
   })
 }
@@ -133,28 +76,17 @@ export function useCreateItem() {
 /** Re-runs a create that failed, reusing the blobs already processed. */
 export function useRetryUpload() {
   const create = useCreateItem()
-  const queryClient = useQueryClient()
 
-  return {
-    retry: (tempId: string) => {
-      const pending = pendingUploads.get(tempId)
-      if (!pending) return
-      // Drop the failed placeholder first; onMutate re-adds a fresh one.
-      patchCache(queryClient, (entries) => entries.filter((entry) => entry.id !== tempId))
-      create.mutate({ tempId, pending })
-    },
+  return (tempId: string) => {
+    const pending = getPending(tempId)
+    if (!pending || pending.state !== 'failed') return
+    create.mutate({ pending })
   }
 }
 
-/** Abandons a failed upload and removes its card. */
+/** Abandons a failed upload, freeing its preview URLs. */
 export function useDiscardUpload() {
-  const queryClient = useQueryClient()
-
-  return (tempId: string) => {
-    pendingUploads.get(tempId)?.photos.forEach(releasePreview)
-    pendingUploads.delete(tempId)
-    patchCache(queryClient, (entries) => entries.filter((entry) => entry.id !== tempId))
-  }
+  return (tempId: string) => removePending(tempId)
 }
 
 export function useUpdateItem() {
@@ -178,7 +110,7 @@ export function useSetFavorite() {
     mutationFn: (vars: { id: string; isFavorite: boolean }) =>
       api.setFavorite(vars.id, vars.isFavorite),
     onMutate: ({ id, isFavorite }) => {
-      const previous = queryClient.getQueryData<WardrobeEntry[]>(WARDROBE_KEY)
+      const previous = queryClient.getQueryData<WardrobeItem[]>(WARDROBE_KEY)
       patchCache(queryClient, (entries) =>
         entries.map((entry) => (entry.id === id ? { ...entry, isFavorite } : entry)),
       )
