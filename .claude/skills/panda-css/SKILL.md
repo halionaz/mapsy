@@ -88,6 +88,13 @@ vague paraphrase.
   A vague answer about API shape is worse than no answer, because it reads as authoritative.
 - **The live doc wins over anything below.** If this file and the fetched doc disagree, the
   doc is right and this file needs updating — say so rather than quietly following the doc.
+- **But the generated types beat both.** The docs' examples can lag the installed version.
+  Observed on Panda 1.12: the pattern examples pass `align: 'center'` to `hstack`/`vstack`,
+  which no longer type-checks — those patterns now expose only `justify` and `gap`, and both
+  already default to `alignItems: center`, so any other alignment goes through a plain
+  `alignItems` prop. When a fetched example fails to compile, read the real signature in
+  `styled-system/patterns/<name>.d.ts` (and the `.mjs` beside it, which shows the defaults the
+  pattern bakes in) rather than fighting the type error.
 
 ## mapsy conventions
 

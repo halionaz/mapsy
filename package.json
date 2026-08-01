@@ -1,0 +1,16 @@
+{
+  "name": "mapsy",
+  "private": true,
+  "packageManager": "pnpm@10.18.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter mapsy-frontend dev",
+    "build": "pnpm --filter mapsy-frontend build",
+    "preview": "pnpm --filter mapsy-frontend preview",
+    "typecheck": "pnpm --filter mapsy-frontend typecheck",
+    "lint": "pnpm --filter mapsy-frontend lint",
+    "codegen": "pnpm --filter mapsy-frontend codegen"
+  }
+}

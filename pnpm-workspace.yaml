@@ -1,0 +1,8 @@
+packages:
+  - 'mapsy-frontend'
+  - 'packages/*'
+
+# pnpm 10 blocks postinstall scripts by default. These need theirs to fetch/build
+# native binaries, so they have to be allowed explicitly.
+onlyBuiltDependencies:
+  - esbuild

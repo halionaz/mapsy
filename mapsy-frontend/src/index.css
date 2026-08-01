@@ -1,0 +1,9 @@
+/*
+ * Panda's cascade layers, in priority order. Declaring them here — before the
+ * generated CSS lands — fixes the ordering regardless of what order the rules
+ * themselves arrive in.
+ *
+ * Everything else (reset, base body styles, tokens) is generated from
+ * panda.config.ts. Hand-written CSS does not belong in this file.
+ */
+@layer reset, base, tokens, recipes, utilities;

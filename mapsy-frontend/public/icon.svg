@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#0C0A09" />
+  <!-- A hanger: the smallest readable mark for "wardrobe" at icon sizes. -->
+  <g fill="none" stroke="#FAFAF9" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 150c0-24 19-42 42-42s42 18 42 42c0 22-16 34-42 42v26" />
+    <path d="M256 218 116 322c-13 10-6 30 11 30h258c17 0 24-20 11-30L256 218Z" />
+  </g>
+</svg>

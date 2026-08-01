@@ -1,0 +1,17 @@
+node_modules/
+dist/
+dist-ssr/
+
+# Panda CSS codegen output — regenerate with `pnpm codegen`, never commit or hand-edit
+styled-system/
+
+# Secrets: Supabase project URL and anon key live here
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+.vite/
+coverage/
+*.local

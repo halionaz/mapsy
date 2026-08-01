@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <!--
+      viewport-fit=cover lets the layout reach under the iOS home indicator;
+      user-scalable is left alone so pinch-zoom on garment photos still works.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <!-- Matched to the light/dark bg tokens so the browser chrome follows suit. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0C0A09" />
+    <meta name="description" content="내가 가진 옷을 한눈에 모아보는 옷장" />
+    <title>mapsy — 내 옷장</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
