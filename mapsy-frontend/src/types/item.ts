@@ -1,12 +1,14 @@
 /**
- * Domain types mirroring the Supabase schema in PRD §4.1.
+ * Domain types for the wardrobe.
+ *
+ * Distinct from `database.ts`, which is generated from the live schema
+ * (`pnpm types:gen`) and describes rows as Postgres returns them: snake_case,
+ * and loose where the database is loose (`colors: string[]`, `status: string`).
+ * These are what the app works in — camelCase, and narrowed to the unions the
+ * UI can actually render. `features/items/mapRow.ts` is the boundary.
  *
  * Types only — runtime values belong in `shared/constants` or the feature that
  * owns them, so `import type` stays usable throughout.
- *
- * Keep these in sync with the SQL by hand for now. Once the Supabase project
- * exists, `supabase gen types typescript` can generate the row types and these
- * become thin aliases over the generated ones.
  */
 
 import type { SubcategoryId } from '@/shared/constants/categories'

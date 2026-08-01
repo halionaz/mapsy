@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { css } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
@@ -11,7 +11,7 @@ import { CLOTHING_COLORS, MAX_COLORS_PER_ITEM, type ColorId } from '@/shared/con
 import { fitPresetsFor, hasFitField } from '@/shared/constants/fits'
 import { SEASONS, type SeasonId } from '@/shared/constants/seasons'
 import { sizePresetsFor } from '@/shared/constants/sizes'
-import type { ProcessedPhoto } from '@/shared/lib/image'
+import { releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
 import type { ItemDraft } from '@/types/item'
 import { MAX_PHOTOS, PhotoPicker } from './PhotoPicker'
@@ -64,8 +64,26 @@ export function ItemForm({
   const [purchasePlace, setPurchasePlace] = useState(initial?.purchasePlace ?? '')
   const [tagText, setTagText] = useState((initial?.tags ?? []).join(', '))
   const [memo, setMemo] = useState(initial?.memo ?? '')
-  const [showOptional, setShowOptional] = useState(false)
+  // Collapsed for a new item — the whole point is that capture stays cheap.
+  // Opened when editing something that already has optional values, otherwise
+  // the edit screen hides most of what it is supposed to be editing.
+  const [showOptional, setShowOptional] = useState(() => hasOptionalValues(initial))
   const [touched, setTouched] = useState(false)
+  const uid = useId()
+
+  // Photos handed to a successful submit belong to the upload store, which
+  // revokes them when it is done. Anything still here on unmount was abandoned
+  // — cancelling, or navigating away — and would otherwise leak for the life of
+  // the tab.
+  const photosRef = useRef(photos)
+  photosRef.current = photos
+  const submitted = useRef(false)
+  useEffect(
+    () => () => {
+      if (!submitted.current) photosRef.current.forEach(releasePreview)
+    },
+    [],
+  )
 
   const groupId = categoryId ? groupIdOf(categoryId) : undefined
   // Size and fit vocabularies differ per category (PRD §5.4, §5.5), so the
@@ -88,8 +106,12 @@ export function ItemForm({
     event.preventDefault()
     setTouched(true)
     if (invalid || pending || !categoryId) return
+    submitted.current = true
 
-    const parsedPrice = price.trim() === '' ? null : Number(price.replace(/[^\d]/g, ''))
+    // "abc" strips to "" and Number("") is 0 — which would store a typo as a
+    // free garment, and mapRow deliberately keeps 0 rather than nulling it.
+    const digits = price.replace(/[^\d]/g, '')
+    const parsedPrice = digits === '' ? null : Number(digits)
 
     onSubmit({
       photos,
@@ -117,8 +139,9 @@ export function ItemForm({
         </Field>
       )}
 
-      <Field label="이름" required hint="나중에 알아볼 수 있는 별명이면 충분해요">
+      <Field label="이름" htmlFor={`${uid}-title`} required hint="나중에 알아볼 수 있는 별명이면 충분해요">
         <input
+          id={`${uid}-title`}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="예) 마산 플리스"
@@ -217,12 +240,13 @@ export function ItemForm({
             />
           )}
 
-          <Field label="브랜드">
-            <input value={brand} onChange={(e) => setBrand(e.target.value)} className={inputStyle} />
+          <Field label="브랜드" htmlFor={`${uid}-brand`}>
+            <input id={`${uid}-brand`} value={brand} onChange={(e) => setBrand(e.target.value)} className={inputStyle} />
           </Field>
 
-          <Field label="가격" hint="원 단위">
+          <Field label="가격" htmlFor={`${uid}-price`} hint="원 단위">
             <input
+              id={`${uid}-price`}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               inputMode="numeric"
@@ -231,8 +255,9 @@ export function ItemForm({
             />
           </Field>
 
-          <Field label="구매일">
+          <Field label="구매일" htmlFor={`${uid}-purchased-at`}>
             <input
+              id={`${uid}-purchased-at`}
               type="date"
               value={purchasedAt}
               onChange={(e) => setPurchasedAt(e.target.value)}
@@ -240,16 +265,18 @@ export function ItemForm({
             />
           </Field>
 
-          <Field label="구매처">
+          <Field label="구매처" htmlFor={`${uid}-purchase-place`}>
             <input
+              id={`${uid}-purchase-place`}
               value={purchasePlace}
               onChange={(e) => setPurchasePlace(e.target.value)}
               className={inputStyle}
             />
           </Field>
 
-          <Field label="태그" hint="쉼표로 구분">
+          <Field label="태그" htmlFor={`${uid}-tags`} hint="쉼표로 구분">
             <input
+              id={`${uid}-tags`}
               value={tagText}
               onChange={(e) => setTagText(e.target.value)}
               placeholder="출근용, 러닝"
@@ -257,8 +284,9 @@ export function ItemForm({
             />
           </Field>
 
-          <Field label="메모">
+          <Field label="메모" htmlFor={`${uid}-memo`}>
             <textarea
+              id={`${uid}-memo`}
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               rows={3}
@@ -332,26 +360,65 @@ const secondaryButton = css({
   _focusVisible: { outline: '2px solid', outlineColor: 'accent', outlineOffset: '2px' },
 })
 
+/**
+ * A labelled block.
+ *
+ * Renders a real `<label>` only when it wraps exactly one form control
+ * (`htmlFor`). Wrapping everything in one was invalid HTML the moment the child
+ * was a `<fieldset>` of chips or a picker with its own `<label>` — and it had
+ * teeth: tapping the word "카테고리" activated the first labelable descendant,
+ * so it silently selected 반팔티. Tapping "사진" opened the file picker.
+ */
 function Field({
   label,
+  htmlFor,
   required,
   hint,
   children,
 }: {
   label: string
+  htmlFor?: string
   required?: boolean
   hint?: string
   children: React.ReactNode
 }) {
+  const caption = (
+    <>
+      {label}
+      {required && <span className={css({ color: 'danger', ml: '1' })}>*</span>}
+      {hint && <span className={css({ ml: '2', color: 'fg.subtle' })}>{hint}</span>}
+    </>
+  )
+  const captionStyle = css({ fontSize: 'xs', color: 'fg.muted' })
+
   return (
-    <label className={vstack({ gap: '2', alignItems: 'stretch' })}>
-      <span className={css({ fontSize: 'xs', color: 'fg.muted' })}>
-        {label}
-        {required && <span className={css({ color: 'danger', ml: '1' })}>*</span>}
-        {hint && <span className={css({ ml: '2', color: 'fg.subtle' })}>{hint}</span>}
-      </span>
+    <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className={captionStyle}>
+          {caption}
+        </label>
+      ) : (
+        <span className={captionStyle}>{caption}</span>
+      )}
       {children}
-    </label>
+    </div>
+  )
+}
+
+/** True when an existing item has anything in the optional section. */
+function hasOptionalValues(initial: Partial<ItemFormValues> | undefined): boolean {
+  if (!initial) return false
+  return Boolean(
+    initial.brand ||
+      initial.size ||
+      initial.fit ||
+      initial.price != null ||
+      initial.purchasedAt ||
+      initial.purchasePlace ||
+      initial.memo ||
+      initial.colors?.length ||
+      initial.seasons?.length ||
+      initial.tags?.length,
   )
 }
 

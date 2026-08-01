@@ -26,7 +26,22 @@ const IMAGE_COLUMNS = '*'
  * are signed rather than public. A day is long enough that a session left open
  * overnight still renders, and short enough that a leaked URL expires.
  */
-const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24
+const SIGNED_URL_TTL_SECONDS = 60 * 60 * 4
+
+/**
+ * Explicit ceilings on the full-collection fetch.
+ *
+ * PostgREST applies its own `max-rows` when one is configured, and the result is
+ * a silently truncated array rather than an error — the client cannot tell a
+ * short page from the whole table. Asking for a known number means the
+ * truncation is detectable, which is what the warnings below do.
+ *
+ * PRD §8.4 puts the move to server-side filtering at ~1,000 garments, so these
+ * sit just past that: hitting one means the client-side approach has been
+ * outgrown, not that something broke.
+ */
+const ITEM_FETCH_LIMIT = 2000
+const IMAGE_FETCH_LIMIT = ITEM_FETCH_LIMIT * 5
 
 /** An item plus a ready-to-render URL for its cover. */
 export interface WardrobeItem extends ItemWithImages {
@@ -38,12 +53,23 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
   const supabase = getSupabase()
 
   const [itemsResult, imagesResult] = await Promise.all([
-    supabase.from('items').select(ITEM_COLUMNS).order('created_at', { ascending: false }),
-    supabase.from('item_images').select(IMAGE_COLUMNS).order('sort_order'),
+    supabase
+      .from('items')
+      .select(ITEM_COLUMNS)
+      .order('created_at', { ascending: false })
+      .limit(ITEM_FETCH_LIMIT),
+    supabase
+      .from('item_images')
+      .select(IMAGE_COLUMNS)
+      .order('sort_order')
+      .limit(IMAGE_FETCH_LIMIT),
   ])
 
   if (itemsResult.error) throw itemsResult.error
   if (imagesResult.error) throw imagesResult.error
+
+  warnIfTruncated(itemsResult.data?.length ?? 0, ITEM_FETCH_LIMIT, '아이템')
+  warnIfTruncated(imagesResult.data?.length ?? 0, IMAGE_FETCH_LIMIT, '사진')
 
   const imagesByItem = new Map<string, ReturnType<typeof toItemImage>[]>()
   for (const row of imagesResult.data ?? []) {
@@ -70,6 +96,14 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
     const cover = coverOf(item.images)
     return { ...item, coverUrl: cover ? (signed.get(cover.thumbPath) ?? null) : null }
   })
+}
+
+function warnIfTruncated(received: number, limit: number, what: string) {
+  if (received < limit) return
+  console.warn(
+    `${what} ${limit}건에서 잘렸을 수 있음. 전량 로드 + 클라이언트 필터링의 한계에 도달했으므로 ` +
+      '서버 사이드 필터링으로 전환해야 함 (PRD §8.4).',
+  )
 }
 
 /**

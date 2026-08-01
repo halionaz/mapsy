@@ -10,15 +10,19 @@ import { ItemEditPage } from '@/features/items/ItemEditPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 
 /**
- * The wardrobe is loaded once and then filtered client-side (PRD §8.4), so the
- * cache should hold it rather than refetch on every focus. `staleTime` is long
- * because the only writer is this tab.
+ * The wardrobe is loaded once and then filtered client-side (PRD §8.4), so
+ * `staleTime` is long — this tab is the only writer, and mutations patch the
+ * cache directly rather than refetching.
  */
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,
-      refetchOnWindowFocus: false,
+      staleTime: 30 * 60 * 1000,
+      // Thumbnails are signed URLs with a finite life (see SIGNED_URL_TTL in
+      // api.ts). Leaving focus refetch off meant a PWA left open long enough
+      // came back to a grid of broken images with no way to recover short of a
+      // manual reload.
+      refetchOnWindowFocus: true,
       retry: 2,
     },
   },

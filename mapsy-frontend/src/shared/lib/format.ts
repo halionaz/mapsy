@@ -8,10 +8,18 @@ export function formatPrice(price: number | null): string | null {
   return `${price.toLocaleString('ko-KR')}원`
 }
 
-/** "2025. 11. 2." from an ISO date, or null when there is no date. */
+/**
+ * "2025. 11. 2." from a `YYYY-MM-DD` string.
+ *
+ * Formatted from the parts rather than through `new Date(iso)`, which parses a
+ * bare date as UTC midnight — in any negative-offset timezone that renders as
+ * the previous day. `purchased_at` is a calendar date with no time in it, so it
+ * should not pass through a timezone at all.
+ */
 export function formatDate(iso: string | null): string | null {
   if (!iso) return null
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleDateString('ko-KR')
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim())
+  if (!match) return null
+  const [, year, month, day] = match
+  return `${year}. ${Number(month)}. ${Number(day)}.`
 }

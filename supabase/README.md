@@ -66,8 +66,9 @@ supabase link --project-ref <your-project-ref>   # URL의 서브도메인이 pro
 supabase db push
 ```
 
-세 마이그레이션 모두 **재실행 가능**하다. 정책은 `drop policy if exists`, 테이블·인덱스는
+모든 마이그레이션이 **재실행 가능**하다. 정책과 제약은 `drop ... if exists`, 테이블·인덱스는
 `if not exists`, 버킷은 `on conflict do update`로 처리해서 중간에 실패해도 다시 돌리면 된다.
+`pnpm test:db`가 마지막에 전체를 한 번 더 적용해 이 성질을 검사한다.
 
 적용 후 Storage 탭에 `wardrobe` 버킷이 **Private**으로 보이면 성공이다.
 
@@ -95,11 +96,15 @@ supabase db push
 
 ### 5. 타입 생성
 
-손으로 미러링한 `mapsy-frontend/src/types/item.ts`를 실제 스키마에서 생성한 것으로 대체한다.
-
 ```bash
-supabase gen types typescript --linked > mapsy-frontend/src/types/database.ts
+pnpm types:gen
 ```
+
+`mapsy-frontend/src/types/database.ts`에 실제 스키마의 행·삽입 타입이 생성된다. 이 파일은
+생성물이니 직접 고치지 않는다. `types/item.ts`는 그대로 남는다 — 그쪽은 앱이 쓰는 도메인
+타입(camelCase, 좁혀진 유니온)이고, 둘 사이의 변환은 `features/items/mapRow.ts`가 맡는다.
+
+스키마를 바꿀 때마다 다시 돌려야 컬럼 이름과 nullability가 컴파일 타임에 검증된다.
 
 ### 6. 확인
 
@@ -115,7 +120,7 @@ pnpm test:db
 ```
 
 Docker에 Postgres를 띄우고 `auth`/`storage` 스텁을 세운 뒤 **실제 마이그레이션을 적용해**
-제약·RLS·스토리지 정책·순서 변경 RPC를 검사한다. 33개 단언이 있고 하나라도 어긋나면
+제약·RLS·스토리지 정책·순서 변경 RPC를 검사한다. 42개 단언이 있고 하나라도 어긋나면
 0이 아닌 코드로 끝난다. 마지막에 마이그레이션을 한 번 더 적용해 멱등성도 확인한다.
 
 `supabase start`가 있으면 그쪽이 더 충실하지만, 이 스크립트는 Docker만 있으면 돌아가서
@@ -146,9 +151,12 @@ select reorder_item_images(<item_id>, array[<cover_id>, <second>, ...]::uuid[]);
 select delete_item_image(<image_id>);
 ```
 
-`reorder_item_images`는 **해당 아이템의 모든 이미지 id를 순서대로** 받는다. 일부만 보내면
-구멍이 생기므로 거부한다. `delete_item_image`는 삭제 후 남은 사진을 0..n-1로 재번호해서,
-대표(0번)를 지워도 다음 사진이 승격되고 카드가 비지 않는다.
+`reorder_item_images`는 **해당 아이템의 모든 이미지 id를 순서대로** 받는다. 개수가 다르거나,
+중복 id가 있거나, 다른 아이템의 id가 섞이면 거부한다 — 갱신된 행 수를 요청 개수와 비교하기
+때문이다. 사진이 없는 아이템에 빈 배열을 넘기는 것은 정상 no-op이다.
+
+`delete_item_image`는 삭제 후 남은 사진을 0..n-1로 재번호해서, 대표(0번)를 지워도 다음
+사진이 승격되고 카드가 비지 않는다.
 
 ### 팔레트에 색을 추가하는 것은 스키마 변경이다
 

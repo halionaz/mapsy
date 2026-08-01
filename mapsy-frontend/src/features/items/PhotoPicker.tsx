@@ -33,10 +33,23 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
     setBusy(true)
     try {
       const accepted = [...fileList].slice(0, remaining)
-      const skipped = fileList.length - accepted.length
-      const processed = await Promise.all(accepted.map(processPhoto))
-      onChange([...photos, ...processed])
-      if (skipped > 0) setError(`사진은 최대 ${MAX_PHOTOS}장이라 ${skipped}장은 제외했어요.`)
+      const overflow = fileList.length - accepted.length
+
+      // allSettled, not all: one undecodable file used to discard every photo
+      // picked alongside it — and the successful ones had already allocated
+      // preview object URLs that nobody then revoked.
+      const results = await Promise.allSettled(accepted.map(processPhoto))
+      const processed = results
+        .filter((r): r is PromiseFulfilledResult<ProcessedPhoto> => r.status === 'fulfilled')
+        .map((r) => r.value)
+      const failed = results.length - processed.length
+
+      if (processed.length > 0) onChange([...photos, ...processed])
+
+      const notes: string[] = []
+      if (overflow > 0) notes.push(`사진은 최대 ${MAX_PHOTOS}장이라 ${overflow}장은 제외했어요.`)
+      if (failed > 0) notes.push(`${failed}장은 불러오지 못했어요.`)
+      setError(notes.length > 0 ? notes.join(' ') : null)
     } catch (e) {
       setError(e instanceof Error ? e.message : '사진을 불러오지 못했어요.')
     } finally {
@@ -128,6 +141,11 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
               borderColor: 'border',
               color: 'fg.muted',
               fontSize: 'xs',
+              // The caption carries a newline; without this it collapses onto
+              // one line inside an 80px box.
+              whiteSpace: 'pre-line',
+              textAlign: 'center',
+              lineHeight: 'tight',
               cursor: 'pointer',
               _hover: { borderColor: 'fg.subtle' },
             })}
