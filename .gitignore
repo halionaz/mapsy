@@ -6,14 +6,19 @@ dist/
 dist-ssr/
 coverage/
 .vite/
+.temp/
 
 # Panda CSS codegen output — regenerate with `pnpm codegen`, never commit or hand-edit
 styled-system/
 
-# Secrets: Supabase project URL and anon key live here
+# Supabase project URL and publishable key live here
 .env
 .env.*
 !.env.example
+
+# package-lock.json / yarn.lock are deliberately NOT ignored. npm still writes a
+# lockfile even when the preinstall guard rejects it, and a stray one is easier
+# to notice in `git status` than hidden.
 
 # Editors / OS
 .vscode/*
