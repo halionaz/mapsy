@@ -19,6 +19,10 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   items_memo_length: '메모가 너무 길어요.',
   items_brand_length: '브랜드 이름이 너무 길어요.',
   items_size_length: '사이즈 표기가 너무 길어요.',
+  // Fit only ever comes from preset chips, so this is unreachable today — listed
+  // so the map stays a complete mirror of the CHECKs rather than a partial one.
+  items_fit_length: '핏 표기가 너무 길어요.',
+  items_price_max: '가격이 너무 커요.',
   items_purchase_place_length: '구매처가 너무 길어요.',
   items_tags_limit: '태그가 너무 많아요.',
   items_tags_element_length: '태그 하나가 너무 길어요.',
@@ -60,6 +64,10 @@ export function errorMessage(error: unknown, fallback = '알 수 없는 오류')
     }
   }
 
-  if (error instanceof Error) return error.message
+  // Reached only by an Error whose message is empty — the branch above already
+  // handles every Error with text, because `message` is an own property. Without
+  // the `||` this returned '' and the screen rendered a label with nothing after
+  // it.
+  if (error instanceof Error) return error.message || fallback
   return fallback
 }

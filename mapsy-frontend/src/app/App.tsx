@@ -12,7 +12,7 @@ import { SettingsPage } from '@/features/settings/SettingsPage'
 /**
  * The wardrobe is loaded once and then filtered client-side (PRD §8.4), so
  * `staleTime` is long — this tab is the only writer, and mutations patch the
- * cache directly rather than refetching.
+ * cache directly, refetching only when there was no entry to patch.
  */
 const queryClient = new QueryClient({
   defaultOptions: {

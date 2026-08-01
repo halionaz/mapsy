@@ -191,6 +191,19 @@ RPC 두 개(`reorder_item_images`, `delete_item_image`)는 노출돼야 하는 �
 실제 프로젝트의 `supabase db dump`로 확인했다. 테스트 하네스(`00_bootstrap.sql`)도 같은
 `alter default privileges`를 실행하므로, 이 차이가 로컬에서 드러난다.
 
+**`create or replace`는 ACL을 보존하지만 `drop` 후 `create`는 보존하지 않는다.** 시그니처를
+바꾸는 변경은 함수를 다시 만들게 되고, 그러면 `anon=X`를 다시 물고 태어난다. 스위트가
+"public의 어떤 함수도 anon이 실행할 수 없음"을 이름 목록이 아니라 조건으로 검사하므로
+그때 잡힌다 — 함수를 추가하거나 시그니처를 바꿀 때 이 단언이 빨간불이면 `revoke`를
+빠뜨린 것이다.
+
+### 클라이언트가 미러링하는 제약은 이름이 있어야 한다
+
+`ItemForm`의 `LIMITS`가 DB 제약을 미러링해서, 사진을 다 올린 뒤에야 실패하는 일을 막는다.
+**미러링 대상은 반드시 이름 있는 CHECK여야 한다** — 한 번은 `price`만 암묵적인 `int4`
+상한을 미러링했고, 대응하는 CHECK가 없으니 단언할 것도 없어서 값이 실제 상한의 4.7배로
+어긋난 채 남아 있었다. `items_price_max`를 만든 이유가 그것이다.
+
 ### item_images는 복합 외래키를 쓴다
 
 `(item_id, user_id) → items(id, user_id)`이므로 남의 아이템에 사진을 붙이는 것이

@@ -56,3 +56,22 @@ describe('errorMessage — 제약 위반', () => {
     expect(errorMessage({ message: 'connection reset', code: 'XX000' })).toBe('connection reset')
   })
 })
+
+describe('errorMessage — 빈 메시지', () => {
+  it('falls back for an Error with no message', () => {
+    // The object branch catches every Error (message is an own property), so
+    // this reaches the instanceof branch with an empty string — which used to be
+    // returned verbatim, rendering a label followed by nothing.
+    expect(errorMessage(new Error(''))).toBe('알 수 없는 오류')
+    expect(errorMessage(new Error(''), '잠시 후 다시')).toBe('잠시 후 다시')
+  })
+
+  it('maps the price ceiling', () => {
+    expect(
+      errorMessage({
+        message: 'violates check constraint "items_price_max"',
+        code: '23514',
+      }),
+    ).toBe('가격이 너무 커요.')
+  })
+})

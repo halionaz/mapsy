@@ -34,12 +34,13 @@ const LIMITS = {
   tagLength: 40,
   tagCount: 20,
   /**
-   * `items.price` is a Postgres integer. One extra zero on a coat and the
-   * insert dies with "integer out of range" — after every photo has uploaded,
-   * and identically on every retry. Ten billion won is comfortably past any
-   * garment and comfortably inside int4.
+   * Mirrors `items_price_max`. The previous value here was 10,000,000,000 with a
+   * comment claiming it sat inside int4 — it does not; int4 stops at
+   * 2,147,483,647, so everything between the two passed the form and died at
+   * INSERT after the photos had uploaded. It drifted because it was the one
+   * limit with no named constraint behind it and therefore nothing asserting it.
    */
-  price: 10_000_000_000,
+  price: 1_000_000_000,
 } as const
 
 /**

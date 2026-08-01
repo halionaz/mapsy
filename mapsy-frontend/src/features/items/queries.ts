@@ -18,8 +18,9 @@ import {
  *
  * The whole collection is fetched once and filtered client-side (PRD §8.4), so
  * there is a single cache entry every screen reads from. Mutations patch that
- * entry directly instead of refetching, which is what keeps a tap on the
- * favourite star instant.
+ * entry directly and only refetch when there was nothing to patch, which is what
+ * keeps a tap on the favourite star instant — a refetch would re-sign every
+ * cover URL and reload the entire grid.
  *
  * In-flight registrations deliberately do *not* live in this cache — see
  * `pendingUploads.ts` for why.
@@ -57,16 +58,21 @@ function patchCache(
 }
 
 /**
- * The guard every mutation needs before touching the cache.
+ * What every mutation needs around a cache patch.
  *
- * A fetch already in flight holds a snapshot from before the mutation, and its
- * response overwrites whatever was patched while it was travelling. Cancelling
- * first stops that; invalidating afterwards re-syncs and covers the case where
- * the cache entry was evicted and the patch had nothing to write to.
+ * `before` — a fetch already in flight holds a snapshot from before the
+ * mutation, and its response overwrites whatever was patched while it was
+ * travelling. Cancelling closes that race, and it is cheap, so all five
+ * mutations do it. `refetchOnWindowFocus` makes the race reachable in ordinary
+ * use: the refetch fires the moment the app is foregrounded, which is exactly
+ * when someone resumes what they were doing.
  *
- * `refetchOnWindowFocus` makes this reachable in ordinary use — the refetch
- * fires the moment the app is foregrounded, which is exactly when someone
- * resumes what they were doing.
+ * `after` — only when there is no cache entry to have patched. An unconditional
+ * invalidate looked tidy and was expensive: `useWardrobe` is observed by three
+ * screens so it is always active, meaning every star tap refetched the whole
+ * collection *and* re-signed every cover URL, changing every `<img src>` and
+ * reloading every thumbnail in the grid. Where the mutation patches the server's
+ * own response, a refetch can only return what the cache already holds.
  */
 function useCachePatch() {
   const queryClient = useQueryClient()
@@ -75,7 +81,10 @@ function useCachePatch() {
     queryClient,
     before: () => queryClient.cancelQueries({ queryKey: WARDROBE_KEY }),
     after: () => {
-      void queryClient.invalidateQueries({ queryKey: WARDROBE_KEY })
+      const cached = queryClient.getQueryData<WardrobeItem[]>(WARDROBE_KEY)
+      if (cached === undefined) {
+        void queryClient.invalidateQueries({ queryKey: WARDROBE_KEY })
+      }
     },
   }
 }
@@ -92,19 +101,13 @@ export function useCreateItem() {
     },
 
     onSuccess: async (created, { pending }) => {
-      // A plain prepend is not enough to guarantee the item stays visible.
-      // Two ways it disappears: the cache entry may have been garbage collected
-      // while the form was open (gcTime is 5 minutes and taking photos takes
-      // longer), in which case the write is dropped; or a refetch may already be
-      // in flight — now likelier, since this PR turned on refetchOnWindowFocus —
-      // and its response overwrites the prepend when it lands.
+      // Two ways a plain prepend loses the item: an in-flight refetch overwrites
+      // it when it lands, or the cache entry was evicted while the form was open
+      // and the write is dropped entirely. Either way `removePending` then takes
+      // the card away, revoking the preview URLs with it, and the registration
+      // vanishes exactly as it did before the pending store existed.
       //
-      // Either way `removePending` then takes the card away, revoking the
-      // preview URLs with it, and the registration vanishes exactly as it did
-      // before the pending store existed.
-      //
-      // Cancelling first stops the in-flight response from winning; invalidating
-      // afterwards covers the cold-cache case by refetching for real.
+      // `before` closes the first; `after` refetches for real in the second.
       await before()
       patchCache(queryClient, (entries) => [created, ...entries])
       removePending(pending.tempId)

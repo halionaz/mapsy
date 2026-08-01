@@ -267,6 +267,13 @@ select tests.fails(
             values (%L, '긴 태그', 'top.knit', array[repeat('가', 41)])$f$, :'A'),
   'items_tags_element_length', '41자 태그 원소 거부');
 
+-- The form mirrors this number. Without a named constraint there was nothing to
+-- assert, and the client cap drifted to 4.7x the int4 ceiling unnoticed.
+select tests.fails(
+  format($f$insert into public.items (user_id, title, category_id, price)
+            values (%L, '너무 비싼 옷', 'top.knit', 1000000001)$f$, :'A'),
+  'items_price_max', '10억원 초과 거부');
+
 \echo '── 함수 노출 ──'
 reset role;
 select tests.eq(
@@ -281,36 +288,39 @@ select tests.eq(
    where n.nspname = 'private' and p.proname in ('has_unique_elements', 'max_element_length')),
   '2', '헬퍼는 private 스키마에 있음');
 
--- Three separate things, because checking only the first two let an explicit
--- `anon=X` grant — which is what Supabase's default privileges actually create —
--- sail through. PUBLIC's entry has an empty grantee, so it starts with '='.
+-- Scoped by condition, not by name. The previous version listed
+-- ('reorder_item_images', 'delete_item_image') explicitly, so a third RPC added
+-- later would inherit Supabase's default `anon=X` grant and no assertion would
+-- notice — the same "test cannot see the regression" shape this suite has now
+-- been bitten by three times.
+--
+-- Deliberately strict: no function in `public` may be anon-executable, trigger
+-- helpers included. If an anon-callable RPC is ever wanted, this line has to be
+-- changed on purpose.
 select tests.eq(
-  (select bool_or(exists (select 1 from unnest(p.proacl) a where a::text like '=%'))::text
+  (select coalesce(string_agg(p.proname, ', ' order by p.proname), '')
    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and p.proname in ('reorder_item_images', 'delete_item_image')),
-  'false', 'RPC에 PUBLIC EXECUTE가 없음');
+   where n.nspname = 'public'
+     and has_function_privilege('anon', p.oid, 'execute')),
+  '', 'public의 어떤 함수도 anon이 실행할 수 없음');
 
 select tests.eq(
-  (select bool_or(exists (select 1 from unnest(p.proacl) a where a::text like 'anon=%'))::text
+  (select bool_and(has_function_privilege('authenticated', p.oid, 'execute'))::text
    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname in ('reorder_item_images', 'delete_item_image')),
-  'false', 'RPC에 anon EXECUTE가 없음 — 기본 권한이 심어둔 것까지 회수됨');
+  'true', 'RPC는 authenticated가 실행할 수 있음');
 
-select tests.eq(
-  (select bool_and(exists (select 1 from unnest(p.proacl) a where a::text like 'authenticated=%'))::text
-   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and p.proname in ('reorder_item_images', 'delete_item_image')),
-  'true', 'RPC는 authenticated에게 부여됨');
-
--- The assertion that actually matters: can an anonymous session call it?
+-- The assertion that actually matters: what an anonymous session gets back.
+-- Narrowed to "for function" so losing schema USAGE cannot pass this by
+-- accident.
 reset role;
 set role anon;
 select tests.fails(
   $f$select public.reorder_item_images('aaaa0000-0000-0000-0000-000000000001', array[]::uuid[])$f$,
-  'permission denied', 'anon은 순서 변경 RPC를 호출할 수 없음');
+  'permission denied for function', 'anon은 순서 변경 RPC를 호출할 수 없음');
 select tests.fails(
   $f$select public.delete_item_image('bbbb0000-0000-0000-0000-000000000000')$f$,
-  'permission denied', 'anon은 사진 삭제 RPC를 호출할 수 없음');
+  'permission denied for function', 'anon은 사진 삭제 RPC를 호출할 수 없음');
 reset role;
 
 set role authenticated;
