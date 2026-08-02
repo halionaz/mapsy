@@ -53,7 +53,7 @@ pnpm dev
 | `pnpm codegen` | Panda CSS 재생성 |
 | `pnpm setup:worktree` | 워크트리에 gitignore된 로컬 파일 채우기 — 아래 참고 |
 | `pnpm cf:dev` | Cloudflare Workers 런타임으로 빌드 결과 확인 |
-| `pnpm cf:deploy` | Cloudflare Workers 배포 — [`docs/DEPLOY.md`](docs/DEPLOY.md) |
+| `pnpm cf:deploy` | Cloudflare Workers 배포 |
 
 ## 워크트리
 
