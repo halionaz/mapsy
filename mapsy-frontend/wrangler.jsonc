@@ -1,35 +1,23 @@
+// Assets-only Worker — no `main`, so requests are answered at the edge without
+// invoking Worker code. See docs/DEPLOY.md.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
 
-  // Must match the Worker name in the Cloudflare dashboard — Workers Builds
-  // reads it from here and fails the build when the two disagree.
+  // Must match the Worker name in the dashboard, or Workers Builds fails.
   "name": "mapsy",
   "compatibility_date": "2026-08-01",
 
-  // No `main`. The build output is static files and every backend call goes to
-  // Supabase, so this is an assets-only Worker: requests are answered at the
-  // edge without invoking Worker code, and without being billed as invocations.
-  // Adding a `main` later is what turns this into a full Worker.
   "assets": {
     "directory": "./dist",
-
-    // Client-side routing needs the server to hand back index.html for paths
-    // that have no file — /items/:id opened directly or refreshed. The service
-    // worker's navigateFallback only covers navigations *after* it installs, so
-    // a first visit from a shared link depends entirely on this.
+    // Hands back index.html for paths with no file, so /items/:id survives a
+    // direct open or refresh.
     "not_found_handling": "single-page-application"
   },
 
-  // <name>.<subdomain>.workers.dev. Worth closing once a custom domain is
-  // attached — two origins split the OAuth allow list and the PWA install target.
   "workers_dev": true,
-
-  // Per-version preview URLs for non-production branches. These are PUBLIC and
-  // read the same Supabase project as production; put Cloudflare Access in front
-  // of them or set this to false.
+  // Per-version preview URLs. Public, and they read the production Supabase
+  // project — put Cloudflare Access in front or set this to false.
   "preview_urls": true,
 
-  "observability": {
-    "enabled": true
-  }
+  "observability": { "enabled": true }
 }

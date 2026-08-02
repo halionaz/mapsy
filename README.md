@@ -51,7 +51,7 @@ pnpm dev
 | `pnpm test:db` | Docker에 Postgres를 띄워 마이그레이션·RLS 검사 |
 | `pnpm codegen` | Panda CSS 재생성 |
 | `pnpm cf:dev` | Cloudflare Workers 런타임으로 빌드 결과 확인 |
-| `pnpm cf:deploy` | Cloudflare Workers 배포 — [`docs/DEPLOY.md`](docs/DEPLOY.md) |
+| `pnpm cf:deploy` | Cloudflare Workers 배포 |
 
 ## 왜 pnpm만 허용하나
 

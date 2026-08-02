@@ -4,7 +4,12 @@ packages:
   - 'mapsy-*'
   - 'packages/*'
 
-# pnpm 10 blocks postinstall scripts by default. These need theirs to fetch/build
-# native binaries, so they have to be allowed explicitly.
+# pnpm 10 blocks postinstall scripts by default and warns about each one it
+# skipped. Both packages below only use theirs to swap a JS shim for the native
+# binary that their platform optionalDependency already installed — neither is
+# required. The lists just record the decision and silence the warnings.
 onlyBuiltDependencies:
   - esbuild
+
+ignoredBuiltDependencies:
+  - workerd
