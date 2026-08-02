@@ -9,7 +9,7 @@ import {
 } from '@/shared/config/categories'
 import { CLOTHING_COLORS, MAX_COLORS_PER_ITEM, type ColorId } from '@/shared/config/colors'
 import { fitPresetsFor, hasFitField } from '@/shared/config/fits'
-import { SEASONS, type SeasonId } from '@/shared/config/seasons'
+import { MAX_SEASONS_PER_ITEM, SEASONS, type SeasonId } from '@/shared/config/seasons'
 import { sizePresetsFor } from '@/shared/config/sizes'
 import { releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
@@ -290,6 +290,7 @@ export function ItemForm({
             selected={seasons}
             onChange={setSeasons}
             multiple
+            max={MAX_SEASONS_PER_ITEM}
           />
 
           {sizeOptions.length > 0 && (

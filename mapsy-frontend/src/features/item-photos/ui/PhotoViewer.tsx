@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { css } from 'styled-system/css'
 
 import { clamp } from '@/shared/lib/clamp'
+import { indexAfterChange } from '../lib/followSlots'
 import type { PhotoSlot } from '../lib/photoSlots'
 import {
   DOUBLE_TAP_SCALE,
@@ -215,18 +216,33 @@ export function PhotoViewer({
     [applyPhoto],
   )
 
+  /**
+   * Which photo is on screen, by id.
+   *
+   * `index` is a position, and a position stops meaning the same thing the
+   * moment the collection changes underneath it. This is what survives that —
+   * see the effect that follows the collection, below.
+   */
+  const shownIdRef = useRef<string | null>(null)
+
   const goTo = useCallback(
     (next: number, animate = true) => {
       // `Math.max` for the same reason `pageAfterSwipe` needs it: with no photos
       // the last index is -1, and clamping between 0 and -1 yields -1.
       const target = clamp(next, 0, Math.max(0, slots.length - 1))
+      const shown = slots[target]
       // Reset before the index moves, so it is the photo being left behind that
       // goes back to fit — arriving on a page still zoomed from last time reads
       // as a bug.
-      if (target !== indexRef.current) resetZoom(false)
+      //
+      // Compared by id rather than by position: a photo that only *moved*,
+      // because one before it was deleted, is still the photo being looked at,
+      // and snapping it back to fit would be the viewer reacting to something
+      // that happened somewhere else.
+      if (shown?.id !== shownIdRef.current) resetZoom(false)
+      shownIdRef.current = shown?.id ?? null
       indexRef.current = target
       setIndex(target)
-      const shown = slots[target]
       if (shown) pageChangeRef.current?.(shown)
       applyTrack(target, 0, animate)
     },
@@ -267,22 +283,36 @@ export function PhotoViewer({
   }, [slots.length, startIndex, goTo])
 
   /**
-   * Follows the collection when it shrinks under the viewer.
+   * Follows the collection when it changes under the viewer.
    *
-   * `goTo` clamps, but nothing was calling it here: the index only moves on
-   * seating, an arrow key or the end of a swipe, so a photo deleted while its
-   * page was open left the index past the end. The track stayed translated to a
-   * page that no longer exists (a blank screen), the counter read "5 / 4", and
-   * `slots[index]` was undefined — until the user happened to swipe.
+   * Nothing else does: the index only moves on seating, an arrow key or the end
+   * of a swipe, and `startId` is read once when seating. So a photo deleted
+   * while the viewer was open used to go wrong in two different ways depending
+   * on where it was.
    *
-   * This is the state the screen behind deliberately keeps the viewer mounted
-   * for. Reachable today by deleting a photo on another device and foregrounding
-   * this one, since the focus refetch brings back an item with fewer images.
+   * Deleted *after* the open page — the index fell off the end. The track stayed
+   * translated to a page that no longer exists (a blank screen), the counter
+   * read "5 / 4" and `slots[index]` was undefined, until the user happened to
+   * swipe.
+   *
+   * Deleted *before* it — worse, because nothing looked wrong. The length shrank
+   * but the index stayed in range, so the same position quietly addressed the
+   * next photo along: `[A,B,C,D,E]` at index 2 is C, and losing A makes index 2
+   * D. This is the tiles-showing-their-neighbour's-photo failure that
+   * `photoSlots` says in its own header it got wrong twice, at full screen.
+   *
+   * Following the id closes both, and only clamps when the photo is genuinely
+   * gone. Reachable today by deleting a photo on another device and
+   * foregrounding this one — the focus refetch brings back an item with fewer
+   * images.
+   *
+   * The rule itself is in `../lib/followSlots`, where the tests beside it can
+   * hold both directions down without a DOM.
    */
   useEffect(() => {
-    if (indexRef.current <= slots.length - 1) return
-    goTo(Math.max(0, slots.length - 1), false)
-  }, [slots.length, goTo])
+    const target = indexAfterChange(slots, shownIdRef.current, indexRef.current)
+    if (target !== null) goTo(target, false)
+  }, [slots, goTo])
 
   // A re-sign hands the current page a new URL, and with it a new <img> element
   // carrying no transform — while `transform.current` still describes the one

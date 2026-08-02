@@ -55,6 +55,28 @@ export async function signPaths(paths: readonly string[]): Promise<Map<string, s
 /** Best-effort storage cleanup; never masks the error that triggered it. */
 export async function removeObjects(paths: readonly string[]): Promise<void> {
   if (paths.length === 0) return
-  const { error } = await getSupabase().storage.from(STORAGE_BUCKET).remove([...paths])
-  if (error) console.warn('스토리지 정리 실패, 고아 객체가 남았을 수 있음:', error.message)
+  const storage = getSupabase().storage.from(STORAGE_BUCKET)
+
+  const { error } = await storage.remove([...paths])
+  if (!error) return
+
+  /**
+   * One key must not cost the others.
+   *
+   * Callers list paths optimistically — an upload that failed may or may not
+   * have left its object behind, so this is deliberately asked to remove keys
+   * that might not exist. Bulk removal is expected to skip what it cannot find
+   * rather than reject the batch, and if that is ever wrong then a batch failing
+   * on a phantom key takes the objects that *do* exist down with it: the exact
+   * orphan the caller was trying to avoid. Going one at a time costs a handful
+   * of requests on a path that is already recovering from a failure.
+   */
+  const results = await Promise.allSettled(paths.map((path) => storage.remove([path])))
+  const left = results.filter((result) => result.status === 'rejected' || result.value.error)
+  if (left.length > 0) {
+    console.warn(
+      `스토리지 정리 실패, 고아 객체 ${left.length}건이 남았을 수 있음:`,
+      error.message,
+    )
+  }
 }

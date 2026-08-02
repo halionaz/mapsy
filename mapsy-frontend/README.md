@@ -185,6 +185,14 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
   `pnpm test:db`가 검증한다. 화면에서 아직 호출하지 않을 뿐이라 그 두 export는 의도적으로
   미사용 상태다. 업로드·삭제·`sort_order`를 조정해야 해서 등록 흐름의 변형이 아니라 별도
   작업이다.
+- **폼이 미러링하는 제약 *값*에는 드리프트 감지가 없다.** 제약 *이름*은 덮여 있다 —
+  `run.sh`가 실제 스키마에서 뽑아 `dbConstraints.generated.ts`에 쓰고, `errorMessage.test.ts`가
+  전수 매핑을 단언한다. 값은 그렇지 않다: `ItemForm`의 `LIMITS` 여덟 개와
+  `MAX_COLORS_PER_ITEM`·`MAX_SEASONS_PER_ITEM`은 마이그레이션에서 손으로 베낀 숫자다. 지금은
+  전부 일치하지만, 이미 한 번 물렸다(`LIMITS.price` 주석 참고 — 폼을 통과한 값이 사진을 다
+  올린 뒤 INSERT에서 죽었다). 기계는 있다: `run.sh`가 이름만이 아니라
+  `pg_get_constraintdef()`도 함께 내보내면 `pnpm test`가 값 어긋남을 잡는다. Docker가 필요한
+  작업이라 아직 안 했다.
 - **그리드 커버 썸네일이 30분마다 다시 내려온다.** `fetchWardrobe`가 실행될 때마다 커버를 전부
   새로 서명하는데, `useWardrobe`는 전역 기본값(staleTime 30분 + `refetchOnWindowFocus`)을
   쓴다. 상세 화면 원본에서 고친 것과 같은 낭비지만, 같은 방법으로는 못 고친다 — 이 쿼리의
