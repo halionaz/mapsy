@@ -14,34 +14,8 @@ import { sizePresetsFor } from '@/shared/config/sizes'
 import { releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
 import type { ItemDraft } from '@/entities/item'
+import { LIMITS } from '../model/limits'
 import { MAX_PHOTOS, PhotoPicker } from './PhotoPicker'
-
-/**
- * Mirrors the CHECK constraints in supabase/migrations.
- *
- * Not belt-and-braces: with photos uploading before the row is inserted, a
- * violation is only discovered after every object has been transferred. The
- * user waits through the whole upload, sees "업로드 실패", and retrying fails at
- * exactly the same point. Catching it in the form costs nothing and turns a
- * dead end into a corrected character count.
- */
-const LIMITS = {
-  title: 100,
-  brand: 100,
-  size: 40,
-  purchasePlace: 100,
-  memo: 2000,
-  tagLength: 40,
-  tagCount: 20,
-  /**
-   * Mirrors `items_price_max`. The previous value here was 10,000,000,000 with a
-   * comment claiming it sat inside int4 — it does not; int4 stops at
-   * 2,147,483,647, so everything between the two passed the form and died at
-   * INSERT after the photos had uploaded. It drifted because it was the one
-   * limit with no named constraint behind it and therefore nothing asserting it.
-   */
-  price: 1_000_000_000,
-} as const
 
 /**
  * The registration and edit form — one component for both (PRD §6.2).

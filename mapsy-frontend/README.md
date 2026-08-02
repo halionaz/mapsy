@@ -152,6 +152,13 @@ lint는 통과한다.
 **결정이 들어있는 로직은 순수 함수로 분리해 테스트한다** — 초성 검색, 필터·정렬, DB 행 매핑,
 이미지 리사이즈/크롭 기하. 이 부분은 Supabase 없이 돌아가고 실제로 검증돼 있다.
 
+**생성물이 두 개 있고 둘 다 스키마에서 나온다.** `dbConstraints.generated.ts`는 제약의 이름과
+정의를 함께 담는다 — 이름은 `errorMessage`가 전부 한국어 문구로 매핑하는지를, 정의는
+`features/item-form/model/limits.test.ts`가 폼의 미러 값과 맞는지를 지킨다. 이름만으로는
+부족했다: `items_price_max`는 이름을 그대로 둔 채 숫자만 열 배 틀렸고, 찾아낸 건 사진 다섯
+장을 이미 올린 사용자였다. 마이그레이션에 새 상한이 생기면 그 테스트가 **미러를 만들든지
+이유를 적든지** 하라고 막는다.
+
 **예외가 하나 있다: `useItemPhotos`.** 순수 함수로 안 떨어지는데(캐시·리렌더가 곧 동작이다)
 `photoSlots`가 자기 주석에서 "이 규칙을 양방향으로 두 번 틀렸다"고 적고 있고, 틀렸던 그 URL을
 만드는 쪽이 이 훅이다. 그래서 여기만 `@testing-library/react` + jsdom으로 테스트한다 — 파일
@@ -185,14 +192,6 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
   `pnpm test:db`가 검증한다. 화면에서 아직 호출하지 않을 뿐이라 그 두 export는 의도적으로
   미사용 상태다. 업로드·삭제·`sort_order`를 조정해야 해서 등록 흐름의 변형이 아니라 별도
   작업이다.
-- **폼이 미러링하는 제약 *값*에는 드리프트 감지가 없다.** 제약 *이름*은 덮여 있다 —
-  `run.sh`가 실제 스키마에서 뽑아 `dbConstraints.generated.ts`에 쓰고, `errorMessage.test.ts`가
-  전수 매핑을 단언한다. 값은 그렇지 않다: `ItemForm`의 `LIMITS` 여덟 개와
-  `MAX_COLORS_PER_ITEM`·`MAX_SEASONS_PER_ITEM`은 마이그레이션에서 손으로 베낀 숫자다. 지금은
-  전부 일치하지만, 이미 한 번 물렸다(`LIMITS.price` 주석 참고 — 폼을 통과한 값이 사진을 다
-  올린 뒤 INSERT에서 죽었다). 기계는 있다: `run.sh`가 이름만이 아니라
-  `pg_get_constraintdef()`도 함께 내보내면 `pnpm test`가 값 어긋남을 잡는다. Docker가 필요한
-  작업이라 아직 안 했다.
 - **그리드 커버 썸네일이 30분마다 다시 내려온다.** `fetchWardrobe`가 실행될 때마다 커버를 전부
   새로 서명하는데, `useWardrobe`는 전역 기본값(staleTime 30분 + `refetchOnWindowFocus`)을
   쓴다. 상세 화면 원본에서 고친 것과 같은 낭비지만, 같은 방법으로는 못 고친다 — 이 쿼리의
