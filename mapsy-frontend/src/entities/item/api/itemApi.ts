@@ -1,4 +1,4 @@
-import { removeObjects, signPaths } from '@/shared/api/storage'
+import { removeObjects, settledError, signPaths } from '@/shared/api/storage'
 import { getSupabase, STORAGE_BUCKET } from '@/shared/api/supabase'
 import { newId } from '@/shared/lib/id'
 import type { ProcessedPhoto } from '@/shared/lib/image'
@@ -230,16 +230,17 @@ async function uploadPhotos(
       // prevent.
       paths.push(path, thumbPath)
 
-      // allSettled, not all. supabase-js turns a StorageError into `{ error }`
-      // but lets anything else through as a rejection, and `Promise.all` rejects
-      // on the first of those without waiting for its sibling — so a sibling
-      // that lands afterwards would go unseen.
+      // allSettled, not all. A failed upload usually resolves into `{ error }`
+      // rather than rejecting (see `settledError`), but the rejection path is
+      // real for anything supabase-js does not recognise — and `Promise.all`
+      // rejects on the first of those without waiting for its sibling, so a
+      // sibling that lands afterwards would go unseen.
       const [full, thumb] = await Promise.allSettled([
         storage.upload(path, photo.full, { contentType }),
         storage.upload(thumbPath, photo.thumb, { contentType }),
       ])
-      const fullError = uploadErrorOf(full)
-      const thumbError = uploadErrorOf(thumb)
+      const fullError = settledError(full)
+      const thumbError = settledError(thumb)
       if (fullError !== null) throw fullError
       if (thumbError !== null) throw thumbError
 
@@ -260,21 +261,6 @@ async function uploadPhotos(
     await removeObjects(paths)
     throw uploadError
   }
-}
-
-/**
- * Why one upload failed, or `null` if it did not — however supabase-js chose to
- * report it: returned in `{ error }` for a StorageError, thrown for anything
- * else.
- *
- * Decided on `status`, and answered against `null` by the caller rather than
- * for truthiness. A rejection carrying `''` or `0` is still a rejection, and a
- * function whose job is to never let a failed upload pass for a successful one
- * should not be the place that hangs on an error value being truthy.
- */
-function uploadErrorOf(result: PromiseSettledResult<{ error: unknown }>): unknown {
-  if (result.status === 'rejected') return result.reason ?? new Error('사진 업로드에 실패했어요.')
-  return result.value.error ?? null
 }
 
 /**
