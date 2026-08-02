@@ -22,8 +22,24 @@ export function ItemEditPage() {
 
   const item = data?.find((entry) => entry.id === id)
 
-  if (isLoading) return <ScreenHeader title="옷 편집">불러오는 중…</ScreenHeader>
-  if (!item) return <ScreenHeader title="옷 편집">이 옷을 찾을 수 없어요.</ScreenHeader>
+  // The wardrobe is normally already in cache by the time anyone reaches this
+  // screen — it is opened from the detail view — so these are announced rather
+  // than drawn as a skeleton: there is nothing here to reserve space for that
+  // the form below will not immediately fill.
+  if (isLoading) {
+    return (
+      <ScreenHeader title="옷 편집" status="옷 정보를 불러오는 중이에요.">
+        불러오는 중…
+      </ScreenHeader>
+    )
+  }
+  if (!item) {
+    return (
+      <ScreenHeader title="옷 편집" status="이 옷을 찾을 수 없어요.">
+        이 옷을 찾을 수 없어요.
+      </ScreenHeader>
+    )
+  }
 
   function handleSubmit({ photos: _photos, ...draft }: ItemFormValues) {
     if (!userId || !item) return
@@ -34,7 +50,7 @@ export function ItemEditPage() {
   }
 
   return (
-    <ScreenHeader title="옷 편집">
+    <ScreenHeader title="옷 편집" status={`${item.title} 편집`}>
       <ItemForm
         initial={item}
         showPhotos={false}

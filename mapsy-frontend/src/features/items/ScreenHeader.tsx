@@ -11,16 +11,32 @@ import { hstack, vstack } from 'styled-system/patterns'
 export function ScreenHeader({
   title,
   action,
+  status,
   children,
 }: {
   title: string
   action?: React.ReactNode
+  /**
+   * What a screen reader should be told about the state of this screen.
+   *
+   * Lives here rather than in the screen because a live region is read when its
+   * contents *change*: one that appears with its text already in it is
+   * announced by some screen readers and not others, and one that unmounts when
+   * the data lands never says that the wait is over. Every state of a screen
+   * renders this same header, so the region survives the switch between them and
+   * the wait and its result are two values of one element.
+   */
+  status?: string
   children: React.ReactNode
 }) {
   const navigate = useNavigate()
 
   return (
     <div className={vstack({ gap: '0', alignItems: 'stretch', flex: '1' })}>
+      <p role="status" className={css({ srOnly: true })}>
+        {status ?? ''}
+      </p>
+
       <header
         className={hstack({
           justify: 'space-between',
