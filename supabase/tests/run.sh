@@ -8,9 +8,10 @@
 # (tests/00_bootstrap.sql) rather than the real services — good enough for
 # constraints, RLS and the ordering functions, which is what the suite covers.
 #
-# Also regenerates the frontend's constraint inventory
-# (mapsy-frontend/src/shared/constants/dbConstraints.generated.ts) and fails if
-# it changed, so running this dirties the working tree by design.
+# Also rewrites the frontend's constraint inventory
+# (mapsy-frontend/src/shared/constants/dbConstraints.generated.ts). The file is
+# written on every run but only *changes* when the schema did, and a change is a
+# failure — so a passing run leaves the working tree exactly as it found it.
 
 set -euo pipefail
 
@@ -78,6 +79,13 @@ docker exec -i "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 \
 # `set -e` would leave a tracked source file holding an unterminated array
 # literal — which breaks typecheck, build and the unit tests at once, with
 # nothing pointing at the cause. Same reason `types:gen` goes through a temp file.
+#
+# NOT NULL is deliberately absent from the list. On Postgres 17 it is not a
+# constraint row at all (`pg_attribute.attnotnull`); from 18 it is, as
+# `contype = 'n'`, and this filter keeps excluding it — the auto-generated names
+# it would bring (`items_title_not_null`) are not sentences to show anyone.
+# SQLSTATE 23502 in errorMessage covers that case instead. So "generated list"
+# means these four contypes, not "every constraint".
 {
   echo "/**"
   echo " * Constraint names in the \`public\` schema."
@@ -113,6 +121,17 @@ echo "재실행 통과"
 # new name has no message. Compared against HEAD rather than the index so an
 # already-staged regeneration still counts as a change.
 echo
+
+# `git diff` says nothing about a path it is not tracking, so gitignoring the
+# generated file would turn the gate below into a silent no-op. The repo already
+# ignores one generated tree (styled-system/), which is exactly the precedent
+# that would make someone try it here.
+if ! git -C "$HERE/.." ls-files --error-unmatch "$GENERATED" >/dev/null 2>&1; then
+  echo "생성 파일이 git에 추적되지 않음: $(basename "$GENERATED")" >&2
+  echo "추적되지 않으면 아래 드리프트 검사가 조용히 통과함. 커밋 대상에서 빼지 말 것." >&2
+  exit 1
+fi
+
 if ! git -C "$HERE/.." diff HEAD --quiet -- "$GENERATED"; then
   echo "제약 목록이 갱신됨: $(basename "$GENERATED")" >&2
   echo "errorMessage의 매핑을 맞춘 뒤 생성 파일과 함께 커밋할 것." >&2

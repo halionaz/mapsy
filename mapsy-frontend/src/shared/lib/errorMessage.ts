@@ -57,10 +57,21 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
 /** Exported for the coverage test; not part of the public surface otherwise. */
 export const MAPPED_CONSTRAINTS = Object.keys(CONSTRAINT_MESSAGES)
 
+/**
+ * By SQLSTATE, for violations that carry no constraint name to look up.
+ *
+ * `23502` is the one that matters: NOT NULL is not a row in `pg_constraint` on
+ * Postgres 17, so it is absent from the generated inventory and from the map
+ * above, and its message — `null value in column "title" of relation "items"
+ * violates not-null constraint` — quotes the column, not a constraint. Nothing
+ * in `CONSTRAINT_MESSAGES` could ever match it, which left the last path that
+ * put raw English on a Korean screen.
+ */
 const CODE_MESSAGES: Record<string, string> = {
   '22003': '숫자가 너무 커요.', // numeric_value_out_of_range
-  '23505': '이미 있는 항목이에요.', // unique_violation
+  '23502': '필수 항목이 비어 있어요.', // not_null_violation
   '23503': '연결된 항목을 찾을 수 없어요.', // foreign_key_violation
+  '23505': '이미 있는 항목이에요.', // unique_violation
   '42501': '권한이 없어요.', // insufficient_privilege
 }
 

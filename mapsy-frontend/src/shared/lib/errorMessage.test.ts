@@ -53,6 +53,20 @@ describe('errorMessage — 제약 위반', () => {
     )
   })
 
+  it('translates a NOT NULL violation, which names no constraint', () => {
+    // Verbatim from Postgres 17. NOT NULL is not a `pg_constraint` row there, so
+    // it is absent from the generated inventory and from CONSTRAINT_MESSAGES,
+    // and the message quotes the column rather than a constraint — no lookup
+    // above can reach it. SQLSTATE is the only handle.
+    expect(
+      errorMessage({
+        message:
+          'null value in column "title" of relation "items" violates not-null constraint',
+        code: '23502',
+      }),
+    ).toBe('필수 항목이 비어 있어요.')
+  })
+
   it('keeps the original text when nothing matches', () => {
     expect(errorMessage({ message: 'connection reset', code: 'XX000' })).toBe('connection reset')
   })
