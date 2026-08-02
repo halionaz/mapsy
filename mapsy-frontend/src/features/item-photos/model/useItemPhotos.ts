@@ -21,15 +21,25 @@ import { photoSlots, type PhotoSlot } from '../lib/photoSlots'
 const NOTHING_UNLOADABLE: ReadonlySet<string> = new Set()
 
 /**
- * How long a signed URL is worth anything, which is not the same as how long it
- * exists: half an hour is left as headroom so a re-sign happens *before* the old
- * URLs expire rather than after an image has already broken.
+ * How long a signed URL is worth reading, which is not how long it exists.
  *
- * One number for both `staleTime` and `gcTime` because it answers one question
- * — "is what we have still usable?" — and the two would otherwise drift apart
- * for no reason anyone could reconstruct.
+ * **The hour that is subtracted is the floor on what a viewer gets handed.**
+ * Nothing re-signs on a timer — a refetch needs a trigger (mount, window focus,
+ * reconnect) *and* a stale entry — so an entry may legitimately be served at the
+ * last moment before it goes stale, and what the `<img>` then holds is exactly
+ * this margin. Someone who opens a garment at that moment and keeps looking at
+ * it, without ever backgrounding the app, watches the photos break an hour
+ * later. Half an hour was the first guess and made that half an hour.
+ *
+ * That floor comes from `staleTime` alone; `gcTime` cannot raise it. The two
+ * measure from different moments — `staleTime` from when the URLs were signed,
+ * `gcTime` from when the last observer left — so one number does not buy one
+ * guarantee. It is used for both because the question each answers happens to
+ * have the same answer here: an entry is worth refetching, and worth keeping,
+ * for exactly as long as its URLs are worth reading. Shortening `gcTime` would
+ * only make a revisit re-sign more often; it would not change the floor.
  */
-const SIGNED_URL_USEFUL_MS = (SIGNED_URL_TTL_SECONDS - 30 * 60) * 1000
+const SIGNED_URL_USEFUL_MS = (SIGNED_URL_TTL_SECONDS - 60 * 60) * 1000
 
 export interface ItemPhotos {
   /** Cover first. The strip, the dots and the viewer all read this order. */
@@ -75,6 +85,11 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
     // `<img src>`. What is kept is five strings per garment opened — the list
     // query holds an array of up to 2,000 rows, which is why the global default
     // stays where it is rather than following this one up.
+    //
+    // This is a cost, not a guarantee: it widens which paths reach the floor
+    // above (a revisit now can, where an eviction used to force a fresh signing)
+    // without lowering it. The floor is the margin, and it is the margin that
+    // was raised.
     gcTime: SIGNED_URL_USEFUL_MS,
   })
 

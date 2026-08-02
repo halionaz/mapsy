@@ -221,16 +221,25 @@ async function uploadPhotos(
       const thumbPath = `${base}_thumb.${photo.ext}`
       const contentType = contentTypeOf(photo.ext)
 
-      const [full, thumb] = await Promise.all([
+      // allSettled, not all. supabase-js turns a StorageError into `{ error }`
+      // but lets anything else through as a rejection — an aborted request, a
+      // connection dropped mid-flight — and `Promise.all` rejects on the first
+      // of those without waiting for its sibling. If the sibling then lands, its
+      // object was never recorded, so the cleanup below walks past it: an orphan
+      // in the bucket, which is the single thing this function exists to avoid.
+      const [full, thumb] = await Promise.allSettled([
         storage.upload(path, photo.full, { contentType }),
         storage.upload(thumbPath, photo.thumb, { contentType }),
       ])
+      const fullError = uploadErrorOf(full)
+      const thumbError = uploadErrorOf(thumb)
+
       // Recorded before the error check: when one of the pair succeeds and the
       // other fails, the successful one still needs cleaning up.
-      if (!full.error) paths.push(path)
-      if (!thumb.error) paths.push(thumbPath)
-      if (full.error) throw full.error
-      if (thumb.error) throw thumb.error
+      if (!fullError) paths.push(path)
+      if (!thumbError) paths.push(thumbPath)
+      if (fullError) throw fullError
+      if (thumbError) throw thumbError
 
       rows.push({
         id: imageId,
@@ -249,6 +258,15 @@ async function uploadPhotos(
     await removeObjects(paths)
     throw uploadError
   }
+}
+
+/**
+ * Why one upload failed, however supabase-js chose to report it — returned in
+ * `{ error }` for a StorageError, thrown for everything else.
+ */
+function uploadErrorOf(result: PromiseSettledResult<{ error: unknown }>): unknown {
+  if (result.status === 'fulfilled') return result.value.error
+  return result.reason ?? new Error('사진 업로드에 실패했어요.')
 }
 
 /**
@@ -335,8 +353,22 @@ export async function deleteItem(id: string, userId: string): Promise<void> {
 
   const paths = (data ?? []).flatMap((row) => [row.path, row.thumb_path])
 
-  const { error } = await supabase.from('items').delete().eq('id', id).eq('user_id', userId)
+  const { data: deleted, error } = await supabase
+    .from('items')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('id')
   if (error) throw error
+
+  // PostgREST does not call "matched nothing" an error, so without asking for
+  // the rows back a delete that hit none reports success — and the caller acts
+  // on it: the card is patched out of the cache, the screen navigates away, and
+  // the garment reappears at the next refetch with nothing to explain it. The
+  // two predicates above are what make that reachable, and RLS can produce the
+  // same empty result on its own. A guard that can miss is a guard whose result
+  // has to be read.
+  if (!deleted?.length) throw new Error('삭제할 옷을 찾지 못했어요.')
 
   // Not fatal: the row is gone, which is what was asked for. A leftover object
   // costs quota, and failing here would tell the user the delete did not work.

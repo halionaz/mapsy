@@ -207,7 +207,8 @@ describe('useItemPhotos', () => {
     await reopen()
     expect(signPathsMock).toHaveBeenCalledTimes(1)
 
-    // 만료 30분 전을 넘긴 뒤 — 이제는 다시 서명해야 URL이 끊기지 않는다.
+    // 만료 한 시간 전을 넘긴 뒤 — 이제는 다시 서명해야 URL이 끊기지 않는다.
+    // 그 한 시간이 재사용되는 URL의 잔여 수명 바닥값이기도 하다.
     vi.setSystemTime(Date.now() + (SIGNED_URL_TTL_SECONDS - 60 * 60) * 1000)
     await reopen()
     expect(signPathsMock).toHaveBeenCalledTimes(2)
