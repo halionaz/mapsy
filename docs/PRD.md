@@ -108,21 +108,30 @@ create table items (
 -- 아이템 사진 (아이템당 최대 5장)
 create table item_images (
   id           uuid primary key default gen_random_uuid(),
-  item_id      uuid not null references items(id) on delete cascade,
-  user_id      uuid not null references auth.users(id) on delete cascade,
+  item_id      uuid not null,
+  user_id      uuid not null,
   path         text not null,                        -- 원본 스토리지 경로
   thumb_path   text not null,                        -- 1:1 크롭 썸네일 경로
-  sort_order   smallint not null default 0,          -- 0번이 대표 사진
+  sort_order   smallint not null default 0,          -- 0번이 대표 사진, 0~4
   width        integer,
   height       integer,
-  created_at   timestamptz not null default now()
+  created_at   timestamptz not null default now(),
+
+  -- 남의 아이템에 사진을 붙이는 것을 구조적으로 차단
+  foreign key (item_id, user_id) references items (id, user_id) on delete cascade,
+  -- 순서 변경 중 일시적 중복을 허용하기 위해 커밋 시점 검사
+  unique (item_id, sort_order) deferrable initially deferred
 );
 ```
+
+> **구현체는 [`supabase/migrations/`](../supabase/migrations/)가 단일 진실 공급원**이다. 위 블록은 설계 의도를 읽기 위한 요약이고, CHECK 제약·인덱스·정책 전문은 마이그레이션 파일에 있다. 운영상 알아야 할 것(사진 순서 변경 방법, 팔레트 확장 시 마이그레이션 필요)은 [`supabase/README.md`](../supabase/README.md)에 정리했다.
 
 **설계 노트**
 - `colors` / `seasons` / `tags`를 정규화 테이블 대신 **배열 + GIN 인덱스**로 둔다. 이 규모(개인 옷장 수백 벌)에서는 조인 없이 필터가 되고 쿼리가 훨씬 단순하다. 태그 자동완성은 `select distinct unnest(tags)`로 해결.
 - 대표 사진은 `cover_image_id` 컬럼 대신 **`sort_order = 0`** 규약으로 정한다. 순환 FK를 피하고, 사진 순서 변경이 곧 대표 변경이 된다.
+- **"아이템당 최대 5장"은 `sort_order between 0 and 4` CHECK + `(item_id, sort_order)` UNIQUE 조합으로 강제**한다. 별도 카운트 트리거가 필요 없다.
 - `status = 'disposed'`는 삭제가 아니다. 판 옷·버린 옷의 기록은 남기되 기본 조회에서 제외한다.
+- **색상 팔레트는 DB CHECK로도 고정**한다. 색 추가가 마이그레이션을 요구하게 되는데, 이는 의도된 마찰이다 — 정규화가 깨지면 색상 필터 자체가 성립하지 않는다. 반면 **카테고리는 그룹 접두사만 검증**해서 소분류 추가는 마이그레이션 없이 가능하다.
 
 ### 4.2 인덱스
 
@@ -141,11 +150,15 @@ create index on item_images (item_id, sort_order);
 
 ```sql
 alter table items enable row level security;
-create policy "own rows" on items
-  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "items are private to their owner" on items
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 ```
 
-`item_images`도 동일. Storage 버킷에도 경로 prefix 기반 정책을 건다.
+`auth.uid()`를 스칼라 서브쿼리로 감싸면 Postgres가 행마다가 아니라 구문당 한 번만 평가한다.
+
+`item_images`도 동일. Storage `wardrobe` 버킷(private)에는 경로 첫 세그먼트가 `auth.uid()`와 일치하는지 보는 정책을 SELECT/INSERT/UPDATE/DELETE 각각에 건다. UPDATE에는 `using`과 `with check`를 모두 두어야 남의 폴더로 이름을 바꿔 옮기는 것을 막을 수 있다.
 
 ---
 

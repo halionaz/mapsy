@@ -9,7 +9,8 @@
  */
 interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string | undefined
-  readonly VITE_SUPABASE_ANON_KEY: string | undefined
+  /** Publishable key (`sb_publishable_...`) — never the secret key. */
+  readonly VITE_SUPABASE_PUBLISHABLE_KEY: string | undefined
 }
 
 interface ImportMeta {

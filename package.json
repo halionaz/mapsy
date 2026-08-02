@@ -3,15 +3,19 @@
   "private": true,
   "packageManager": "pnpm@10.18.2",
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "pnpm": ">=10"
   },
   "scripts": {
+    "preinstall": "node scripts/only-pnpm.mjs",
     "dev": "pnpm --filter mapsy-frontend dev",
     "preview": "pnpm --filter mapsy-frontend preview",
     "codegen": "pnpm --filter mapsy-frontend codegen",
-
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "test:db": "bash supabase/tests/run.sh",
+    "types:gen": "supabase gen types typescript --linked > mapsy-frontend/src/types/database.ts.tmp && mv mapsy-frontend/src/types/database.ts.tmp mapsy-frontend/src/types/database.ts"
   }
 }
