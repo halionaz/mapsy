@@ -106,9 +106,10 @@ supabase db push
 pnpm types:gen
 ```
 
-`mapsy-frontend/src/types/database.ts`에 실제 스키마의 행·삽입 타입이 생성된다. 이 파일은
-생성물이니 직접 고치지 않는다. `types/item.ts`는 그대로 남는다 — 그쪽은 앱이 쓰는 도메인
-타입(camelCase, 좁혀진 유니온)이고, 둘 사이의 변환은 `features/items/mapRow.ts`가 맡는다.
+`mapsy-frontend/src/shared/api/database.types.ts`에 실제 스키마의 행·삽입 타입이 생성된다. 이
+파일은 생성물이니 직접 고치지 않는다. `entities/item/model/types.ts`는 그대로 남는다 — 그쪽은
+앱이 쓰는 도메인 타입(camelCase, 좁혀진 유니온)이고, 둘 사이의 변환은
+`entities/item/api/mapRow.ts`가 맡는다.
 
 스키마를 바꿀 때마다 다시 돌려야 컬럼 이름과 nullability가 컴파일 타임에 검증된다.
 
@@ -132,7 +133,7 @@ Docker에 Postgres를 띄우고 `auth`/`storage` 스텁을 세운 뒤 **실제 �
 `supabase start`가 있으면 그쪽이 더 충실하지만, 이 스크립트는 Docker만 있으면 돌아가서
 마이그레이션을 건드릴 때마다 부담 없이 실행할 수 있다.
 
-실행하면 `mapsy-frontend/src/shared/constants/dbConstraints.generated.ts`도 갱신된다.
+실행하면 `mapsy-frontend/src/shared/config/dbConstraints.generated.ts`도 갱신된다.
 프론트엔드의 `errorMessage`가 모든 제약 이름을 한국어 문구로 매핑하는데, 그 완전성을 주석이
 아니라 유닛 테스트가 검사하게 하려는 것이다 — 제약을 추가하고 매핑을 잊으면 `pnpm test`가
 잡는다. 파일이 바뀌면 run.sh가 알려준다.

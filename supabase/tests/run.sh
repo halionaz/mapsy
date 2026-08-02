@@ -9,7 +9,7 @@
 # constraints, RLS and the ordering functions, which is what the suite covers.
 #
 # Also rewrites the frontend's constraint inventory
-# (mapsy-frontend/src/shared/constants/dbConstraints.generated.ts). The file is
+# (mapsy-frontend/src/shared/config/dbConstraints.generated.ts). The file is
 # written on every run but only *changes* when the schema did, and a change is a
 # failure — so a passing run leaves the working tree exactly as it found it.
 
@@ -21,7 +21,7 @@ CONTAINER="${MAPSY_PG_CONTAINER:-mapsy-pg-test}"
 IMAGE="${MAPSY_PG_IMAGE:-postgres:17-alpine}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS="$HERE/../migrations"
-GENERATED="$HERE/../../mapsy-frontend/src/shared/constants/dbConstraints.generated.ts"
+GENERATED="$HERE/../../mapsy-frontend/src/shared/config/dbConstraints.generated.ts"
 
 if ! docker info >/dev/null 2>&1; then
   echo "Docker 데몬이 꺼져 있음. Docker Desktop을 실행한 뒤 다시 시도." >&2

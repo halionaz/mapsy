@@ -43,31 +43,71 @@ UI를 그대로 만들 수 있다.
 
 ## 구조
 
+[Feature-Sliced Design](https://feature-sliced.design)을 따른다.
+
 ```
 src/
-├── app/          라우터, 프로바이더, 레이아웃 셸 겸 인증 게이트
-├── features/
-│   ├── auth/       세션 훅, 로그인
-│   ├── filters/    필터 모델 + applyFilters (순수)
-│   ├── items/      api · queries · 폼 · 카드 · 화면
-│   └── settings/
-├── shared/
-│   ├── constants/  카테고리·색상·사이즈·핏·계절 프리셋 (PRD §5)
-│   ├── lib/        supabase · 이미지 처리 · 초성 검색 · 포맷
-│   └── ui/         공용 컴포넌트
-└── types/        도메인 타입 (PRD §4 스키마 대응)
+├── app/            앱 전역 — 라우트 테이블, 프로바이더, 레이아웃 셸 겸 인증 게이트
+│   ├── providers/    QueryClient · BrowserRouter
+│   └── layouts/      AppLayout
+├── pages/          라우트 하나 = 슬라이스 하나
+│   ├── wardrobe/ item-detail/ item-new/ item-edit/ login/ settings/
+├── entities/       도메인 객체
+│   └── item/
+│       ├── api/      Supabase 호출 · DB 행 ↔ 도메인 변환(mapRow)
+│       ├── model/    도메인 타입 · react-query 훅 · 업로드 대기열
+│       └── ui/       ItemCard
+├── features/       사용자 동작
+│   ├── auth/           세션 상태 · 구글 로그인
+│   ├── item-form/      등록·편집 폼과 사진 선택
+│   ├── item-photos/    원본 사진 서명(useItemPhotos) · 뷰어 · 팬/줌 기하
+│   └── wardrobe-filter/  필터 모델 + applyFilters (순수)
+└── shared/
+    ├── api/        supabase 클라이언트 · storage · queryKeys · DB 생성 타입
+    ├── config/     카테고리·색상·사이즈·핏·계절 프리셋 (PRD §5)
+    ├── lib/        이미지 처리 · 초성 검색 · 포맷 · 유틸
+    └── ui/         공용 컴포넌트
 ```
+
+**세그먼트가 곧 관심사다.** 슬라이스 안에서 `api/`는 바깥과 말하는 코드, `model/`은 상태와
+도메인 규칙, `lib/`는 순수 로직, `ui/`는 그리는 코드다. 어디에 넣을지 애매하면 "이게 없으면
+무엇이 안 되나"로 정한다.
+
+**슬라이스 밖에서는 `index.ts`만 본다.** `@/entities/item`은 되고
+`@/entities/item/model/queries`는 안 된다 — 그래야 내부 배치를 호출부를 건드리지 않고 바꿀 수
+있고, 공개할 생각이 없던 것(`fetchWardrobe`, `mapRow`)이 새어나가지 않는다. `shared/`는
+슬라이스가 없으므로 파일을 직접 가리킨다 (`@/shared/lib/format`).
+
+**의존 방향은 아래로만.** `app → pages → features → entities → shared`. 같은 층의 슬라이스끼리도
+서로 import하지 않는다 — 화면에서 조합한다.
+
+## 데이터
+
+**서버에서 오는 것은 전부 react-query를 통한다.** 컴포넌트에 `useEffect` + `useState`로 짠
+페치가 있으면 그건 아직 옮기지 않은 것이다 — 경합 취소, 재시도, 캐시를 손으로 다시 만들게 된다.
+
+**쿼리 키는 [`shared/api/queryKeys.ts`](src/shared/api/queryKeys.ts) 한 곳에서만 만든다.** 키를
+읽는 쪽이 페치하는 훅 하나가 아니라서 그렇다 — 뮤테이션 다섯 개가 같은 항목을 패치·취소·무효화
+한다. 호출부에 직접 적은 키가 어긋나면 `setQueryData`는 아무도 읽지 않는 항목에 조용히 쓰고
+에러를 내지 않는다. `all`은 접두사(취소·무효화용), 함수는 정확한 키
+(`setQueryData`/`getQueryData`용)다.
+
+옷장은 한 번 받아 클라이언트에서 거른다(PRD §8.4). 캐시 항목이 하나뿐이라 뮤테이션은
+**무효화 대신 그 항목을 직접 패치한다** — 즐겨찾기 별 하나 누를 때마다 전량 refetch가 돌면
+커버 URL이 전부 다시 서명되고 그리드의 모든 썸네일이 다시 로드된다. 이유는
+[`entities/item/model/queries.ts`](src/entities/item/model/queries.ts) 주석에 있다.
 
 ## 테스트 범위
 
 **결정이 들어있는 로직은 순수 함수로 분리해 테스트한다** — 초성 검색, 필터·정렬, DB 행 매핑,
 이미지 리사이즈/크롭 기하. 이 부분은 Supabase 없이 돌아가고 실제로 검증돼 있다.
 
-**네트워크 경로(`api.ts`, `queries.ts`)와 화면은 자동 테스트가 없다.** 다만 행/삽입 타입은
-`src/types/database.ts`(실제 스키마에서 생성)에서 오므로 컬럼 이름과 nullability는 컴파일
-타임에 검증된다. 나머지는 손으로 밟아봐야 한다 — 등록 → 조회 → 편집 → 삭제.
+**네트워크 경로(`entities/item/api`, `entities/item/model/queries.ts`)와 화면은 자동 테스트가
+없다.** 다만 행/삽입 타입은 `src/shared/api/database.types.ts`(실제 스키마에서 생성)에서 오므로
+컬럼 이름과 nullability는 컴파일 타임에 검증된다. 나머지는 손으로 밟아봐야 한다 —
+등록 → 조회 → 편집 → 삭제.
 
-스키마를 바꾸면 `pnpm types:gen`으로 타입을 다시 생성한다. `src/types/database.ts`는
+스키마를 바꾸면 `pnpm types:gen`으로 타입을 다시 생성한다. `src/shared/api/database.types.ts`는
 생성물이니 직접 고치지 않는다.
 
 ## 스타일링
@@ -86,9 +126,10 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
   시트가 없다. `applyFilters`는 이미 모든 축을 처리하므로 UI만 얹으면 된다.
 - **편집 화면에서 사진 교체·순서 변경 불가 — UI만 없다.** DB 함수
   (`reorder_item_images`, `delete_item_image`)와 클라이언트 래퍼
-  (`api.reorderItemImages`, `api.deleteItemImage`)는 있고 `pnpm test:db`가 검증한다.
-  화면에서 아직 호출하지 않을 뿐이라 그 두 export는 의도적으로 미사용 상태다.
-  업로드·삭제·`sort_order`를 조정해야 해서 등록 흐름의 변형이 아니라 별도 작업이다.
+  (`reorderItemImages`, `deleteItemImage` — `@/entities/item`에서 export)는 있고
+  `pnpm test:db`가 검증한다. 화면에서 아직 호출하지 않을 뿐이라 그 두 export는 의도적으로
+  미사용 상태다. 업로드·삭제·`sort_order`를 조정해야 해서 등록 흐름의 변형이 아니라 별도
+  작업이다.
 - 로그아웃 (설정 화면이 스텁)
 - **PWA 아이콘이 SVG 하나뿐.** `manifest.icons`가 SVG라 Android 설치 배너 조건을 못 채울 수
   있고, iOS는 SVG `apple-touch-icon`을 무시하므로 아예 링크를 걸지 않았다. 192·512 PNG와
