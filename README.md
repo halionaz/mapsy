@@ -14,6 +14,7 @@ mapsy/
 ├── mapsy-frontend/   Vite + React SPA (PWA)
 ├── supabase/         스키마 마이그레이션 · RLS · DB 회귀 테스트
 ├── scripts/          저장소 도구
+├── .githooks/        git 훅 — pnpm install이 core.hooksPath로 연결한다
 └── docs/PRD.md       제품 명세
 ```
 
@@ -50,8 +51,42 @@ pnpm dev
 | `pnpm test` | vitest — 순수 로직 단위 테스트 |
 | `pnpm test:db` | Docker에 Postgres를 띄워 마이그레이션·RLS 검사 |
 | `pnpm codegen` | Panda CSS 재생성 |
+| `pnpm setup:worktree` | 워크트리에 gitignore된 로컬 파일 채우기 — 아래 참고 |
 | `pnpm cf:dev` | Cloudflare Workers 런타임으로 빌드 결과 확인 |
 | `pnpm cf:deploy` | Cloudflare Workers 배포 — [`docs/DEPLOY.md`](docs/DEPLOY.md) |
+
+## 워크트리
+
+`git worktree add`는 **추적되는 파일만** 새 디렉토리에 푼다. gitignore된 것 —
+`mapsy-frontend/.env.local`, `supabase/.env`, supabase CLI가 링크한 프로젝트를 기억하는
+`supabase/.temp/` — 은 만들어진 워크트리에 남는다. 그래서 새 워크트리에서 `pnpm dev`를
+띄우면 Supabase 설정이 통째로 비어 있다.
+
+[`.githooks/post-checkout`](.githooks/post-checkout)이 이걸 자동으로 메운다.
+
+```bash
+git worktree add ../mapsy-feature -b feat/something
+#   ✓ mapsy-frontend/.env.local
+#   ✓ supabase/.env
+#   ✓ supabase/.temp/project-ref
+#   ...
+```
+
+원본은 **메인 워크트리**(`.git`이 있는 쪽)다. 이미 있는 파일은 건드리지 않으니 아무 때나 다시
+돌려도 되고, 나중에 추가된 것만 채워진다. 덮어쓰려면 `pnpm setup:worktree --force`.
+
+무엇을 복사할지는 나열하지 않고 **찾는다** — 저장소 안의 모든 `.env*` 중 git이 이미 추적하는
+것(`.env.example`)을 뺀 나머지. `mapsy-server/.env`는 생기기만 하면 잡히고, 워크스페이스
+글롭과 같은 이유로 파일을 고칠 일이 없다. env가 아닌 경로는
+[`scripts/setup-worktree.sh`](scripts/setup-worktree.sh)의 `EXTRA_PATHS`에 적혀 있다.
+
+의존성 설치는 훅에서 **하지 않는다.** `pnpm install`이 훅 안에서 돌면 `git worktree add`가
+설명 없이 30초씩 멈춘다. node_modules가 없으면 그렇다고 알려주기만 하고, 직접 부른
+`pnpm setup:worktree`는 없을 때만 설치한다.
+
+> **훅은 `pnpm install`이 연결한다** — `git config core.hooksPath .githooks`를 `prepare`에서
+> 돌린다. 클론 직후 아직 설치를 안 했다면 훅도 없다. 그리고 이 설정은 `.git/hooks/`를
+> 대체하므로, 거기에 직접 넣은 훅이 있다면 `.githooks/`로 옮겨야 한다.
 
 ## 왜 pnpm만 허용하나
 
