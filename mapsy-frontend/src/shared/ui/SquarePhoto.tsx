@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { css, cva, cx } from 'styled-system/css'
 
 import { skeletonSurface } from './skeletonStyle'
@@ -151,12 +151,36 @@ export function SquarePhoto({
     )
   }, [])
 
+  /**
+   * Read through a ref so that `fail` — and `checkComplete` below it — do not
+   * depend on the caller's function identity.
+   *
+   * Every call site builds this inline, and the one that matters cannot do
+   * otherwise: the detail screen renders a tile per photo inside a `map`, so
+   * `onLoadError={() => markUnloadable(slot.id)}` is a new function on every
+   * render and there is no `useCallback` available inside a loop. Depending on
+   * it made `checkComplete` new every render, and React tears down and
+   * re-attaches a callback ref whose identity changed — on a screen that
+   * re-renders once per frame while the viewer is being swiped. Owning the
+   * problem here fixes it for every caller instead of asking each one to.
+   *
+   * Assigned during render, not in an effect. `checkComplete` is a callback ref
+   * and can call `fail` the moment it attaches — for a cached broken image, in
+   * the same commit. Measured order on a re-render is `ref attach` →
+   * `useLayoutEffect` → `useEffect`, so *both* effect kinds land after the only
+   * consumer, and the ref would still hold the previous render's closure when it
+   * mattered: a photo set that changed in the same render would have its
+   * neighbour marked unloadable.
+   */
+  const onLoadErrorRef = useRef(onLoadError)
+  onLoadErrorRef.current = onLoadError
+
   const fail = useCallback(
     (failedSrc: string) => {
       settle(failedSrc, 'failed')
-      onLoadError?.()
+      onLoadErrorRef.current?.()
     },
-    [settle, onLoadError],
+    [settle],
   )
 
   // A photo already in the browser cache can finish before React has attached

@@ -1,0 +1,140 @@
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+
+import type { ItemImage } from '@/entities/item'
+import { signPaths, SIGNED_URL_TTL_SECONDS, storageKeys } from '@/shared/api/storage'
+import { isSupabaseConfigured } from '@/shared/api/supabase'
+import { photoSlots, type PhotoSlot } from '../lib/photoSlots'
+
+/**
+ * An item's photos, in cover order, paired with signed full-size URLs.
+ *
+ * Only the thumbnail is signed by the wardrobe query; the originals are signed
+ * here so the grid isn't paying for URLs nobody opens.
+ *
+ * Both jobs live in one hook because they are one invariant: the URLs are
+ * matched to the photos **by position**, so deriving the order in one place and
+ * the URLs in another is how a tile ends up showing its neighbour's photo. The
+ * caller gets slots, which cannot be misaligned.
+ */
+
+const NOTHING_UNLOADABLE: ReadonlySet<string> = new Set()
+
+/**
+ * How long a signed URL is worth reading, which is not how long it exists.
+ *
+ * **The hour that is subtracted is the floor on what a viewer gets handed.**
+ * Nothing re-signs on a timer — a refetch needs a trigger (mount, window focus,
+ * reconnect) *and* a stale entry — so an entry may legitimately be served at the
+ * last moment before it goes stale, and what the `<img>` then holds is exactly
+ * this margin. Someone who opens a garment at that moment and keeps looking at
+ * it, without ever backgrounding the app, watches the photos break an hour
+ * later. Half an hour was the first guess and made that half an hour.
+ *
+ * That floor comes from `staleTime` alone; `gcTime` cannot raise it. The two
+ * measure from different moments — `staleTime` from when the URLs were signed,
+ * `gcTime` from when the last observer left — so one number does not buy one
+ * guarantee. It is used for both because the question each answers happens to
+ * have the same answer here: an entry is worth refetching, and worth keeping,
+ * for exactly as long as its URLs are worth reading. Shortening `gcTime` would
+ * only make a revisit re-sign more often; it would not change the floor.
+ */
+const SIGNED_URL_USEFUL_MS = (SIGNED_URL_TTL_SECONDS - 60 * 60) * 1000
+
+export interface ItemPhotos {
+  /** Cover first. The strip, the dots and the viewer all read this order. */
+  photos: ItemImage[]
+  slots: PhotoSlot[]
+  /** A photo whose URL was signed but which the browser would not load. */
+  markUnloadable: (photoId: string) => void
+}
+
+export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPhotos {
+  const photos = useMemo(
+    () => [...(images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
+    [images],
+  )
+  const paths = useMemo(() => photos.map((photo) => photo.path), [photos])
+
+  const query = useQuery({
+    // A fresh array every render is fine: react-query hashes keys by value, so
+    // the same paths address the same entry. It is also what removes the old
+    // effect-based version's join-the-paths-into-a-string dance — `useEffect`
+    // compared them by identity, and every cache patch (starring the item, say)
+    // produced a new array, re-signing every URL and remounting every <img>.
+    queryKey: storageKeys.signedUrls(paths),
+    queryFn: async () => {
+      const signed = await signPaths(paths)
+      // One entry per photo, in order — `null` for a path that could not be
+      // signed. Keeping the slots aligned with the photos is what lets a tile
+      // tell "still coming" from "did not arrive".
+      return paths.map((path) => signed.get(path) ?? null)
+    },
+    enabled: isSupabaseConfigured && paths.length > 0,
+    // Tied to how long the URLs actually live, not to the 30 minutes the
+    // wardrobe list uses. These URLs are what an `<img src>` is built from, and
+    // re-signing changes every one of them: the browser caches by full URL
+    // including the token, so a refetch re-downloads up to five 1280px
+    // originals over the phone's connection. At the default staleTime that
+    // happened every half hour — seven times more often than the URLs need it.
+    staleTime: SIGNED_URL_USEFUL_MS,
+    // Held for as long as it is worth reading rather than inheriting the hour
+    // the list query uses. gcTime only starts once nothing observes the entry,
+    // so this is what a *second* visit to the same garment finds: URLs that are
+    // still valid, reused without a signing round trip and without changing any
+    // `<img src>`. What is kept is five strings per garment opened — the list
+    // query holds an array of up to 2,000 rows, which is why the global default
+    // stays where it is rather than following this one up.
+    //
+    // This is a cost, not a guarantee: it widens which paths reach the floor
+    // above (a revisit now can, where an eviction used to force a fresh signing)
+    // without lowering it. The floor is the margin, and it is the margin that
+    // was raised.
+    gcTime: SIGNED_URL_USEFUL_MS,
+  })
+
+  /**
+   * Settled with nothing to show.
+   *
+   * Without this the tiles would sit on a skeleton for good, which reads as a
+   * slow network rather than as a failure the user could retry by reloading.
+   * (`retry` is on by default, so this is reached only after the attempts are
+   * exhausted.)
+   */
+  const allFailed = useMemo(() => photos.map(() => null), [photos])
+  const urls = query.data ?? (query.isError ? allFailed : null)
+
+  const [unloadable, setUnloadable] = useState<ReadonlySet<string>>(NOTHING_UNLOADABLE)
+  const [signedFor, setSignedFor] = useState(query.data)
+
+  // Whatever would not load did so at a URL that no longer exists, so a fresh
+  // signing — a different item, or a refetch when the app is foregrounded —
+  // deserves another attempt. Adjusted during render rather than in an effect so
+  // the stale set is never rendered once first.
+  // https://react.dev/reference/react/useState#storing-information-from-previous-renders
+  if (signedFor !== query.data) {
+    setSignedFor(query.data)
+    setUnloadable(NOTHING_UNLOADABLE)
+  }
+
+  // Memoised, and not only to save the work. `PhotoViewer` takes this as a prop
+  // and builds its paging callback from it, so a fresh array every render is a
+  // fresh callback every render — and the key handler bound to that callback
+  // would be detached and reattached on each one. Swiping in the viewer scrolls
+  // the strip behind it, which re-renders the screen, so "every render" is every
+  // frame of a swipe.
+  const slots = useMemo(
+    () => photoSlots(photos, urls, unloadable),
+    [photos, urls, unloadable],
+  )
+
+  return {
+    photos,
+    slots,
+    // Returns the same set when the id is already in it: a new one every time
+    // would be a new state value every time, and this is called from an <img>
+    // error handler that can fire on a re-render.
+    markUnloadable: (photoId) =>
+      setUnloadable((failed) => (failed.has(photoId) ? failed : new Set(failed).add(photoId))),
+  }
+}

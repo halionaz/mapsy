@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { cva } from 'styled-system/css'
-import { swatchVar, colorLabel, type ColorId } from '@/shared/constants/colors'
+import { swatchVar, colorLabel, type ColorId } from '@/shared/config/colors'
 
 /**
  * The colour dot shown on item cards and in the filter sheet.

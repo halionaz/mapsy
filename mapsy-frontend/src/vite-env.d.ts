@@ -4,7 +4,7 @@
 /**
  * Optional on purpose. These are the only runtime inputs the app cannot
  * guarantee, and typing them as plain `string` makes the guard in
- * `shared/lib/supabase.ts` a tautology the compiler will happily let someone
+ * `shared/api/supabase.ts` a tautology the compiler will happily let someone
  * delete.
  */
 interface ImportMetaEnv {

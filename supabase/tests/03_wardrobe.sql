@@ -170,9 +170,20 @@ values ('aaaa0000-0000-0000-0000-000000000003', :'A', '사진 없는 아이템',
 select public.reorder_item_images('aaaa0000-0000-0000-0000-000000000003', array[]::uuid[]);
 \echo '  ok  빈 배열은 오류가 아님 (사진 0장 아이템)'
 
-delete from public.items where id in (
-  'aaaa0000-0000-0000-0000-000000000002',
-  'aaaa0000-0000-0000-0000-000000000003');
+-- RETURNING이 소유자에게 행을 돌려주는지 — 아래 B 케이스의 반대쪽.
+--
+-- 프론트엔드가 여기에 기댄다. deleteItem은 `.select('id')`로 지운 행을 받아
+-- 비어 있으면 실패로 처리하는데, PostgREST가 0행 매치를 에러로 보지 않아서
+-- 그렇지 않으면 아무것도 안 지운 삭제가 성공으로 보고되기 때문이다. 정책이
+-- `for all` 하나라 DELETE의 RETURNING도 같은 조건으로 SELECT되지만, 나중에
+-- 커맨드별 정책으로 쪼개면서 select를 좁히면 **삭제는 되고 예외는 나는** 상태가
+-- 된다 — 행은 사라졌는데 스토리지 정리를 건너뛰어 고아 객체가 남는다.
+with deleted as (
+  delete from public.items where id in (
+    'aaaa0000-0000-0000-0000-000000000002',
+    'aaaa0000-0000-0000-0000-000000000003')
+  returning 1)
+select tests.eq((select count(*)::text from deleted), '2', '소유자의 삭제는 지운 행을 돌려줌');
 
 \echo '── 사진 삭제 시 재번호 ──'
 select public.delete_item_image('bbbb0000-0000-0000-0000-000000000002');

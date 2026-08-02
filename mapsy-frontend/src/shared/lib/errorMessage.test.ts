@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DB_CONSTRAINTS } from '@/shared/constants/dbConstraints.generated'
+import { DB_CONSTRAINTS } from '@/shared/config/dbConstraints.generated'
 import { errorMessage, MAPPED_CONSTRAINTS } from './errorMessage'
 
 describe('errorMessage', () => {
