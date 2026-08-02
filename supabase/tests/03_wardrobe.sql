@@ -288,6 +288,18 @@ select tests.eq(
    where n.nspname = 'private' and p.proname in ('has_unique_elements', 'max_element_length')),
   '2', '헬퍼는 private 스키마에 있음');
 
+-- The helpers keep EXECUTE — revoking it breaks CHECK evaluation (see 005) — so
+-- schema USAGE is the only thing standing between anon and them. Asserted
+-- because it is load-bearing and invisible: nothing else here would notice a
+-- stray `grant usage on schema private to anon`.
+select tests.eq(
+  has_schema_privilege('anon', 'private', 'usage')::text,
+  'false', 'anon은 private 스키마에 접근할 수 없음');
+
+select tests.eq(
+  has_schema_privilege('authenticated', 'private', 'usage')::text,
+  'true', 'authenticated는 private 스키마 USAGE가 있음 — CHECK 평가에 필요');
+
 -- Scoped by condition, not by name. The previous version listed
 -- ('reorder_item_images', 'delete_item_image') explicitly, so a third RPC added
 -- later would inherit Supabase's default `anon=X` grant and no assertion would

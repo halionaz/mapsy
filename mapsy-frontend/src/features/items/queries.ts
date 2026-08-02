@@ -67,7 +67,9 @@ function patchCache(
  * use: the refetch fires the moment the app is foregrounded, which is exactly
  * when someone resumes what they were doing.
  *
- * `after` — only when there is no cache entry to have patched. An unconditional
+ * `after` — only when there is no cache entry to have patched. In practice that
+ * is `useCreateItem` alone: the other four are reached from screens that already
+ * read the collection, so their cache is warm by construction. An unconditional
  * invalidate looked tidy and was expensive: `useWardrobe` is observed by three
  * screens so it is always active, meaning every star tap refetched the whole
  * collection *and* re-signed every cover URL, changing every `<img src>` and
@@ -174,9 +176,11 @@ export function useSetFavorite() {
     onError: (_error, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(WARDROBE_KEY, context.previous)
     },
-    // Completes the optimistic-update recipe: without it a star that the server
-    // rejected in some way the client did not model stays wrong until the next
-    // unrelated refetch.
+    // Only does anything if the cache was empty — which the star cannot normally
+    // reach, since pressing it requires the detail screen to have found the item
+    // in that cache. Kept for the path where it somehow is: a rejected write is
+    // already undone by onError above, so this is not the recipe's usual
+    // "re-sync with the server" step.
     onSettled: after,
   })
 }

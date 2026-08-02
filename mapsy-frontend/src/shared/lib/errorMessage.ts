@@ -9,10 +9,15 @@
  */
 
 /**
- * Constraint names carry the intent, so they map to something a person can act
- * on. The form mirrors these limits and normally catches them first; this is the
- * surface left over for anything that slips past, and it should not be raw
- * Postgres text on a Korean screen.
+ * Every named constraint in supabase/migrations, mapped to something a person
+ * can act on. The form mirrors most of these and normally catches them first;
+ * this is the surface left over for anything that slips past, and it should not
+ * be raw Postgres text on a Korean screen.
+ *
+ * Complete on purpose rather than "the ones we expect to hit" — several are
+ * unreachable through the UI today, and picking which of those to include was
+ * the sort of judgement that leaves gaps. If a constraint is added, it belongs
+ * here.
  */
 const CONSTRAINT_MESSAGES: Record<string, string> = {
   items_title_length: '이름이 너무 길어요.',
@@ -36,7 +41,12 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   items_category_group_valid: '카테고리를 다시 골라주세요.',
   items_price_non_negative: '가격은 0원 이상이어야 해요.',
   items_title_not_blank: '이름을 입력해주세요.',
+  items_status_valid: '보유 상태 값이 올바르지 않아요.',
   item_images_sort_order_range: '사진은 최대 5장까지예요.',
+  item_images_path_not_blank: '사진 경로가 비어 있어요.',
+  item_images_dimensions_positive: '사진 크기를 읽지 못했어요.',
+  item_images_item_sort_key: '사진 순서가 중복됐어요.',
+  item_images_item_fk: '사진을 붙일 옷을 찾을 수 없어요.',
 }
 
 const CODE_MESSAGES: Record<string, string> = {

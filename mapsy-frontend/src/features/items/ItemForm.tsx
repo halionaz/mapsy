@@ -148,13 +148,32 @@ export function ItemForm({
   const priceProblem =
     parsedPrice != null && parsedPrice > LIMITS.price ? '가격이 너무 커요.' : null
 
-  const invalid =
-    missingPhoto || missingTitle || missingCategory || tagProblem !== null || priceProblem !== null
+  /**
+   * Reasons that live inside the collapsed section.
+   *
+   * Kept separate because they are the ones a user cannot see when submit
+   * refuses. The required fields above are always on screen and explain
+   * themselves in place; these needed somewhere else to speak from — otherwise
+   * filling in a too-large price, collapsing the section and tapping 등록 does
+   * nothing at all, with no indication why.
+   *
+   * Anything added to `invalid` from inside that section belongs here too.
+   */
+  const hiddenProblems = [tagProblem, priceProblem].filter(
+    (problem): problem is string => problem !== null,
+  )
+
+  const invalid = missingPhoto || missingTitle || missingCategory || hiddenProblems.length > 0
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setTouched(true)
-    if (invalid || pending || !categoryId) return
+    if (invalid || pending || !categoryId) {
+      // Open the section so the field-level message is reachable; the summary by
+      // the submit button covers the moment before that.
+      if (hiddenProblems.length > 0) setShowOptional(true)
+      return
+    }
 
     onSubmit({
       photos,
@@ -359,6 +378,16 @@ export function ItemForm({
               className={css({ ...inputBase, resize: 'vertical' })}
             />
           </Field>
+        </div>
+      )}
+
+      {touched && hiddenProblems.length > 0 && (
+        <div role="alert" className={vstack({ gap: '1', alignItems: 'stretch' })}>
+          {hiddenProblems.map((problem) => (
+            <p key={problem} className={css({ fontSize: 'sm', color: 'danger' })}>
+              {problem}
+            </p>
+          ))}
         </div>
       )}
 

@@ -5,11 +5,16 @@ mapsy의 데이터베이스 스키마와 스토리지 정책. **이 디렉토리
 
 ```
 migrations/
-├── 20260801000001_init_wardrobe.sql      items · item_images · 인덱스 · RLS
-├── 20260801000002_wardrobe_storage.sql   wardrobe 버킷 · 스토리지 정책
-└── 20260801000003_item_image_ordering.sql 사진 순서 변경/삭제 RPC
+├── 20260801000001_init_wardrobe.sql       items · item_images · 인덱스 · RLS
+├── 20260801000002_wardrobe_storage.sql    wardrobe 버킷 · 스토리지 정책
+├── 20260801000003_item_image_ordering.sql 사진 순서 변경 · 삭제 RPC
+├── 20260801000004_tighten_constraints.sql 순서 변경 가드 수정 · 배열/텍스트 제약
+├── 20260801000005_private_helpers.sql     CHECK 헬퍼 비노출 · 함수 권한
+├── 20260801000006_revoke_anon_execute.sql RPC에서 anon EXECUTE 회수
+└── 20260801000007_price_ceiling.sql       가격 상한 · 트리거 함수 권한
 tests/
-└── run.sh                                마이그레이션 적용 + 회귀 검사
+├── run.sh                                 컨테이너에 마이그레이션 적용 + 회귀 검사
+└── 03_wardrobe.sql                        단언 본체
 ```
 
 ---
@@ -126,8 +131,21 @@ Docker에 Postgres를 띄우고 `auth`/`storage` 스텁을 세운 뒤 **실제 �
 `supabase start`가 있으면 그쪽이 더 충실하지만, 이 스크립트는 Docker만 있으면 돌아가서
 마이그레이션을 건드릴 때마다 부담 없이 실행할 수 있다.
 
-**커버하지 않는 것**: 실제 Auth 흐름, 실제 Storage 업로드, 프론트엔드 네트워크 경로.
-이건 위 6단계에서 손으로 확인해야 한다.
+**커버하지 않는 것**
+
+- 실제 Auth 흐름, 실제 Storage 업로드, 프론트엔드 네트워크 경로 — 위 6단계에서 손으로 확인.
+- **배포된 프로젝트 자체.** 스위트는 `supabase/migrations/`로 세운 일회용 컨테이너를 검사할
+  뿐이다. 대시보드 SQL 에디터로 만든 객체나 `public`에 설치한 확장은 Supabase의 기본 권한
+  때문에 `anon=X`를 달고 태어나는데 스위트는 그것을 보지 못한다. 실제로 `anon` 권한 드리프트를
+  처음 잡아낸 것도 스위트가 아니라 `supabase db dump`였다.
+
+  주기적으로 확인할 것:
+
+  ```bash
+  supabase db dump --schema public -f - | grep 'TO "anon"'
+  ```
+
+  마이그레이션은 스위트가 지키고, 배포된 DB는 이 덤프가 지킨다.
 
 ---
 
