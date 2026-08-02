@@ -1,9 +1,12 @@
 /**
  * Cache keys for the wardrobe — the item entity's one collection query.
  *
- * Lives in the entity rather than in a shared registry: `shared` is the one
- * layer that must not know what a garment is, and a key named "wardrobe" down
- * there is the domain leaking to the bottom of the app.
+ * Lives in the entity rather than in a shared registry because a key is the
+ * *address* of a cache entry, and an address belongs beside the thing that
+ * fills it — `fetchWardrobe` is in this slice. A global registry puts the two
+ * an import away from each other and gains nothing: the drift it is supposed to
+ * prevent is between the mutations below and this file, which are neighbours
+ * either way.
  *
  * Two shapes, and the difference matters:
  *

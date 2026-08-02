@@ -20,6 +20,17 @@ import { photoSlots, type PhotoSlot } from '../lib/photoSlots'
 
 const NOTHING_UNLOADABLE: ReadonlySet<string> = new Set()
 
+/**
+ * How long a signed URL is worth anything, which is not the same as how long it
+ * exists: half an hour is left as headroom so a re-sign happens *before* the old
+ * URLs expire rather than after an image has already broken.
+ *
+ * One number for both `staleTime` and `gcTime` because it answers one question
+ * — "is what we have still usable?" — and the two would otherwise drift apart
+ * for no reason anyone could reconstruct.
+ */
+const SIGNED_URL_USEFUL_MS = (SIGNED_URL_TTL_SECONDS - 30 * 60) * 1000
+
 export interface ItemPhotos {
   /** Cover first. The strip, the dots and the viewer all read this order. */
   photos: ItemImage[]
@@ -55,20 +66,16 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
     // re-signing changes every one of them: the browser caches by full URL
     // including the token, so a refetch re-downloads up to five 1280px
     // originals over the phone's connection. At the default staleTime that
-    // happened every half hour, on the first window focus after it — seven
-    // times more often than the URLs need it.
-    //
-    // Half an hour of headroom keeps the recovery the list query was given
-    // (`refetchOnWindowFocus` re-signs before anything expires) without paying
-    // for it while the URLs are still good.
-    //
-    // Longer than the global gcTime (an hour) on purpose, and not a
-    // contradiction: gcTime only runs once nothing observes the query, so this
-    // covers the screen that stays open — a phone backgrounded and picked up
-    // again. Leave the screen for an hour and the entry is evicted, which is
-    // the right answer too: a cold open should sign afresh. Matching the two
-    // numbers in either direction is a regression.
-    staleTime: (SIGNED_URL_TTL_SECONDS - 30 * 60) * 1000,
+    // happened every half hour — seven times more often than the URLs need it.
+    staleTime: SIGNED_URL_USEFUL_MS,
+    // Held for as long as it is worth reading rather than inheriting the hour
+    // the list query uses. gcTime only starts once nothing observes the entry,
+    // so this is what a *second* visit to the same garment finds: URLs that are
+    // still valid, reused without a signing round trip and without changing any
+    // `<img src>`. What is kept is five strings per garment opened — the list
+    // query holds an array of up to 2,000 rows, which is why the global default
+    // stays where it is rather than following this one up.
+    gcTime: SIGNED_URL_USEFUL_MS,
   })
 
   /**

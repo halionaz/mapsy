@@ -14,9 +14,15 @@ import {
 /**
  * Supabase access for the wardrobe.
  *
- * No RLS filtering appears in these queries: the policies already scope every
- * row to auth.uid(), and repeating the condition in the client would suggest the
- * security lives here rather than in the database.
+ * Reads and updates carry no owner condition: the policies already scope every
+ * row to auth.uid(), and repeating that in the client would suggest the security
+ * lives here rather than in the database.
+ *
+ * **Deletes are the exception** — `deleteItem` and the rollback inside
+ * `createItem` both add `.eq('user_id', …)`. Not because RLS is doubted, but
+ * because those two are the only queries whose mistake cannot be taken back: a
+ * `delete` that matches more rows than intended has no undo, so it is worth one
+ * redundant predicate. Do not "tidy" them into consistency with the rest.
  */
 
 const ITEM_COLUMNS = '*'
