@@ -19,6 +19,17 @@ export default defineConfig({
 
   theme: {
     extend: {
+      // Skeletons breathe while a photo is being fetched or decoded. Opacity
+      // only — animating a colour or a gradient position on a grid full of
+      // placeholders costs paint work on exactly the frames where the phone is
+      // already busy decoding images. Every use pairs this with `_motionReduce`.
+      keyframes: {
+        skeletonPulse: {
+          '0%, 100%': { opacity: 0.35 },
+          '50%': { opacity: 0.14 },
+        },
+      },
+
       tokens: {
         fonts: {
           body: {
@@ -113,6 +124,18 @@ export default defineConfig({
             pink: { value: '#F9A8D4' },
             purple: { value: '#7C3AED' },
             multi: { value: '#A3A3A3' },
+          },
+
+          // ── Photo overlays ───────────────────────────────────────────────
+          // Chrome that sits on top of a photograph: the full-screen viewer and
+          // the scrim over a thumbnail that is still uploading. Like the
+          // swatches above these are deliberately outside `semanticTokens` — a
+          // photo viewer is dark under either colour scheme, because the point
+          // is to get everything that is not the photograph out of the way.
+          overlay: {
+            DEFAULT: { value: 'rgba(12, 10, 9, 0.96)' },
+            scrim: { value: 'rgba(12, 10, 9, 0.45)' },
+            fg: { value: '#FAFAF9' },
           },
         },
       },

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { css } from 'styled-system/css'
+import { css, cx } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
 import { CATEGORY_GROUPS, type CategoryGroupId } from '@/shared/constants/categories'
@@ -8,7 +8,8 @@ import { applyFilters } from '@/features/filters/applyFilters'
 import { EMPTY_FILTERS, SORT_OPTIONS, type SortId } from '@/features/filters/model'
 import { errorMessage } from '@/shared/lib/errorMessage'
 import { chipStyle } from '@/shared/ui/chipStyle'
-import { ItemCard, PendingCard } from './ItemCard'
+import { skeletonSurface } from '@/shared/ui/skeletonStyle'
+import { CardSkeleton, ItemCard, PendingCard } from './ItemCard'
 import { usePendingUploads } from './pendingUploads'
 import { useDiscardUpload, useRetryUpload, useWardrobe } from './queries'
 
@@ -137,8 +138,39 @@ export function WardrobePage() {
           pb: 'calc({spacing.24} + var(--safe-b))',
         })}
       >
+        {/* Outside the branches, and always mounted.
+            A live region is read when its contents *change*, so one that appears
+            with its text already in it is announced by some screen readers and
+            not others — and one that unmounts when the data lands never says
+            that the wait is over. Kept here it changes from the wait to the
+            result, which is both announcements in one element.
+            Absolutely positioned by `srOnly`, so it is out of flow and does not
+            take a slot in the column's gap. */}
+        <p role="status" className={css({ srOnly: true })}>
+          {isLoading
+            ? '옷장을 불러오는 중이에요.'
+            : error
+              ? '옷장을 불러오지 못했어요.'
+              : `옷 ${visible.length}벌`}
+        </p>
+
         {isLoading ? (
-          <Centered>불러오는 중…</Centered>
+          <div className={vstack({ gap: '4', alignItems: 'stretch' })}>
+            {/* The placeholders are decoration — six empty list items is not
+                what a screen reader should be given to walk through. */}
+            <div className={listMeta} aria-hidden="true">
+              <span
+                className={cx(skeletonSurface, css({ width: '10', height: '2.5', rounded: 'sm' }))}
+              />
+            </div>
+            <ul className={grid} aria-hidden="true">
+              {SKELETON_KEYS.map((key) => (
+                <li key={key}>
+                  <CardSkeleton />
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : error ? (
           <Centered>
             <p className={css({ color: 'danger', fontSize: 'sm' })}>
@@ -161,7 +193,7 @@ export function WardrobePage() {
           </Centered>
         ) : (
           <div className={vstack({ gap: '4', alignItems: 'stretch' })}>
-            <div className={hstack({ justify: 'space-between' })}>
+            <div className={listMeta}>
               <span className={css({ fontSize: 'xs', color: 'fg.muted' })}>
                 {visible.length}벌
               </span>
@@ -191,16 +223,7 @@ export function WardrobePage() {
               </label>
             </div>
 
-            <ul
-              className={css({
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '3',
-                listStyle: 'none',
-                p: '0',
-                m: '0',
-              })}
-            >
+            <ul className={grid}>
               {/* Pending registrations are pinned to the top and sit outside
                   the filters — hiding one behind a category chip would read as
                   data loss while its photos are still uploading. */}
@@ -265,6 +288,56 @@ export function WardrobePage() {
     </div>
   )
 }
+
+/**
+ * Shared by the loaded grid and the loading one, so the placeholders sit on the
+ * same lines the cards will occupy and the screen doesn't reflow when the data
+ * lands. Two rows' worth of them: enough to fill the fold on a phone, few enough
+ * that a fast connection doesn't flash a screenful of grey.
+ */
+const grid = css({
+  display: 'grid',
+  // `minmax(0, …)`, not a bare `1fr`.
+  //
+  // `1fr` is shorthand for `minmax(auto, 1fr)`, and that `auto` is the item's
+  // automatic minimum size — which for a card is the min-content width of its
+  // title. Titles are `white-space: nowrap`, so a title's min-content width is
+  // the whole untruncated string: `overflow: hidden` decides what is *drawn*,
+  // never what the text asks for. The result was a grid whose columns were
+  // sized by how long each garment's name happened to be — 와이드진 wide, 흰 티
+  // narrow — and since the photo is a square that fills its column, the longer
+  // name also produced a taller card. Every card looked like a different size
+  // because every name was a different length.
+  //
+  // A zero floor lets the three tracks be equal and leaves the clipping to the
+  // title, which is what was asked of it.
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  // The same automatic minimum applies to the item inside the track, where it
+  // would push the card back out over the track it was just made to fit.
+  '& > li': { minWidth: 0 },
+  gap: '3',
+  listStyle: 'none',
+  p: '0',
+  m: '0',
+})
+
+/**
+ * The count-and-sort line above the grid.
+ *
+ * Given a fixed height so the loading state can reserve exactly this much. It
+ * holds a native <select> whose height is the browser's business, and a row that
+ * measures itself is a row the placeholder cannot match — which would leave the
+ * grid dropping by its height the moment the data lands, the reflow the
+ * skeletons exist to prevent.
+ */
+const listMeta = css({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  height: '7',
+})
+
+const SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e', 'f']
 
 const iconLink = css({
   fontSize: 'lg',
