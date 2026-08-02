@@ -1,0 +1,25 @@
+# Response headers for the deployed static assets. Read by Cloudflare from the
+# root of the upload — Vite copies public/ into dist/ verbatim, so this lands in
+# the right place. The file itself is parsed, never served.
+#
+# Cloudflare's default for every asset is `public, max-age=0, must-revalidate`
+# plus an ETag: cacheable, but revalidated before use, so an unchanged file costs
+# a 304 rather than a download. That default is already correct for files whose
+# name stays the same while their contents change — index.html, sw.js,
+# manifest.webmanifest — which is why there is no `/*` Cache-Control rule below.
+# Adding one would pin a stale app shell for its whole max-age and stall the
+# `registerType: 'autoUpdate'` service worker by exactly that long.
+
+# Vite fingerprints these filenames, so a change produces a new name and there is
+# nothing to revalidate. Cloudflare does not infer this from the name.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The Workbox runtime is fingerprinted the same way, but sits at the root.
+/workbox-*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=()
