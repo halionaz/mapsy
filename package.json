@@ -16,6 +16,9 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "test:db": "bash supabase/tests/run.sh",
+    "cf:deploy": "pnpm --filter mapsy-frontend cf:deploy",
+    "cf:upload": "pnpm --filter mapsy-frontend cf:upload",
+    "cf:dev": "pnpm --filter mapsy-frontend cf:dev",
     "types:gen": "supabase gen types typescript --linked > mapsy-frontend/src/types/database.ts.tmp && mv mapsy-frontend/src/types/database.ts.tmp mapsy-frontend/src/types/database.ts"
   }
 }

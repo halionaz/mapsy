@@ -2,7 +2,8 @@
 
 mapsy 내 옷장의 프론트엔드. Vite + React + TypeScript SPA이며 PWA로 설치된다.
 
-전체 스펙은 [`../docs/PRD.md`](../docs/PRD.md)를 참고.
+전체 스펙은 [`../docs/PRD.md`](../docs/PRD.md), 배포 절차는
+[`../docs/DEPLOY.md`](../docs/DEPLOY.md)를 참고.
 
 ## 시작하기
 
@@ -37,6 +38,8 @@ UI를 그대로 만들 수 있다.
 | `pnpm lint` | oxlint |
 | `pnpm test` | vitest (순수 로직) |
 | `pnpm types:gen` | Supabase 스키마에서 DB 타입 재생성 |
+| `pnpm cf:dev` | Cloudflare Workers 런타임(`wrangler dev`)으로 확인 |
+| `pnpm cf:deploy` | Cloudflare Workers 배포 |
 
 ## 구조
 
@@ -91,6 +94,4 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
   있고, iOS는 SVG `apple-touch-icon`을 무시하므로 아예 링크를 걸지 않았다. 192·512 PNG와
   maskable, 180 PNG(apple-touch-icon)가 필요하다.
 - 포매터·CI 없음. 코드 스타일(세미콜론 없음, 싱글쿼트)이 균일하지만 강제하는 게 없다.
-- 정적 호스팅 SPA 폴백(`_redirects` / `vercel.json`) 없음 — 서비스워커 설치 전 첫 방문에서
-  `/items/123` 새로고침은 호스트 rewrite 설정에 달려 있다.
 - 라우트 코드 스플리팅과 에러 바운더리 없음

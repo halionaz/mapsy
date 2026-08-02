@@ -3,7 +3,7 @@
 패션 서비스. 첫 기능은 **내 옷장** — 가진 옷을 사진으로 등록하고 카테고리·색상·사이즈·계절로
 한눈에 모아본다.
 
-전체 스펙은 [`docs/PRD.md`](docs/PRD.md).
+전체 스펙은 [`docs/PRD.md`](docs/PRD.md), 배포는 [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## 구성
 
@@ -50,6 +50,8 @@ pnpm dev
 | `pnpm test` | vitest — 순수 로직 단위 테스트 |
 | `pnpm test:db` | Docker에 Postgres를 띄워 마이그레이션·RLS 검사 |
 | `pnpm codegen` | Panda CSS 재생성 |
+| `pnpm cf:dev` | Cloudflare Workers 런타임으로 빌드 결과 확인 |
+| `pnpm cf:deploy` | Cloudflare Workers 배포 — [`docs/DEPLOY.md`](docs/DEPLOY.md) |
 
 ## 왜 pnpm만 허용하나
 

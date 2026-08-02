@@ -8,6 +8,9 @@ coverage/
 .vite/
 .temp/
 
+# wrangler dev의 로컬 상태·캐시. 배포 설정은 wrangler.jsonc이고, 이 디렉토리는 생성물이다.
+.wrangler/
+
 # Panda CSS codegen output — regenerate with `pnpm codegen`, never commit or hand-edit
 styled-system/
 
