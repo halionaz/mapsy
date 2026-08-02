@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { errorMessage } from './errorMessage'
+import { DB_CONSTRAINTS } from '@/shared/constants/dbConstraints.generated'
+import { errorMessage, MAPPED_CONSTRAINTS } from './errorMessage'
 
 describe('errorMessage', () => {
   it('reads a Supabase error, which is a plain object rather than an Error', () => {
@@ -73,5 +74,23 @@ describe('errorMessage — 빈 메시지', () => {
         code: '23514',
       }),
     ).toBe('가격이 너무 커요.')
+  })
+})
+
+describe('CONSTRAINT_MESSAGES 커버리지', () => {
+  it('covers every constraint the schema defines', () => {
+    // The map claimed completeness in a comment three times and drifted three
+    // times. The inventory is now generated from the database by `pnpm test:db`,
+    // so adding a constraint without a message fails here instead of surfacing
+    // as raw Postgres text on a Korean screen.
+    const missing = DB_CONSTRAINTS.filter((name) => !MAPPED_CONSTRAINTS.includes(name))
+    expect(missing).toEqual([])
+  })
+
+  it('has no messages for constraints that no longer exist', () => {
+    const stale = MAPPED_CONSTRAINTS.filter(
+      (name) => !(DB_CONSTRAINTS as readonly string[]).includes(name),
+    )
+    expect(stale).toEqual([])
   })
 })

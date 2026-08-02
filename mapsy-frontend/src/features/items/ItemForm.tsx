@@ -149,28 +149,34 @@ export function ItemForm({
     parsedPrice != null && parsedPrice > LIMITS.price ? '가격이 너무 커요.' : null
 
   /**
-   * Reasons that live inside the collapsed section.
+   * Everything blocking submit, split by whether the user can see it.
    *
-   * Kept separate because they are the ones a user cannot see when submit
-   * refuses. The required fields above are always on screen and explain
-   * themselves in place; these needed somewhere else to speak from — otherwise
-   * filling in a too-large price, collapsing the section and tapping 등록 does
-   * nothing at all, with no indication why.
-   *
-   * Anything added to `invalid` from inside that section belongs here too.
+   * `invalid` is derived from these two lists and nothing else, so the only way
+   * to block submission is to append to one of them — and the hidden list is
+   * rendered. A free `|| somethingProblem` term is what caused the last
+   * regression: a check added inside the collapsed section made the button do
+   * nothing with no message anywhere.
    */
+  const visibleProblems = [
+    missingPhoto ? '사진을 한 장 이상 추가해주세요.' : null,
+    missingTitle ? '이름을 입력해주세요.' : null,
+    missingCategory ? '카테고리를 골라주세요.' : null,
+  ].filter((problem): problem is string => problem !== null)
+
+  /** Inside `{showOptional && …}` — invisible while the section is collapsed. */
   const hiddenProblems = [tagProblem, priceProblem].filter(
     (problem): problem is string => problem !== null,
   )
 
-  const invalid = missingPhoto || missingTitle || missingCategory || hiddenProblems.length > 0
+  const invalid = visibleProblems.length + hiddenProblems.length > 0
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setTouched(true)
     if (invalid || pending || !categoryId) {
-      // Open the section so the field-level message is reachable; the summary by
-      // the submit button covers the moment before that.
+      // Open the section so the field-level message becomes reachable. Until
+      // this render lands, the summary above the buttons is what explains the
+      // refusal.
       if (hiddenProblems.length > 0) setShowOptional(true)
       return
     }
@@ -381,7 +387,10 @@ export function ItemForm({
         </div>
       )}
 
-      {touched && hiddenProblems.length > 0 && (
+      {/* Only while collapsed: once the section opens, the field-level message
+          says the same thing in the right place, and two live regions with the
+          same text is worse for a screen reader than one. */}
+      {touched && !showOptional && hiddenProblems.length > 0 && (
         <div role="alert" className={vstack({ gap: '1', alignItems: 'stretch' })}>
           {hiddenProblems.map((problem) => (
             <p key={problem} className={css({ fontSize: 'sm', color: 'danger' })}>

@@ -47,8 +47,4 @@ alter table public.items
 revoke all on function public.set_updated_at()
   from public, anon, authenticated, service_role;
 
--- Note on the `private` helpers: their EXECUTE is deliberately *not* revoked.
--- CHECK expressions are evaluated with the inserting role's privileges, so
--- taking it away makes every INSERT fail with "permission denied for function"
--- (established in 005). What keeps them unreachable is the absence of USAGE on
--- the schema, which the regression suite now asserts directly.
+-- The `private` helpers are handled separately in 008.

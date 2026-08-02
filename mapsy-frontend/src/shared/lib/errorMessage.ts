@@ -9,15 +9,16 @@
  */
 
 /**
- * Every named constraint in supabase/migrations, mapped to something a person
- * can act on. The form mirrors most of these and normally catches them first;
- * this is the surface left over for anything that slips past, and it should not
- * be raw Postgres text on a Korean screen.
+ * Every constraint in the `public` schema, mapped to something a person can act
+ * on. The form mirrors most of these and normally catches them first; this is
+ * the surface left over for anything that slips past, and it should not be raw
+ * Postgres text on a Korean screen.
  *
- * Complete on purpose rather than "the ones we expect to hit" — several are
- * unreachable through the UI today, and picking which of those to include was
- * the sort of judgement that leaves gaps. If a constraint is added, it belongs
- * here.
+ * Complete rather than "the ones we expect to hit" — deciding which unreachable
+ * ones to skip is the judgement that left gaps three times running. It is no
+ * longer maintained by hand either: `dbConstraints.generated.ts` is produced
+ * from the schema by `pnpm test:db`, and a unit test fails if this map does not
+ * cover it.
  */
 const CONSTRAINT_MESSAGES: Record<string, string> = {
   items_title_length: '이름이 너무 길어요.',
@@ -47,7 +48,14 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   item_images_dimensions_positive: '사진 크기를 읽지 못했어요.',
   item_images_item_sort_key: '사진 순서가 중복됐어요.',
   item_images_item_fk: '사진을 붙일 옷을 찾을 수 없어요.',
+  items_id_user_key: '이미 있는 옷이에요.',
+  items_user_id_fkey: '계정을 찾을 수 없어요. 다시 로그인해주세요.',
+  items_pkey: '이미 있는 옷이에요.',
+  item_images_pkey: '이미 있는 사진이에요.',
 }
+
+/** Exported for the coverage test; not part of the public surface otherwise. */
+export const MAPPED_CONSTRAINTS = Object.keys(CONSTRAINT_MESSAGES)
 
 const CODE_MESSAGES: Record<string, string> = {
   '22003': '숫자가 너무 커요.', // numeric_value_out_of_range

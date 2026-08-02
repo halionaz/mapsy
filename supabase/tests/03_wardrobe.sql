@@ -288,17 +288,27 @@ select tests.eq(
    where n.nspname = 'private' and p.proname in ('has_unique_elements', 'max_element_length')),
   '2', '헬퍼는 private 스키마에 있음');
 
--- The helpers keep EXECUTE — revoking it breaks CHECK evaluation (see 005) — so
--- schema USAGE is the only thing standing between anon and them. Asserted
--- because it is load-bearing and invisible: nothing else here would notice a
--- stray `grant usage on schema private to anon`.
+-- What actually authorises the helpers is EXECUTE, the same rule as the public
+-- RPCs. Schema USAGE is a second layer for direct SQL only: constraint
+-- expressions resolve to an OID at definition time, so evaluation never consults
+-- the namespace — revoking USAGE from `authenticated` leaves the CHECKs working.
 select tests.eq(
-  has_schema_privilege('anon', 'private', 'usage')::text,
-  'false', 'anon은 private 스키마에 접근할 수 없음');
+  (select coalesce(string_agg(p.proname, ', ' order by p.proname), '')
+   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'private'
+     and has_function_privilege('anon', p.oid, 'execute')),
+  '', 'private 헬퍼도 anon이 실행할 수 없음');
 
 select tests.eq(
-  has_schema_privilege('authenticated', 'private', 'usage')::text,
-  'true', 'authenticated는 private 스키마 USAGE가 있음 — CHECK 평가에 필요');
+  (select bool_and(has_function_privilege('authenticated', p.oid, 'execute'))::text
+   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'private'),
+  'true', 'authenticated는 헬퍼를 실행할 수 있음 — CHECK 평가에 필요한 유일한 권한');
+
+-- Defence in depth for direct SQL, kept but labelled for what it is.
+select tests.eq(
+  has_schema_privilege('anon', 'private', 'usage')::text,
+  'false', 'anon은 private 스키마 이름을 해석할 수 없음');
 
 -- Scoped by condition, not by name. The previous version listed
 -- ('reorder_item_images', 'delete_item_image') explicitly, so a third RPC added

@@ -11,7 +11,8 @@ migrations/
 ├── 20260801000004_tighten_constraints.sql 순서 변경 가드 수정 · 배열/텍스트 제약
 ├── 20260801000005_private_helpers.sql     CHECK 헬퍼 비노출 · 함수 권한
 ├── 20260801000006_revoke_anon_execute.sql RPC에서 anon EXECUTE 회수
-└── 20260801000007_price_ceiling.sql       가격 상한 · 트리거 함수 권한
+├── 20260801000007_price_ceiling.sql       가격 상한 · 트리거 함수 권한
+└── 20260801000008_private_helper_grants.sql private 헬퍼 EXECUTE 정리
 tests/
 ├── run.sh                                 컨테이너에 마이그레이션 적용 + 회귀 검사
 └── 03_wardrobe.sql                        단언 본체
@@ -125,11 +126,16 @@ pnpm test:db
 ```
 
 Docker에 Postgres를 띄우고 `auth`/`storage` 스텁을 세운 뒤 **실제 마이그레이션을 적용해**
-제약·RLS·스토리지 정책·순서 변경 RPC·함수 노출 범위를 검사한다. 49개 단언이 있고 하나라도 어긋나면
+제약·RLS·스토리지 정책·순서 변경 RPC·함수 권한을 검사한다. 52개 단언이 있고 하나라도 어긋나면
 0이 아닌 코드로 끝난다. 마지막에 마이그레이션을 한 번 더 적용해 멱등성도 확인한다.
 
 `supabase start`가 있으면 그쪽이 더 충실하지만, 이 스크립트는 Docker만 있으면 돌아가서
 마이그레이션을 건드릴 때마다 부담 없이 실행할 수 있다.
+
+실행하면 `mapsy-frontend/src/shared/constants/dbConstraints.generated.ts`도 갱신된다.
+프론트엔드의 `errorMessage`가 모든 제약 이름을 한국어 문구로 매핑하는데, 그 완전성을 주석이
+아니라 유닛 테스트가 검사하게 하려는 것이다 — 제약을 추가하고 매핑을 잊으면 `pnpm test`가
+잡는다. 파일이 바뀌면 run.sh가 알려준다.
 
 **커버하지 않는 것**
 
@@ -190,11 +196,19 @@ select delete_item_image(<image_id>);
 ### CHECK 헬퍼는 private 스키마에 있다
 
 `has_unique_elements` 같은 헬퍼를 `public`에 두면 PostgREST가 그대로 RPC 엔드포인트로
-노출한다. 그렇다고 `revoke execute`를 하면 **CHECK 평가 자체가 permission denied로 깨진다**
-— 제약식은 삽입하는 역할의 권한으로 평가되기 때문이다(PG 17에서 확인).
+노출한다. 그래서 `private` 스키마에 둔다 — PostgREST가 introspect하지 않으므로 REST로는
+도달할 수 없다.
 
-그래서 헬퍼는 `private` 스키마에 둔다. PostgREST가 introspect하지 않으므로 노출되지 않고,
-`authenticated`에게 `usage`만 주면 제약은 정상 동작한다.
+권한은 `public`의 RPC와 같은 규칙을 쓴다: PUBLIC에서 회수하고 `authenticated`·`service_role`
+에게 명시적으로 EXECUTE를 준다. 두 가지를 헷갈리지 말 것 —
+
+- **CHECK 평가에 필요한 것은 함수 EXECUTE뿐이다.** 제약식은 정의 시점에 함수 OID로 해석돼
+  저장되므로 평가 때 네임스페이스를 다시 보지 않는다. `authenticated`에게서 스키마 USAGE를
+  회수해도 CHECK는 정상 동작한다(확인함).
+- 반대로 **EXECUTE를 회수하면 INSERT가 permission denied로 깨진다.** 단, 회수만 하고 삽입
+  역할에 다시 부여하지 않았을 때다. 명시적으로 부여하면 문제없다.
+
+스키마 경계가 노출을 막고, EXECUTE가 권한을 정한다.
 
 RPC 두 개(`reorder_item_images`, `delete_item_image`)는 노출돼야 하는 것이 맞지만
 `authenticated` 전용이어야 한다. 여기에 함정이 두 겹 있다.
