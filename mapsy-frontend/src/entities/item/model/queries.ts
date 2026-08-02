@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { errorMessage } from '@/shared/lib/errorMessage'
 import * as api from '../api/itemApi'
-import { itemKeys } from './queryKeys'
+import { wardrobeKeys } from './queryKeys'
 import {
   addPending,
   getPending,
@@ -33,7 +33,7 @@ import type { ItemDraft, ItemStatus, WardrobeItem } from './types'
 
 export function useWardrobe() {
   return useQuery<WardrobeItem[]>({
-    queryKey: itemKeys.list(),
+    queryKey: wardrobeKeys.list(),
     queryFn: api.fetchWardrobe,
     // Preview mode has no backend to ask. Without this the query runs anyway,
     // `getSupabase()` throws, and the home screen shows a retry-backed error
@@ -55,7 +55,7 @@ function patchCache(
   queryClient: ReturnType<typeof useQueryClient>,
   update: (entries: WardrobeItem[]) => WardrobeItem[],
 ) {
-  queryClient.setQueryData<WardrobeItem[]>(itemKeys.list(), (entries) =>
+  queryClient.setQueryData<WardrobeItem[]>(wardrobeKeys.list(), (entries) =>
     entries ? update(entries) : entries,
   )
 }
@@ -86,11 +86,11 @@ function useCachePatch() {
     queryClient,
     // `all` rather than `list()`: cancel and invalidate match by prefix, so a
     // second wardrobe query added later is covered without touching this.
-    before: () => queryClient.cancelQueries({ queryKey: itemKeys.all }),
+    before: () => queryClient.cancelQueries({ queryKey: wardrobeKeys.all }),
     after: () => {
-      const cached = queryClient.getQueryData<WardrobeItem[]>(itemKeys.list())
+      const cached = queryClient.getQueryData<WardrobeItem[]>(wardrobeKeys.list())
       if (cached === undefined) {
-        void queryClient.invalidateQueries({ queryKey: itemKeys.all })
+        void queryClient.invalidateQueries({ queryKey: wardrobeKeys.all })
       }
     },
   }
@@ -172,7 +172,7 @@ export function useSetFavorite() {
       api.setFavorite(vars.id, vars.isFavorite),
     onMutate: async ({ id, isFavorite }) => {
       await before()
-      const previous = queryClient.getQueryData<WardrobeItem[]>(itemKeys.list())
+      const previous = queryClient.getQueryData<WardrobeItem[]>(wardrobeKeys.list())
       patchCache(queryClient, (entries) =>
         entries.map((entry) => (entry.id === id ? { ...entry, isFavorite } : entry)),
       )
@@ -180,7 +180,7 @@ export function useSetFavorite() {
     },
     onError: (_error, _vars, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(itemKeys.list(), context.previous)
+        queryClient.setQueryData(wardrobeKeys.list(), context.previous)
       }
     },
     // Only does anything if the cache was empty — which the star cannot normally

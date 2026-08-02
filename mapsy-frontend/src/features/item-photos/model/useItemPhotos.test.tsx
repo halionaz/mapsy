@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ItemImage } from '@/entities/item'
+import { SIGNED_URL_TTL_SECONDS } from '@/shared/api/storage'
 import { useItemPhotos } from './useItemPhotos'
 
 /**
@@ -43,6 +44,7 @@ vi.mock('@/shared/api/supabase', () => ({
 
 afterEach(() => {
   signPathsMock.mockReset()
+  vi.useRealTimers()
 })
 
 function image(id: string, sortOrder: number): ItemImage {
@@ -59,12 +61,19 @@ function image(id: string, sortOrder: number): ItemImage {
   }
 }
 
-function renderUseItemPhotos(images: readonly ItemImage[] | undefined) {
-  const queryClient = new QueryClient({
-    // A failure has to settle within the test rather than after three attempts,
-    // and nothing here should read another test's cache.
-    defaultOptions: { queries: { retry: false } },
-  })
+function renderUseItemPhotos(
+  images: readonly ItemImage[] | undefined,
+  // Passed in only by the test that leaves the screen and comes back; every
+  // other test gets a fresh client so nothing reads another test's cache.
+  client?: QueryClient,
+) {
+  const queryClient =
+    client ??
+    new QueryClient({
+      // A failure has to settle within the test rather than after three
+      // attempts.
+      defaultOptions: { queries: { retry: false } },
+    })
   const rendered = renderHook((props: readonly ItemImage[] | undefined) => useItemPhotos(props), {
     initialProps: images,
     wrapper: ({ children }) => (
@@ -75,7 +84,7 @@ function renderUseItemPhotos(images: readonly ItemImage[] | undefined) {
 }
 
 describe('useItemPhotos', () => {
-  it('사진이 없으면 서명하지 않고 빈 슬롯으로 정착한다', () => {
+  it('사진이 없으면 서명 요청을 보내지 않는다', () => {
     const { result } = renderUseItemPhotos([])
 
     expect(result.current.slots).toEqual([])
@@ -152,6 +161,56 @@ describe('useItemPhotos', () => {
         url: 'https://signed/a-fresh',
       }),
     )
+  })
+
+  it('같은 사진을 두 번 실패 처리해도 슬롯 참조가 바뀌지 않는다', async () => {
+    const images = [image('a', 0)]
+    signPathsMock.mockResolvedValue(new Map([[images[0].path, 'https://signed/a']]))
+
+    const { result } = renderUseItemPhotos(images)
+    await waitFor(() => expect(result.current.slots[0].state).toBe('ready'))
+
+    act(() => result.current.markUnloadable('a'))
+    const failed = result.current.slots
+
+    // `<img onError>`는 리렌더마다 다시 발화할 수 있다. 매번 새 Set을 만들면
+    // 매번 새 상태값이 되고, PhotoViewer의 키 핸들러가 프레임마다 붙었다
+    // 떨어진다 — 스와이프 중에는 그게 매 프레임이다.
+    act(() => result.current.markUnloadable('a'))
+    expect(result.current.slots).toBe(failed)
+  })
+
+  it('URL이 살아 있는 동안은 다시 열어도 재서명하지 않는다', async () => {
+    const images = [image('a', 0)]
+    signPathsMock.mockResolvedValue(new Map([[images[0].path, 'https://signed/a']]))
+
+    // 이 테스트만 클라이언트를 공유한다 — 상세 화면을 떠났다 다시 들어오는 것을
+    // 재현하려면 캐시가 사이에 살아 있어야 한다.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    // 상세 화면을 열고 닫는다. 다시 열면 stale일 때만 재서명한다
+    // (`refetchOnMount` 기본값) — 포커스 복귀도 같은 판정을 쓴다.
+    const reopen = async () => {
+      const { result, unmount } = renderUseItemPhotos(images, client)
+      await waitFor(() => expect(result.current.slots[0].state).toBe('ready'))
+      unmount()
+    }
+
+    await reopen()
+    expect(signPathsMock).toHaveBeenCalledTimes(1)
+
+    // 한 시간 뒤 — URL은 아직 세 시간 남았다. 재서명은 모든 <img src>를 바꾸고
+    // 브라우저는 토큰까지 포함한 URL로 캐시하므로, 여기서 다시 서명하면 1280px
+    // 원본을 통째로 다시 받는다. 목록용 staleTime 30분을 그대로 물려받으면
+    // 정확히 이 지점에서 다시 받았다.
+    vi.setSystemTime(Date.now() + 60 * 60 * 1000)
+    await reopen()
+    expect(signPathsMock).toHaveBeenCalledTimes(1)
+
+    // 만료 30분 전을 넘긴 뒤 — 이제는 다시 서명해야 URL이 끊기지 않는다.
+    vi.setSystemTime(Date.now() + (SIGNED_URL_TTL_SECONDS - 60 * 60) * 1000)
+    await reopen()
+    expect(signPathsMock).toHaveBeenCalledTimes(2)
   })
 
   it('서명이 실패하면 스켈레톤에 갇히지 않고 실패로 정착한다', async () => {

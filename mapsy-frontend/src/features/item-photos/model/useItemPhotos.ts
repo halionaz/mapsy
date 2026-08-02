@@ -61,6 +61,13 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
     // Half an hour of headroom keeps the recovery the list query was given
     // (`refetchOnWindowFocus` re-signs before anything expires) without paying
     // for it while the URLs are still good.
+    //
+    // Longer than the global gcTime (an hour) on purpose, and not a
+    // contradiction: gcTime only runs once nothing observes the query, so this
+    // covers the screen that stays open — a phone backgrounded and picked up
+    // again. Leave the screen for an hour and the entry is evicted, which is
+    // the right answer too: a cold open should sign afresh. Matching the two
+    // numbers in either direction is a regression.
     staleTime: (SIGNED_URL_TTL_SECONDS - 30 * 60) * 1000,
   })
 

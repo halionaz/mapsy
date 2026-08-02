@@ -12,7 +12,6 @@ export type {
   ItemDraft,
   ItemImage,
   ItemStatus,
-  ItemWithImages,
   WardrobeItem,
 } from './model/types'
 

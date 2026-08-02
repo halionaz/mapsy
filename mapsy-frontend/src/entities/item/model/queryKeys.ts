@@ -1,5 +1,5 @@
 /**
- * Cache keys for the wardrobe.
+ * Cache keys for the wardrobe — the item entity's one collection query.
  *
  * Lives in the entity rather than in a shared registry: `shared` is the one
  * layer that must not know what a garment is, and a key named "wardrobe" down
@@ -16,7 +16,7 @@
 
 const ROOT = ['wardrobe'] as const
 
-export const itemKeys = {
+export const wardrobeKeys = {
   all: ROOT,
   /** The whole collection — one entry, filtered client-side (PRD §8.4). */
   list: () => [...ROOT, 'list'] as const,
