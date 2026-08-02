@@ -3,9 +3,9 @@ import { css } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
 import { processPhoto, releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
+import { MAX_PHOTOS } from '../model/limits'
 
 /** Matches the 0–4 sort_order range the database enforces. */
-export const MAX_PHOTOS = 5
 
 interface PhotoPickerProps {
   photos: ProcessedPhoto[]

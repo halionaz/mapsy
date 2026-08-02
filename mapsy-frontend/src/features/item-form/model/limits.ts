@@ -30,3 +30,13 @@ export const LIMITS = {
    */
   price: 1_000_000_000,
 } as const
+
+/**
+ * How many photos one item may have — mirrors `item_images_sort_order_range`,
+ * whose ceiling is on `sort_order` and so is one less than this.
+ *
+ * Here rather than beside the picker that enforces it, for the same reason as
+ * everything above: it is a copy of a number the database owns, and the test
+ * that keeps the copies honest has to be able to read it.
+ */
+export const MAX_PHOTOS = 5

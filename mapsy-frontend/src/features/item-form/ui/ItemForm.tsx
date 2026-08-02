@@ -14,8 +14,8 @@ import { sizePresetsFor } from '@/shared/config/sizes'
 import { releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
 import type { ItemDraft } from '@/entities/item'
-import { LIMITS } from '../model/limits'
-import { MAX_PHOTOS, PhotoPicker } from './PhotoPicker'
+import { LIMITS, MAX_PHOTOS } from '../model/limits'
+import { PhotoPicker } from './PhotoPicker'
 
 /**
  * The registration and edit form — one component for both (PRD §6.2).

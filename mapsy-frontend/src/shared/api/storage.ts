@@ -52,13 +52,35 @@ export async function signPaths(paths: readonly string[]): Promise<Map<string, s
   return result
 }
 
-/** Best-effort storage cleanup; never masks the error that triggered it. */
+/** Why one removal failed, or `null` if it did not. */
+function removeFailure(result: PromiseSettledResult<{ error: unknown }>): unknown {
+  if (result.status === 'rejected') return result.reason ?? new Error('알 수 없는 이유')
+  return result.value.error ?? null
+}
+
+/**
+ * Best-effort storage cleanup; **never throws**, and never masks the error that
+ * triggered it.
+ *
+ * Not throwing is the whole contract, and it is load-bearing at all three call
+ * sites. Two of them are `catch` blocks that clean up and then re-throw the real
+ * failure — a throw here would replace the reason with a janitorial one. The
+ * third is the last line of `deleteItem`, where the row is already gone: a throw
+ * there is reported to the user as "삭제하지 못했어요" for a garment that really
+ * was deleted, which is the mismatch between the database and what the screen
+ * says that `deleteItem`'s row check exists to prevent, reopened backwards.
+ *
+ * Every call therefore goes through `allSettled`. supabase-js resolves a
+ * StorageError into `{ error }` but *rejects* on anything else — a dropped
+ * connection, an aborted request — and the conditions that make it reject are
+ * the same ones that make cleanup necessary.
+ */
 export async function removeObjects(paths: readonly string[]): Promise<void> {
   if (paths.length === 0) return
   const storage = getSupabase().storage.from(STORAGE_BUCKET)
 
-  const { error } = await storage.remove([...paths])
-  if (!error) return
+  const [batch] = await Promise.allSettled([storage.remove([...paths])])
+  if (removeFailure(batch) === null) return
 
   /**
    * One key must not cost the others.
@@ -72,11 +94,18 @@ export async function removeObjects(paths: readonly string[]): Promise<void> {
    * of requests on a path that is already recovering from a failure.
    */
   const results = await Promise.allSettled(paths.map((path) => storage.remove([path])))
-  const left = results.filter((result) => result.status === 'rejected' || result.value.error)
+  // Reported from the retries rather than from the batch. When the batch failed
+  // *because* of a phantom key, the batch's own message says nothing about the
+  // objects that are actually still there — and the retries that succeeded are
+  // not worth mentioning at all.
+  const left = results
+    .map((result, index) => ({ path: paths[index], failure: removeFailure(result) }))
+    .filter((entry) => entry.failure !== null)
+
   if (left.length > 0) {
     console.warn(
       `스토리지 정리 실패, 고아 객체 ${left.length}건이 남았을 수 있음:`,
-      error.message,
+      left.map((entry) => `${entry.path}: ${String(entry.failure)}`).join(', '),
     )
   }
 }

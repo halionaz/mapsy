@@ -312,6 +312,13 @@ export function PhotoViewer({
   useEffect(() => {
     const target = indexAfterChange(slots, shownIdRef.current, indexRef.current)
     if (target !== null) goTo(target, false)
+    // Re-read afterwards rather than trusting `goTo` to have run. The one branch
+    // that returns `null` while the screen changed anyway is a photo deleted
+    // whose replacement lands on the same index — `[A,B]` losing A shows B at
+    // index 0 — and leaving the id at the deleted photo makes this ref, the one
+    // source of what is on screen, quietly wrong. Nothing reads it that way
+    // today; this file exists because position and identity were confused twice.
+    shownIdRef.current = slots[indexRef.current]?.id ?? null
   }, [slots, goTo])
 
   // A re-sign hands the current page a new URL, and with it a new <img> element
