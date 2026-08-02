@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#
+# 새 워크트리가 생기면 gitignore된 로컬 파일을 채운다.
+#
+# git passes (prev_head, new_head, is_branch_checkout). `git worktree add` and
+# `git clone` report the null SHA as prev_head — that is how a working tree that
+# did not exist a moment ago is told apart from an ordinary branch switch, which
+# already has its local files and needs nothing.
+#
+# --files-only keeps `git worktree add` fast: pnpm install belongs to whoever
+# creates the worktree, not to a hook that silently adds half a minute to it.
+#
+# A hook must never fail the command that triggered it. Every path here ends in
+# exit 0.
+
+prev=$1
+
+# Null SHA is all zeros — 40 chars for sha1, 64 for sha256.
+case "$prev" in
+  *[!0]* | '') exit 0 ;;
+esac
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+setup="$root/scripts/setup-worktree.sh"
+
+[ -f "$setup" ] || exit 0
+
+bash "$setup" --files-only || true
+exit 0

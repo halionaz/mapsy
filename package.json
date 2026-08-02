@@ -8,6 +8,8 @@
   },
   "scripts": {
     "preinstall": "node scripts/only-pnpm.mjs",
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || exit 0",
+    "setup:worktree": "bash scripts/setup-worktree.sh",
     "dev": "pnpm --filter mapsy-frontend dev",
     "preview": "pnpm --filter mapsy-frontend preview",
     "codegen": "pnpm --filter mapsy-frontend codegen",
