@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import type { ItemImage } from '@/entities/item'
-import { queryKeys } from '@/shared/api/queryKeys'
-import { signPaths } from '@/shared/api/storage'
+import { signPaths, SIGNED_URL_TTL_SECONDS, storageKeys } from '@/shared/api/storage'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { photoSlots, type PhotoSlot } from '../lib/photoSlots'
 
@@ -42,7 +41,7 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
     // effect-based version's join-the-paths-into-a-string dance — `useEffect`
     // compared them by identity, and every cache patch (starring the item, say)
     // produced a new array, re-signing every URL and remounting every <img>.
-    queryKey: queryKeys.storage.signedUrls(paths),
+    queryKey: storageKeys.signedUrls(paths),
     queryFn: async () => {
       const signed = await signPaths(paths)
       // One entry per photo, in order — `null` for a path that could not be
@@ -51,6 +50,18 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
       return paths.map((path) => signed.get(path) ?? null)
     },
     enabled: isSupabaseConfigured && paths.length > 0,
+    // Tied to how long the URLs actually live, not to the 30 minutes the
+    // wardrobe list uses. These URLs are what an `<img src>` is built from, and
+    // re-signing changes every one of them: the browser caches by full URL
+    // including the token, so a refetch re-downloads up to five 1280px
+    // originals over the phone's connection. At the default staleTime that
+    // happened every half hour, on the first window focus after it — seven
+    // times more often than the URLs need it.
+    //
+    // Half an hour of headroom keeps the recovery the list query was given
+    // (`refetchOnWindowFocus` re-signs before anything expires) without paying
+    // for it while the URLs are still good.
+    staleTime: (SIGNED_URL_TTL_SECONDS - 30 * 60) * 1000,
   })
 
   /**

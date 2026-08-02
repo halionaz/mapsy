@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { queryKeys } from '@/shared/api/queryKeys'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { errorMessage } from '@/shared/lib/errorMessage'
 import * as api from '../api/itemApi'
+import { itemKeys } from './queryKeys'
 import {
   addPending,
   getPending,
@@ -25,14 +25,15 @@ import type { ItemDraft, ItemStatus, WardrobeItem } from './types'
  * In-flight registrations deliberately do *not* live in this cache — see
  * `pendingUploads.ts` for why.
  *
- * Keys come from `shared/api/queryKeys` rather than a const in this file: the
- * mutations below address the same entry from five other places, and a key that
- * drifts turns `setQueryData` into a silent write nobody reads.
+ * Keys are in `./queryKeys` — five mutations address the same entry, and a key
+ * spelled out at each call site is a silent no-op when it drifts: `setQueryData`
+ * on a key nothing observes writes to an entry that is never read, and reports
+ * no error.
  */
 
 export function useWardrobe() {
   return useQuery<WardrobeItem[]>({
-    queryKey: queryKeys.wardrobe.list(),
+    queryKey: itemKeys.list(),
     queryFn: api.fetchWardrobe,
     // Preview mode has no backend to ask. Without this the query runs anyway,
     // `getSupabase()` throws, and the home screen shows a retry-backed error
@@ -54,7 +55,7 @@ function patchCache(
   queryClient: ReturnType<typeof useQueryClient>,
   update: (entries: WardrobeItem[]) => WardrobeItem[],
 ) {
-  queryClient.setQueryData<WardrobeItem[]>(queryKeys.wardrobe.list(), (entries) =>
+  queryClient.setQueryData<WardrobeItem[]>(itemKeys.list(), (entries) =>
     entries ? update(entries) : entries,
   )
 }
@@ -85,11 +86,11 @@ function useCachePatch() {
     queryClient,
     // `all` rather than `list()`: cancel and invalidate match by prefix, so a
     // second wardrobe query added later is covered without touching this.
-    before: () => queryClient.cancelQueries({ queryKey: queryKeys.wardrobe.all }),
+    before: () => queryClient.cancelQueries({ queryKey: itemKeys.all }),
     after: () => {
-      const cached = queryClient.getQueryData<WardrobeItem[]>(queryKeys.wardrobe.list())
+      const cached = queryClient.getQueryData<WardrobeItem[]>(itemKeys.list())
       if (cached === undefined) {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.wardrobe.all })
+        void queryClient.invalidateQueries({ queryKey: itemKeys.all })
       }
     },
   }
@@ -171,7 +172,7 @@ export function useSetFavorite() {
       api.setFavorite(vars.id, vars.isFavorite),
     onMutate: async ({ id, isFavorite }) => {
       await before()
-      const previous = queryClient.getQueryData<WardrobeItem[]>(queryKeys.wardrobe.list())
+      const previous = queryClient.getQueryData<WardrobeItem[]>(itemKeys.list())
       patchCache(queryClient, (entries) =>
         entries.map((entry) => (entry.id === id ? { ...entry, isFavorite } : entry)),
       )
@@ -179,7 +180,7 @@ export function useSetFavorite() {
     },
     onError: (_error, _vars, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(queryKeys.wardrobe.list(), context.previous)
+        queryClient.setQueryData(itemKeys.list(), context.previous)
       }
     },
     // Only does anything if the cache was empty — which the star cannot normally

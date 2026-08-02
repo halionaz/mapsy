@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-import type { Database } from '@/shared/api/database.types'
+import type { Database } from './database.types'
 
 /**
  * Supabase client — the only backend mapsy talks to (PRD §8.3).

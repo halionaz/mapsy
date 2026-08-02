@@ -20,6 +20,19 @@ import { getSupabase, STORAGE_BUCKET } from './supabase'
  */
 export const SIGNED_URL_TTL_SECONDS = 60 * 60 * 4
 
+/**
+ * Cache keys for the queries below — kept beside the fetcher rather than in a
+ * shared registry, so a key and the request it addresses move together.
+ *
+ * The paths are part of the key, so a different set is a different entry and
+ * URLs can never be read against the wrong photos. Order is significant:
+ * callers match the result to their photos by position. react-query hashes keys
+ * by value, so a caller may pass a freshly built array every render.
+ */
+export const storageKeys = {
+  signedUrls: (paths: readonly string[]) => ['storage', 'signed-urls', paths] as const,
+} as const
+
 /** Signs a batch of storage paths, returning path → URL for the ones that worked. */
 export async function signPaths(paths: readonly string[]): Promise<Map<string, string>> {
   const result = new Map<string, string>()
@@ -40,8 +53,8 @@ export async function signPaths(paths: readonly string[]): Promise<Map<string, s
 }
 
 /** Best-effort storage cleanup; never masks the error that triggered it. */
-export async function removeObjects(paths: string[]): Promise<void> {
+export async function removeObjects(paths: readonly string[]): Promise<void> {
   if (paths.length === 0) return
-  const { error } = await getSupabase().storage.from(STORAGE_BUCKET).remove(paths)
+  const { error } = await getSupabase().storage.from(STORAGE_BUCKET).remove([...paths])
   if (error) console.warn('스토리지 정리 실패, 고아 객체가 남았을 수 있음:', error.message)
 }

@@ -52,22 +52,27 @@ src/
 │   └── layouts/      AppLayout
 ├── pages/          라우트 하나 = 슬라이스 하나
 │   ├── wardrobe/ item-detail/ item-new/ item-edit/ login/ settings/
-├── entities/       도메인 객체
+├── entities/       도메인 객체 — 그 객체를 읽고 쓰는 일 전부
 │   └── item/
 │       ├── api/      Supabase 호출 · DB 행 ↔ 도메인 변환(mapRow)
-│       ├── model/    도메인 타입 · react-query 훅 · 업로드 대기열
+│       ├── model/    도메인 타입 · 쿼리/뮤테이션 훅 · 쿼리 키 · 업로드 대기열
 │       └── ui/       ItemCard
-├── features/       사용자 동작
+├── features/       엔티티 하나로 안 떨어지는 사용자 동작
 │   ├── auth/           세션 상태 · 구글 로그인
 │   ├── item-form/      등록·편집 폼과 사진 선택
 │   ├── item-photos/    원본 사진 서명(useItemPhotos) · 뷰어 · 팬/줌 기하
 │   └── wardrobe-filter/  필터 모델 + applyFilters (순수)
 └── shared/
-    ├── api/        supabase 클라이언트 · storage · queryKeys · DB 생성 타입
+    ├── api/        supabase 클라이언트 · storage · DB 생성 타입
     ├── config/     카테고리·색상·사이즈·핏·계절 프리셋 (PRD §5)
     ├── lib/        이미지 처리 · 초성 검색 · 포맷 · 유틸
     └── ui/         공용 컴포넌트
 ```
+
+**엔티티가 자기 CRUD를 갖는다.** `useSetFavorite`도 `useDeleteItem`도
+`entities/item`에 있다 — 사용자 동작이지만 옷 하나를 읽고 쓰는 것 이상이 아니고,
+훅 하나짜리 슬라이스를 네 개 만드는 편이 더 나쁘다. `features/`로 올라가는 건
+**여러 엔티티를 엮거나 엔티티에 속하지 않는** 동작이다: 로그인, 폼, 필터, 사진 뷰어.
 
 **세그먼트가 곧 관심사다.** 슬라이스 안에서 `api/`는 바깥과 말하는 코드, `model/`은 상태와
 도메인 규칙, `lib/`는 순수 로직, `ui/`는 그리는 코드다. 어디에 넣을지 애매하면 "이게 없으면
@@ -81,16 +86,30 @@ src/
 **의존 방향은 아래로만.** `app → pages → features → entities → shared`. 같은 층의 슬라이스끼리도
 서로 import하지 않는다 — 화면에서 조합한다.
 
+**이 세 규칙은 문서가 아니라 lint가 강제한다.** `.oxlintrc.json`의 `no-restricted-imports`가
+딥 임포트·상향 의존·동일 층 임포트를 전부 잡는다. 오버라이드 글롭이 `src/shared/**`가 아니라
+`**/shared/**`인 것이 중요하다 — 전자는 **아무 파일도 매칭하지 못해 규칙이 조용히 죽고**,
+lint는 통과한다.
+
 ## 데이터
 
 **서버에서 오는 것은 전부 react-query를 통한다.** 컴포넌트에 `useEffect` + `useState`로 짠
 페치가 있으면 그건 아직 옮기지 않은 것이다 — 경합 취소, 재시도, 캐시를 손으로 다시 만들게 된다.
 
-**쿼리 키는 [`shared/api/queryKeys.ts`](src/shared/api/queryKeys.ts) 한 곳에서만 만든다.** 키를
-읽는 쪽이 페치하는 훅 하나가 아니라서 그렇다 — 뮤테이션 다섯 개가 같은 항목을 패치·취소·무효화
-한다. 호출부에 직접 적은 키가 어긋나면 `setQueryData`는 아무도 읽지 않는 항목에 조용히 쓰고
-에러를 내지 않는다. `all`은 접두사(취소·무효화용), 함수는 정확한 키
-(`setQueryData`/`getQueryData`용)다.
+**쿼리 키는 페처를 소유한 슬라이스가 갖는다** — 옷장은
+[`entities/item/model/queryKeys.ts`](src/entities/item/model/queryKeys.ts), 서명 URL은
+`signPaths` 바로 옆인 [`shared/api/storage.ts`](src/shared/api/storage.ts). 호출부에 직접 적지
+않는 이유는, 옷장 항목 하나를 뮤테이션 다섯 개가 패치·취소·무효화하는데 그중 하나만 키가
+어긋나도 `setQueryData`가 아무도 읽지 않는 항목에 조용히 쓰고 **에러를 내지 않기** 때문이다.
+`all`은 접두사(취소·무효화용), 함수는 정확한 키(`setQueryData`/`getQueryData`용)다.
+
+전역 레지스트리를 두지 않는 이유는 `shared`가 최하층이어서다. 거기에 `wardrobe`라는 이름이
+있으면 도메인이 앱 바닥까지 내려온다.
+
+**캐시 기본값을 그냥 물려받지 않는다.** 서명 URL 쿼리는 `staleTime`을 URL 수명에 맞춰 따로
+잡는다 — 목록용 30분을 그대로 쓰면 포커스 복귀마다 재서명되고, `<img src>`가 전부 바뀌어
+원본 사진을 다시 받는다. 브라우저는 토큰까지 포함한 URL 전체로 캐시하므로 같은 객체라도 새
+URL은 새 요청이다.
 
 옷장은 한 번 받아 클라이언트에서 거른다(PRD §8.4). 캐시 항목이 하나뿐이라 뮤테이션은
 **무효화 대신 그 항목을 직접 패치한다** — 즐겨찾기 별 하나 누를 때마다 전량 refetch가 돌면
@@ -101,6 +120,11 @@ src/
 
 **결정이 들어있는 로직은 순수 함수로 분리해 테스트한다** — 초성 검색, 필터·정렬, DB 행 매핑,
 이미지 리사이즈/크롭 기하. 이 부분은 Supabase 없이 돌아가고 실제로 검증돼 있다.
+
+**예외가 하나 있다: `useItemPhotos`.** 순수 함수로 안 떨어지는데(캐시·리렌더가 곧 동작이다)
+`photoSlots`가 자기 주석에서 "이 규칙을 양방향으로 두 번 틀렸다"고 적고 있고, 틀렸던 그 URL을
+만드는 쪽이 이 훅이다. 그래서 여기만 `@testing-library/react` + jsdom으로 테스트한다 — 파일
+맨 위 `@vitest-environment jsdom` 주석으로 그 파일만 jsdom을 쓰고, 나머지는 node 그대로다.
 
 **네트워크 경로(`entities/item/api`, `entities/item/model/queries.ts`)와 화면은 자동 테스트가
 없다.** 다만 행/삽입 타입은 `src/shared/api/database.types.ts`(실제 스키마에서 생성)에서 오므로

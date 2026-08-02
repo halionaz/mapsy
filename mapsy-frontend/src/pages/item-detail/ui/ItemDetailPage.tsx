@@ -337,10 +337,12 @@ export function ItemDetailPage() {
           rather than holding a stale index and zoom from the last photo.
           Closing goes back, because opening came forward. */}
       {/* Gated on the history entry alone, not on there being a photo to show.
-          A re-sign turns every slot back to pending for a moment, and
-          unmounting on that would close and re-open the viewer — losing the
-          page and the zoom — over a network blip. The viewer draws waiting and
-          failure itself. */}
+          Unmounting when there is momentarily nothing to draw would close and
+          re-open the viewer — losing the page and the zoom — over a network
+          blip. The viewer draws waiting and failure itself.
+          (A re-sign no longer produces that gap: react-query keeps the previous
+          URLs until the new ones land. This survives as the guard for the
+          states that still can — a photo deleted from under the screen.) */}
       {openedPhotoId != null && (
         <PhotoViewer
           slots={slots}

@@ -3,6 +3,95 @@
   "plugins": ["react", "typescript", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["@/{entities,features,pages}/*/**"],
+            "message": "슬라이스는 index.ts로만 접근한다 — @/entities/item/model/queries가 아니라 @/entities/item."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["**/shared/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app/**", "@/pages/**", "@/features/**", "@/entities/**"],
+                "message": "shared는 최하층이다 — 위층을 import할 수 없고, 도메인을 알아서도 안 된다."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/entities/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app/**", "@/pages/**", "@/features/**"],
+                "message": "entities는 features 이상을 import할 수 없다."
+              },
+              {
+                "group": ["@/entities/*/**"],
+                "message": "다른 엔티티는 index.ts로만. 같은 엔티티 안에서는 상대 경로를 쓴다."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/features/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app/**", "@/pages/**", "@/features/**"],
+                "message": "features는 위층·동일층을 import할 수 없다. 두 기능을 엮어야 하면 페이지에서 조합한다."
+              },
+              {
+                "group": ["@/entities/*/**"],
+                "message": "엔티티는 index.ts로만 접근한다."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/pages/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app/**", "@/pages/**"],
+                "message": "pages는 app·동일층을 import할 수 없다."
+              },
+              {
+                "group": ["@/{entities,features}/*/**"],
+                "message": "슬라이스는 index.ts로만 접근한다."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }
