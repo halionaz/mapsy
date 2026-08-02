@@ -64,10 +64,18 @@ const CODE_MESSAGES: Record<string, string> = {
   '42501': '권한이 없어요.', // insufficient_privilege
 }
 
+/**
+ * Postgres always quotes the constraint name, so pull it out and look it up.
+ *
+ * Scanning the table for a substring hit worked while the names happened to be
+ * unrelated, but the map is generated now and only grows: the first entry that
+ * is a prefix of a longer name would win on insertion order alone, silently
+ * returning the wrong sentence. Extracting first makes the lookup exact and
+ * removes the ordering dependency nothing was testing.
+ */
 function friendly(message: string, code: unknown): string | null {
-  for (const [name, text] of Object.entries(CONSTRAINT_MESSAGES)) {
-    if (message.includes(name)) return text
-  }
+  const named = /constraint "([^"]+)"/.exec(message)?.[1]
+  if (named && named in CONSTRAINT_MESSAGES) return CONSTRAINT_MESSAGES[named]
   if (typeof code === 'string' && code in CODE_MESSAGES) return CODE_MESSAGES[code]
   return null
 }

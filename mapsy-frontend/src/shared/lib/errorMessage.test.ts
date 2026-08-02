@@ -56,6 +56,18 @@ describe('errorMessage — 제약 위반', () => {
   it('keeps the original text when nothing matches', () => {
     expect(errorMessage({ message: 'connection reset', code: 'XX000' })).toBe('connection reset')
   })
+
+  it('matches the whole constraint name, not a prefix of it', () => {
+    // The map is generated and only grows. A substring scan would return the
+    // message for `items_price_max` here purely because it comes first in
+    // insertion order, so the name is extracted and looked up exactly.
+    expect(
+      errorMessage({
+        message: 'violates check constraint "items_price_max_krw"',
+        code: '23514',
+      }),
+    ).toBe('violates check constraint "items_price_max_krw"')
+  })
 })
 
 describe('errorMessage — 빈 메시지', () => {

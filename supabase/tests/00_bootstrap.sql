@@ -19,6 +19,16 @@ begin
   end loop;
 end $$;
 
+-- Supabase creates `service_role` with BYPASSRLS; a plain CREATE ROLE does not.
+-- Nothing asserts service_role behaviour yet, but 006 and 008 grant EXECUTE to
+-- it and this file creates it, which makes the harness look like it models the
+-- role. Without this, the first assertion that says "service_role can do X"
+-- would be checking a role that does not exist in production — the same shape as
+-- the missing `alter default privileges` below, which let a false claim about
+-- anon EXECUTE pass for two rounds. Applied unconditionally so a pre-existing
+-- role from an earlier run is corrected too.
+alter role service_role bypassrls;
+
 create schema if not exists auth;
 
 create table if not exists auth.users (

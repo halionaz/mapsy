@@ -152,16 +152,17 @@ export function ItemForm({
    * Everything blocking submit, split by whether the user can see it.
    *
    * `invalid` is derived from these two lists and nothing else, so the only way
-   * to block submission is to append to one of them — and the hidden list is
-   * rendered. A free `|| somethingProblem` term is what caused the last
-   * regression: a check added inside the collapsed section made the button do
-   * nothing with no message anywhere.
+   * to block submission is to append to one of them. A free `|| somethingProblem`
+   * term is what caused the last regression: a check added inside the collapsed
+   * section made the button do nothing with no message anywhere.
+   *
+   * The visible list holds flags rather than sentences on purpose — each of
+   * these fields renders its own `<FieldError>` in place, and carrying the text
+   * here too would be a second copy of three user-facing strings with nothing
+   * keeping the two in sync. The hidden list carries text because nothing else
+   * shows it.
    */
-  const visibleProblems = [
-    missingPhoto ? '사진을 한 장 이상 추가해주세요.' : null,
-    missingTitle ? '이름을 입력해주세요.' : null,
-    missingCategory ? '카테고리를 골라주세요.' : null,
-  ].filter((problem): problem is string => problem !== null)
+  const visibleProblems = [missingPhoto, missingTitle, missingCategory].filter(Boolean)
 
   /** Inside `{showOptional && …}` — invisible while the section is collapsed. */
   const hiddenProblems = [tagProblem, priceProblem].filter(
@@ -174,9 +175,9 @@ export function ItemForm({
     event.preventDefault()
     setTouched(true)
     if (invalid || pending || !categoryId) {
-      // Open the section so the field-level message becomes reachable. Until
-      // this render lands, the summary above the buttons is what explains the
-      // refusal.
+      // Open the section so the field-level message becomes reachable. That
+      // message is what explains this refusal — `setTouched` and this land in
+      // one batch, so the summary below never renders for a blocked submit.
       if (hiddenProblems.length > 0) setShowOptional(true)
       return
     }
@@ -387,9 +388,11 @@ export function ItemForm({
         </div>
       )}
 
-      {/* Only while collapsed: once the section opens, the field-level message
-          says the same thing in the right place, and two live regions with the
-          same text is worse for a screen reader than one. */}
+      {/* Not what explains a blocked submit — that opens the section in the same
+          batch, so this never renders on that path. It covers what comes after:
+          the user collapses the section again and would otherwise be left with a
+          button that refuses for no stated reason. Gated on `!showOptional` so
+          it never duplicates the field-level message into a second live region. */}
       {touched && !showOptional && hiddenProblems.length > 0 && (
         <div role="alert" className={vstack({ gap: '1', alignItems: 'stretch' })}>
           {hiddenProblems.map((problem) => (

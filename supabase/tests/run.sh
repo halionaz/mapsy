@@ -7,6 +7,10 @@
 # on any machine and in CI. The trade-off is that auth and storage are stubs
 # (tests/00_bootstrap.sql) rather than the real services — good enough for
 # constraints, RLS and the ordering functions, which is what the suite covers.
+#
+# Also regenerates the frontend's constraint inventory
+# (mapsy-frontend/src/shared/constants/dbConstraints.generated.ts) and fails if
+# it changed, so running this dirties the working tree by design.
 
 set -euo pipefail
 
@@ -16,13 +20,17 @@ CONTAINER="${MAPSY_PG_CONTAINER:-mapsy-pg-test}"
 IMAGE="${MAPSY_PG_IMAGE:-postgres:17-alpine}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS="$HERE/../migrations"
+GENERATED="$HERE/../../mapsy-frontend/src/shared/constants/dbConstraints.generated.ts"
 
 if ! docker info >/dev/null 2>&1; then
   echo "Docker 데몬이 꺼져 있음. Docker Desktop을 실행한 뒤 다시 시도." >&2
   exit 1
 fi
 
-cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
+cleanup() {
+  docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  rm -f "$GENERATED.tmp"
+}
 trap cleanup EXIT
 
 cleanup
@@ -64,7 +72,12 @@ docker exec -i "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 \
 # The frontend maps every constraint name to a Korean message. That map used to
 # claim completeness in a comment and drifted three times; now the inventory is
 # generated from the schema and a unit test asserts the map covers it.
-GENERATED="$HERE/../../mapsy-frontend/src/shared/constants/dbConstraints.generated.ts"
+#
+# Written to a temp file and moved into place, never straight to `$GENERATED`.
+# A redirect truncates its target before the block runs, so a psql hiccup under
+# `set -e` would leave a tracked source file holding an unterminated array
+# literal — which breaks typecheck, build and the unit tests at once, with
+# nothing pointing at the cause. Same reason `types:gen` goes through a temp file.
 {
   echo "/**"
   echo " * Constraint names in the \`public\` schema."
@@ -81,13 +94,8 @@ GENERATED="$HERE/../../mapsy-frontend/src/shared/constants/dbConstraints.generat
       where n.nspname = 'public' and c.contype in ('c','u','f','p')
       order by conname;" | sed "s/^/  '/;s/\$/',/"
   echo "] as const"
-} > "$GENERATED"
-
-if ! git -C "$HERE/.." diff --quiet -- "$GENERATED" 2>/dev/null; then
-  echo
-  echo "제약 목록이 갱신됨: $(basename "$GENERATED")"
-  echo "errorMessage의 매핑을 맞춘 뒤 커밋할 것 (pnpm test가 검사함)."
-fi
+} > "$GENERATED.tmp"
+mv "$GENERATED.tmp" "$GENERATED"
 
 # Re-applying must be a no-op: a migration that fails halfway has to be
 # retryable, and that property is easy to break without noticing.
@@ -97,3 +105,17 @@ for migration in "$MIGRATIONS"/*.sql; do
   apply "$migration"
 done
 echo "재실행 통과"
+
+# Last, so it is the final word rather than a line buried under the NOTICEs
+# above — and a failure, not a notice. Warning and exiting 0 left the guarantee
+# resting on "remember to run `pnpm test` afterwards": add a constraint, run only
+# the cheap suites against a stale inventory, and everything is green while the
+# new name has no message. Compared against HEAD rather than the index so an
+# already-staged regeneration still counts as a change.
+echo
+if ! git -C "$HERE/.." diff HEAD --quiet -- "$GENERATED"; then
+  echo "제약 목록이 갱신됨: $(basename "$GENERATED")" >&2
+  echo "errorMessage의 매핑을 맞춘 뒤 생성 파일과 함께 커밋할 것." >&2
+  exit 1
+fi
+echo "제약 목록 최신"
