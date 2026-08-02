@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { css, cva, cx } from 'styled-system/css'
 
 import { skeletonSurface } from './skeletonStyle'
@@ -163,11 +163,17 @@ export function SquarePhoto({
    * re-attaches a callback ref whose identity changed — on a screen that
    * re-renders once per frame while the viewer is being swiped. Owning the
    * problem here fixes it for every caller instead of asking each one to.
+   *
+   * Assigned during render, not in an effect. `checkComplete` is a callback ref
+   * and can call `fail` the moment it attaches — for a cached broken image, in
+   * the same commit. Measured order on a re-render is `ref attach` →
+   * `useLayoutEffect` → `useEffect`, so *both* effect kinds land after the only
+   * consumer, and the ref would still hold the previous render's closure when it
+   * mattered: a photo set that changed in the same render would have its
+   * neighbour marked unloadable.
    */
   const onLoadErrorRef = useRef(onLoadError)
-  useEffect(() => {
-    onLoadErrorRef.current = onLoadError
-  })
+  onLoadErrorRef.current = onLoadError
 
   const fail = useCallback(
     (failedSrc: string) => {

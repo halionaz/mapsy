@@ -221,25 +221,27 @@ async function uploadPhotos(
       const thumbPath = `${base}_thumb.${photo.ext}`
       const contentType = contentTypeOf(photo.ext)
 
+      // Recorded before either upload is attempted, not after one reports
+      // success. A request that fails may still have left its object behind —
+      // an aborted or dropped connection is this end giving up, not the server
+      // rolling back — and a path that was never recorded is one the cleanup
+      // below walks straight past. Removing an object that does not exist costs
+      // nothing; leaving one that does is the orphan this function exists to
+      // prevent.
+      paths.push(path, thumbPath)
+
       // allSettled, not all. supabase-js turns a StorageError into `{ error }`
-      // but lets anything else through as a rejection — an aborted request, a
-      // connection dropped mid-flight — and `Promise.all` rejects on the first
-      // of those without waiting for its sibling. If the sibling then lands, its
-      // object was never recorded, so the cleanup below walks past it: an orphan
-      // in the bucket, which is the single thing this function exists to avoid.
+      // but lets anything else through as a rejection, and `Promise.all` rejects
+      // on the first of those without waiting for its sibling — so a sibling
+      // that lands afterwards would go unseen.
       const [full, thumb] = await Promise.allSettled([
         storage.upload(path, photo.full, { contentType }),
         storage.upload(thumbPath, photo.thumb, { contentType }),
       ])
       const fullError = uploadErrorOf(full)
       const thumbError = uploadErrorOf(thumb)
-
-      // Recorded before the error check: when one of the pair succeeds and the
-      // other fails, the successful one still needs cleaning up.
-      if (!fullError) paths.push(path)
-      if (!thumbError) paths.push(thumbPath)
-      if (fullError) throw fullError
-      if (thumbError) throw thumbError
+      if (fullError !== null) throw fullError
+      if (thumbError !== null) throw thumbError
 
       rows.push({
         id: imageId,
@@ -261,12 +263,18 @@ async function uploadPhotos(
 }
 
 /**
- * Why one upload failed, however supabase-js chose to report it — returned in
- * `{ error }` for a StorageError, thrown for everything else.
+ * Why one upload failed, or `null` if it did not — however supabase-js chose to
+ * report it: returned in `{ error }` for a StorageError, thrown for anything
+ * else.
+ *
+ * Decided on `status`, and answered against `null` by the caller rather than
+ * for truthiness. A rejection carrying `''` or `0` is still a rejection, and a
+ * function whose job is to never let a failed upload pass for a successful one
+ * should not be the place that hangs on an error value being truthy.
  */
 function uploadErrorOf(result: PromiseSettledResult<{ error: unknown }>): unknown {
-  if (result.status === 'fulfilled') return result.value.error
-  return result.reason ?? new Error('사진 업로드에 실패했어요.')
+  if (result.status === 'rejected') return result.reason ?? new Error('사진 업로드에 실패했어요.')
+  return result.value.error ?? null
 }
 
 /**

@@ -266,6 +266,24 @@ export function PhotoViewer({
     goTo(startIndex, false)
   }, [slots.length, startIndex, goTo])
 
+  /**
+   * Follows the collection when it shrinks under the viewer.
+   *
+   * `goTo` clamps, but nothing was calling it here: the index only moves on
+   * seating, an arrow key or the end of a swipe, so a photo deleted while its
+   * page was open left the index past the end. The track stayed translated to a
+   * page that no longer exists (a blank screen), the counter read "5 / 4", and
+   * `slots[index]` was undefined — until the user happened to swipe.
+   *
+   * This is the state the screen behind deliberately keeps the viewer mounted
+   * for. Reachable today by deleting a photo on another device and foregrounding
+   * this one, since the focus refetch brings back an item with fewer images.
+   */
+  useEffect(() => {
+    if (indexRef.current <= slots.length - 1) return
+    goTo(Math.max(0, slots.length - 1), false)
+  }, [slots.length, goTo])
+
   // A re-sign hands the current page a new URL, and with it a new <img> element
   // carrying no transform — while `transform.current` still describes the one
   // that went away. Left alone the viewer believes it is zoomed in when the
