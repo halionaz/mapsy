@@ -35,6 +35,7 @@ import {
   type WardrobeFilters,
 } from '@/features/wardrobe-filter'
 import { CATEGORY_GROUPS, type CategoryGroupId } from '@/shared/config/categories'
+import { assertNever } from '@/shared/lib/assertNever'
 import { errorMessage } from '@/shared/lib/errorMessage'
 import { Button } from '@/shared/ui/Button'
 import { buttonStyle, iconButtonStyle } from '@/shared/ui/buttonStyle'
@@ -43,6 +44,35 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { inputStyle } from '@/shared/ui/fieldStyle'
 import { skeletonSurface } from '@/shared/ui/skeletonStyle'
 import { useScrolledPast } from '@/shared/ui/useScrolledPast'
+
+/**
+ * The five things this screen can be.
+ *
+ * Up here with the component rather than down among the style declarations,
+ * where these two were first written. That placement is not cosmetic: this file
+ * is 700 lines, a new top-level declaration lands wherever the last edit was,
+ * and down there every gap already had somebody's docblock in it — three
+ * separate blocks were pulled off the symbol they described that way, `page`'s
+ * among them. Screen logic beside the screen leaves no such gap to land in.
+ */
+type View = 'loading' | 'failed' | 'empty' | 'noMatches' | 'grid'
+
+/**
+ * Which screens the stale banner belongs on.
+ *
+ * A `Record` rather than a list of `view === …` comparisons: the comparisons
+ * said in prose that a new view "has to be placed here on purpose", and prose
+ * does not stop anyone — a sixth view would simply never get a banner, silently.
+ * Keyed by the union, adding one stops the compiler until it is answered for.
+ */
+const SHOWS_STALE_NOTICE: Record<View, boolean> = {
+  loading: false,
+  // The whole screen is already the failure; a banner on top would say it twice.
+  failed: false,
+  empty: true,
+  noMatches: true,
+  grid: true,
+}
 
 /**
  * 내 옷장 — the home screen (PRD §6.1).
@@ -267,7 +297,9 @@ export function WardrobePage() {
             ? '옷장을 불러오는 중이에요.'
             : view === 'failed'
               ? '옷장을 불러오지 못했어요.'
-              : `옷 ${visible.length}벌${stale ? '. 최신 목록은 불러오지 못했어요.' : ''}`}
+              : view === 'empty' || view === 'noMatches' || view === 'grid'
+                ? `옷 ${visible.length}벌${stale ? '. 최신 목록은 불러오지 못했어요.' : ''}`
+                : assertNever(view)}
         </p>
 
         {/* Over the wardrobe, not instead of it: the rows on screen are real,
@@ -372,7 +404,7 @@ export function WardrobePage() {
               </Button>
             }
           />
-        ) : (
+        ) : view === 'grid' ? (
           <div className={vstack({ gap: '4', alignItems: 'stretch' })}>
             <div className={listMeta}>
               <span className={css({ textStyle: 'caption', color: 'fg.muted' })}>
@@ -407,6 +439,11 @@ export function WardrobePage() {
               ))}
             </ul>
           </div>
+        ) : (
+          // Unreachable: every member of `View` is named above, which is the
+          // point — a sixth would stop compiling here rather than falling through
+          // to the grid and being quietly drawn as one.
+          assertNever(view)
         )}
       </main>
 
@@ -442,25 +479,6 @@ export function WardrobePage() {
  * above it remembered to be `position: relative` — a contract kept by comments
  * in two files, and already only half kept: `main` never was.
  */
-type View = 'loading' | 'failed' | 'empty' | 'noMatches' | 'grid'
-
-/**
- * Which screens the stale banner belongs on.
- *
- * A `Record` rather than a list of `view === …` comparisons: the comparisons
- * said in prose that a new view "has to be placed here on purpose", and prose
- * does not stop anyone — a sixth view would simply never get a banner, silently.
- * Keyed by the union, adding one stops the compiler until it is answered for.
- */
-const SHOWS_STALE_NOTICE: Record<View, boolean> = {
-  loading: false,
-  // The whole screen is already the failure; a banner on top would say it twice.
-  failed: false,
-  empty: true,
-  noMatches: true,
-  grid: true,
-}
-
 const page = cx(
   vstack({ gap: '0', alignItems: 'stretch', flex: '1' }),
   css({

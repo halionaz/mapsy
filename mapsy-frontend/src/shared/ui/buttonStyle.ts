@@ -114,11 +114,23 @@ export const buttonStyle = cva({
       },
     },
 
+    /**
+     * `--button-icon` is part of what a size *means*, so it lives here beside the
+     * height and the padding rather than in a lookup table next to the component.
+     *
+     * `Button` swaps the caller's icon for a spinner while it is loading, and the
+     * two have to be the same size or the glyph jumps when the press lands. The
+     * component held that mapping for a while and defaulted `size` itself to
+     * reach it — which quietly took the recipe's `defaultVariants` out of the
+     * loop, so raising the default here would have grown every `<Link>` wearing
+     * this recipe and left every `<Button>` behind. Reading it as a custom
+     * property keeps one default, in one place, governing both.
+     */
     size: {
       // 44px is the floor for anything a thumb has to find (sizes.tap).
-      sm: { minHeight: '9', px: '3.5' },
-      md: { minHeight: 'tap', px: '5' },
-      lg: { minHeight: '12', px: '6', textStyle: 'subheading' },
+      sm: { minHeight: '9', px: '3.5', '--button-icon': '14px' },
+      md: { minHeight: 'tap', px: '5', '--button-icon': '16px' },
+      lg: { minHeight: '12', px: '6', textStyle: 'subheading', '--button-icon': '18px' },
     },
 
     /** Pill for standalone actions, `block` for a stack of full-width rows. */

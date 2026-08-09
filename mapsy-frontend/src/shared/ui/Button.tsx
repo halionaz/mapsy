@@ -39,14 +39,14 @@ interface ButtonProps extends Omit<React.ComponentProps<'button'>, 'className'>,
 }
 
 /**
- * What the spinner replaces the icon with, per size.
- *
- * Here rather than at the call site, because the call site already handed over
- * the icon: `icon` became a prop so nobody had to remember the swap, and "the
- * two glyphs must be the same size" is the other half of that decision. Left
- * out, a 14px icon on a small button jumped to 16px the moment it started.
+ * The spinner that stands in for `icon`, sized by the button rather than by this
+ * file — `buttonStyle`'s size variants publish `--button-icon`, so the component
+ * never learns what the sizes are and the recipe's default keeps governing.
  */
-const SPINNER_SIZE = { sm: 14, md: 16, lg: 18 } as const
+const buttonSpinner = css({
+  width: 'var(--button-icon, 16px)',
+  height: 'var(--button-icon, 16px)',
+})
 
 /**
  * Sets `type="button"` by default.
@@ -58,11 +58,7 @@ const SPINNER_SIZE = { sm: 14, md: 16, lg: 18 } as const
  */
 export function Button({
   variant,
-  // Defaulted here rather than read as `size ?? 'md'` at the two places that
-  // need it. The recipe also defaults to `md`, and a literal in both spots is
-  // one to change and one to forget — raising the recipe's default to `lg` grew
-  // the button and left the spinner at 16px.
-  size = 'md',
+  size,
   shape,
   full,
   icon,
@@ -80,7 +76,7 @@ export function Button({
       className={cx(buttonStyle({ variant, size, shape, full }), className)}
       {...props}
     >
-      {loading ? <Spinner size={SPINNER_SIZE[size]} /> : icon}
+      {loading ? <Spinner className={buttonSpinner} /> : icon}
       {children}
     </button>
   )
@@ -117,15 +113,14 @@ export function IconButton({
   )
 }
 
-export function Spinner({ size = 16 }: { size?: number }) {
+export function Spinner({ size = 16, className }: { size?: number; className?: string }) {
   return (
     <LoaderCircle
       size={size}
       aria-hidden="true"
-      className={css({
-        animation: 'spin',
-        _motionReduce: { animation: 'none', opacity: 0.6 },
-      })}
+      // `className` may override the width and height the `size` attribute sets;
+      // nothing in the base rule touches either, so there is no conflict to lose.
+      className={cx(css({ animation: 'spin', _motionReduce: { animation: 'none', opacity: 0.6 } }), className)}
     />
   )
 }
