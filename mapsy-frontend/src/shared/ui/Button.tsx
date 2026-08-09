@@ -46,6 +46,16 @@ interface ButtonProps extends Omit<React.ComponentProps<'button'>, 'className'>,
  * had exactly that shape, so the default is inverted here once instead of being
  * remembered at each call site.
  */
+/**
+ * What the spinner replaces the icon with, per size.
+ *
+ * Here rather than at the call site, because the call site already handed over
+ * the icon: `icon` became a prop so nobody had to remember the swap, and "the
+ * two glyphs must be the same size" is the other half of that decision. Left
+ * out, a 14px icon on a small button jumped to 16px the moment it started.
+ */
+const SPINNER_SIZE = { sm: 14, md: 16, lg: 18 } as const
+
 export function Button({
   variant,
   size,
@@ -66,7 +76,7 @@ export function Button({
       className={cx(buttonStyle({ variant, size, shape, full }), className)}
       {...props}
     >
-      {loading ? <Spinner /> : icon}
+      {loading ? <Spinner size={SPINNER_SIZE[size ?? 'md']} /> : icon}
       {children}
     </button>
   )

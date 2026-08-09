@@ -102,18 +102,32 @@ export function WardrobePage() {
    * cached to fall back on. A failure with rows in hand is `staleWarning`, drawn
    * over the grid rather than in place of it.
    */
-  const failedCold = error != null && !hasWardrobe
-  const staleWarning = error != null && hasWardrobe
+  // `data !== undefined`, not "there are rows". An empty wardrobe is an answer:
+  // `data: []` means the fetch succeeded and this person owns nothing yet, and a
+  // later refetch failing does not take that answer back. Asking "are there rows
+  // to draw" instead put a new user's first screen — 아직 등록한 옷이 없어요 —
+  // behind a load failure the moment a focus refetch missed.
+  const answered = data !== undefined
 
   const view = isLoading
     ? 'loading'
-    : failedCold
+    : error != null && !answered
       ? 'failed'
       : !hasWardrobe
         ? 'empty'
         : visible.length === 0 && pending.length === 0
           ? 'noMatches'
           : 'grid'
+
+  /**
+   * A failure worth mentioning over the top of a screen that still works.
+   *
+   * Derived from `view` rather than re-tested against `hasWardrobe`, so it
+   * cannot disagree with the branch that is actually drawn. The listed views are
+   * spelled out rather than negated: a view added later has to be placed here on
+   * purpose instead of inheriting a banner nobody chose for it.
+   */
+  const stale = error != null && (view === 'empty' || view === 'noMatches' || view === 'grid')
 
   function setGroup(groupId: CategoryGroupId | null) {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
@@ -255,13 +269,19 @@ export function WardrobePage() {
             ? '옷장을 불러오는 중이에요.'
             : view === 'failed'
               ? '옷장을 불러오지 못했어요.'
-              : `옷 ${visible.length}벌${staleWarning ? '. 최신 목록은 불러오지 못했어요.' : ''}`}
+              : `옷 ${visible.length}벌${stale ? '. 최신 목록은 불러오지 못했어요.' : ''}`}
         </p>
 
-        {/* Over the wardrobe, not instead of it. The rows on screen are real —
-            they just may be a few minutes old. */}
-        {staleWarning && (
-          <div role="alert" className={staleNotice}>
+        {/* Over the wardrobe, not instead of it: the rows on screen are real,
+            they just may be a few minutes old.
+
+            No `role="alert"` on it. The region above is always mounted and its
+            text already changed to say this — an alert here would be a second
+            live region announcing the same fact, and it would read the retry
+            button's label as part of the sentence. The banner is what the sighted
+            user sees; the region above is what everyone else hears. */}
+        {stale && (
+          <div className={staleNotice}>
             <TriangleAlert size={15} aria-hidden="true" className={css({ flexShrink: 0 })} />
             <span className={css({ flex: '1' })}>최신 목록을 불러오지 못했어요</span>
             <Button
@@ -563,14 +583,22 @@ const statusStripScrim = css({
  * `role="alert"` rather than a toast: it has to stay while the condition does,
  * and a toast that slides away leaves no way to ask again.
  */
+/**
+ * Informational, not alarming.
+ *
+ * It was drawn in `danger`, the same pair as a validation error that blocks
+ * submission and the confirm on a delete. Nothing here is broken — the garments
+ * on screen are real and a few minutes old — and painting that the same red as
+ * an irreversible action flattens three levels of severity into one.
+ */
 const staleNotice = hstack({
   gap: '2',
   mb: '4',
   px: '3',
   py: '2',
   rounded: 'field',
-  bg: 'danger.subtle',
-  color: 'danger',
+  bg: 'bg.subtle',
+  color: 'fg.muted',
   textStyle: 'caption',
 })
 

@@ -26,7 +26,14 @@ const { useWardrobeMock } = vi.hoisted(() => ({ useWardrobeMock: vi.fn() }))
 
 /** The shape `useWardrobe` returns, with only what this screen reads. */
 function query(overrides: Record<string, unknown>) {
-  return { data: undefined, isLoading: false, isFetching: false, error: null, refetch: vi.fn(), ...overrides }
+  return {
+    data: undefined,
+    isLoading: false,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+    ...overrides,
+  }
 }
 
 vi.mock('@/entities/item', async (importOriginal) => ({
@@ -121,6 +128,32 @@ describe('WardrobePage — the route to registration', () => {
 
     expect(screen.getByRole('button', { name: /다시 시도/ })).toBeDefined()
     expect(registerFab()).not.toBeNull()
+  })
+
+  /**
+   * An empty wardrobe is an answer, not a missing one.
+   *
+   * `data: []` means the fetch succeeded and there are no garments. A later
+   * refetch failing does not undo that, so the screen still owes the user the
+   * onboarding copy rather than a load failure.
+   */
+  it('leaves an empty wardrobe empty when its refetch fails', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [], error: new Error('offline') }))
+    renderWardrobe()
+
+    expect(screen.getByText('아직 등록한 옷이 없어요')).toBeDefined()
+    expect(screen.queryByText('옷장을 불러오지 못했어요')).toBeNull()
+  })
+
+  it('says only once that the list may be out of date', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()], error: new Error('offline') }))
+    const { container } = renderWardrobe()
+
+    const announcing = [...container.querySelectorAll('[role="status"], [role="alert"]')].filter(
+      (node) => node.textContent?.includes('불러오지 못했'),
+    )
+
+    expect(announcing).toHaveLength(1)
   })
 
   it('hands the empty wardrobe its own call to action, and only that one', () => {
