@@ -108,8 +108,27 @@ export const buttonStyle = cva({
       block: { rounded: 'field' },
     },
 
+    /**
+     * Fills the line it is on.
+     *
+     * Almost every use of this is inside a flex row — a sheet's footer, a
+     * dialog's two actions, the item form's action bar — and there `width: 100%`
+     * is a flex *basis*, not a ceiling. Against the base's `flexShrink: 0` it
+     * could never come back down, so the row overflowed by exactly the width of
+     * whatever sat beside it: 초기화 pushed 41벌 보기 off the screen, and the
+     * confirm dialog's two buttons each asked for the whole width.
+     *
+     * Letting it shrink turns `full` into "take the rest of the line", which is
+     * what every call site meant. Two of them side by side then settle at equal
+     * halves, because they shrink from equal bases.
+     *
+     * `minWidth: 0` is load-bearing: a flex item's automatic minimum size is its
+     * min-content width, the label is `white-space: nowrap`, and without this
+     * that floor is the whole untruncated label — the shrink is allowed but has
+     * nowhere to go.
+     */
     full: {
-      true: { width: 'full' },
+      true: { width: 'full', flexShrink: 1, minWidth: 0 },
     },
   },
 
