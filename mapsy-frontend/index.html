@@ -16,9 +16,13 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <!-- Matched to the light/dark bg tokens so the browser chrome follows suit. -->
+    <!--
+      Matched to the light/dark `bg` semantic tokens in panda.config.ts so the
+      browser chrome follows suit. These two are the one place the palette is
+      restated outside the config — HTML cannot read a CSS custom property here.
+    -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0C0A09" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0C0B0A" />
     <meta name="description" content="내가 가진 옷을 한눈에 모아보는 옷장" />
     <title>mapsy — 내 옷장</title>
   </head>

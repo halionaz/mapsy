@@ -1,11 +1,11 @@
 import { useId, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, ImagePlus, X } from 'lucide-react'
 import { css } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
 import { processPhoto, releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
+import { IconButton, Spinner } from '@/shared/ui/Button'
 import { MAX_PHOTOS } from '../model/limits'
-
-/** Matches the 0–4 sort_order range the database enforces. */
 
 interface PhotoPickerProps {
   photos: ProcessedPhoto[]
@@ -75,82 +75,61 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
 
   return (
     <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
-      <div className={hstack({ gap: '2', overflowX: 'auto', py: '1' })}>
+      <div className={hstack({ gap: '3', overflowX: 'auto', py: '1', alignItems: 'flex-start' })}>
         {photos.map((photo, index) => (
-          <div key={photo.previewUrl} className={vstack({ gap: '1', flexShrink: 0 })}>
+          <div key={photo.previewUrl} className={vstack({ gap: '1.5', flexShrink: 0 })}>
             <div className={css({ position: 'relative' })}>
-              <img
-                src={photo.previewUrl}
-                alt={`사진 ${index + 1}`}
-                className={css({
-                  width: '80px',
-                  height: '80px',
-                  objectFit: 'cover',
-                  rounded: 'md',
-                  bg: 'bg.subtle',
-                })}
-              />
-              {index === 0 && (
-                <span
-                  className={css({
-                    position: 'absolute',
-                    bottom: '0',
-                    insetInline: '0',
-                    bg: 'accent',
-                    color: 'accent.fg',
-                    fontSize: '2xs',
-                    textAlign: 'center',
-                    py: '0.5',
-                    roundedBottom: 'md',
-                  })}
-                >
-                  대표
-                </span>
-              )}
-            </div>
-            <div className={hstack({ gap: '0.5', justify: 'center' })}>
-              <IconButton label={`사진 ${index + 1} 앞으로`} onClick={() => move(index, -1)} disabled={index === 0}>
-                ‹
+              <img src={photo.previewUrl} alt={`사진 ${index + 1}`} className={thumb} />
+
+              {/* The remove control sits on the photo rather than under it: it
+                  is the one action whose target should be the thing it acts on,
+                  and it keeps the row of reorder buttons down to two. */}
+              <IconButton
+                label={`사진 ${index + 1} 삭제`}
+                size="sm"
+                onPhoto
+                onClick={() => removeAt(index)}
+                className={removeButton}
+              >
+                <X size={13} />
               </IconButton>
-              <IconButton label={`사진 ${index + 1} 삭제`} onClick={() => removeAt(index)}>
-                ✕
+
+              {index === 0 && <span className={coverTag}>대표</span>}
+            </div>
+
+            <div className={hstack({ gap: '0.5', justify: 'center' })}>
+              <IconButton
+                label={`사진 ${index + 1} 앞으로`}
+                size="sm"
+                onClick={() => move(index, -1)}
+                disabled={index === 0}
+              >
+                <ChevronLeft size={15} />
               </IconButton>
               <IconButton
                 label={`사진 ${index + 1} 뒤로`}
+                size="sm"
                 onClick={() => move(index, 1)}
                 disabled={index === photos.length - 1}
               >
-                ›
+                <ChevronRight size={15} />
               </IconButton>
             </div>
           </div>
         ))}
 
         {remaining > 0 && (
-          <label
-            htmlFor={inputId}
-            className={css({
-              width: '80px',
-              height: '80px',
-              flexShrink: 0,
-              display: 'grid',
-              placeItems: 'center',
-              rounded: 'md',
-              borderWidth: '1px',
-              borderStyle: 'dashed',
-              borderColor: 'border',
-              color: 'fg.muted',
-              fontSize: 'xs',
-              // The caption carries a newline; without this it collapses onto
-              // one line inside an 80px box.
-              whiteSpace: 'pre-line',
-              textAlign: 'center',
-              lineHeight: 'tight',
-              cursor: 'pointer',
-              _hover: { borderColor: 'fg.subtle' },
-            })}
-          >
-            {busy ? '처리 중…' : `+ 사진\n${photos.length}/${MAX_PHOTOS}`}
+          <label htmlFor={inputId} className={addTile}>
+            {busy ? (
+              <Spinner size={18} />
+            ) : (
+              <>
+                <ImagePlus size={20} aria-hidden="true" />
+                <span>
+                  {photos.length}/{MAX_PHOTOS}
+                </span>
+              </>
+            )}
           </label>
         )}
       </div>
@@ -167,7 +146,7 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
       />
 
       {error && (
-        <p role="alert" className={css({ fontSize: 'xs', color: 'danger' })}>
+        <p role="alert" className={css({ textStyle: 'caption', color: 'danger' })}>
           {error}
         </p>
       )}
@@ -175,40 +154,56 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
   )
 }
 
-function IconButton({
-  label,
-  onClick,
-  disabled,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      disabled={disabled}
-      className={css({
-        width: '22px',
-        height: '22px',
-        fontSize: 'xs',
-        color: 'fg.muted',
-        rounded: 'sm',
-        cursor: 'pointer',
-        _hover: { color: 'fg' },
-        _disabled: { opacity: 0.3, cursor: 'not-allowed' },
-        _focusVisible: {
-          outline: '2px solid',
-          outlineColor: 'accent',
-          outlineOffset: '1px',
-        },
-      })}
-    >
-      {children}
-    </button>
-  )
-}
+const thumb = css({
+  // Literal, not a shared constant: Panda extracts styles by reading the
+  // source, and a value it has to resolve through a variable is a value it may
+  // silently emit nothing for.
+  width: '84px',
+  height: '84px',
+  objectFit: 'cover',
+  rounded: 'card',
+  bg: 'bg.subtle',
+  display: 'block',
+})
+
+const removeButton = css({
+  position: 'absolute',
+  top: '1',
+  right: '1',
+})
+
+const coverTag = css({
+  position: 'absolute',
+  bottom: '1',
+  left: '1',
+  px: '1.5',
+  py: '0.5',
+  rounded: 'full',
+  bg: 'accent',
+  color: 'accent.fg',
+  fontSize: '2xs',
+  fontWeight: 'bold',
+  lineHeight: 'tight',
+})
+
+const addTile = css({
+  // Same literal as `thumb`, for the same reason.
+  width: '84px',
+  height: '84px',
+  flexShrink: 0,
+  display: 'grid',
+  placeItems: 'center',
+  gap: '1',
+  gridAutoFlow: 'row',
+  rounded: 'card',
+  borderWidth: '1px',
+  borderStyle: 'dashed',
+  borderColor: 'border.strong',
+  bg: 'bg.subtle',
+  color: 'fg.muted',
+  textStyle: 'caption',
+  cursor: 'pointer',
+  transitionProperty: 'border-color, color, background-color',
+  transitionDuration: 'fast',
+  _hover: { borderColor: 'accent', color: 'accent.text' },
+})

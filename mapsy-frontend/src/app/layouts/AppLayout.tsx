@@ -1,5 +1,7 @@
+import { TriangleAlert } from 'lucide-react'
 import { Link, Navigate, Outlet, useLocation } from 'react-router'
 import { css } from 'styled-system/css'
+import { hstack } from 'styled-system/patterns'
 
 import { useSession } from '@/features/auth'
 
@@ -59,25 +61,26 @@ const shell = css({
 function PreviewBanner() {
   return (
     <div
-      className={css({
+      className={hstack({
+        justify: 'center',
+        gap: '2',
         px: '4',
-        py: '2',
+        py: '2.5',
         bg: 'accent.subtle',
-        color: 'fg',
-        fontSize: 'xs',
-        textAlign: 'center',
+        color: 'accent.text',
+        textStyle: 'caption',
       })}
     >
-      Supabase 미설정 — 미리보기 모드{' '}
+      <TriangleAlert size={14} aria-hidden="true" className={css({ flexShrink: 0 })} />
+      <span>Supabase 미설정 — 미리보기 모드</span>
       <Link
         to="/login"
         className={css({
+          fontWeight: 'bold',
           textDecoration: 'underline',
-          _focusVisible: {
-            outline: '2px solid',
-            outlineColor: 'accent',
-            outlineOffset: '2px',
-          },
+          textUnderlineOffset: '2px',
+          rounded: 'sm',
+          layerStyle: 'focusable',
         })}
       >
         로그인 화면
