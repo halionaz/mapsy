@@ -1,3 +1,4 @@
+import { categoryLabel, type SubcategoryId } from '@/shared/config/categories'
 import { colorLabel, type ColorId } from '@/shared/config/colors'
 import { seasonLabel, type SeasonId } from '@/shared/config/seasons'
 import { EMPTY_FILTERS, type WardrobeFilters } from '../model/filters'
@@ -10,15 +11,26 @@ import { EMPTY_FILTERS, type WardrobeFilters } from '../model/filters'
  * shows that choice as a selected chip, and repeating it in the summary row
  * would give one filter two different places to be turned off.
  *
- * `query`, `status` and `sort` are not filters in this sense either — the search
- * box holds one, the wardrobe/처분함 switch holds the next, and the third
- * reorders rather than removes.
+ * `query` and `sort` are not filters in this sense either — the search box holds
+ * one, and the other reorders rather than removes. `status` is not reachable
+ * from this screen at all: the wardrobe always draws `owned`, and 처분한 옷 is a
+ * section of the settings screen with its own predicate.
  */
 
-/** The axes the sheet owns, i.e. everything the summary row can clear. */
-const LIST_AXES = ['colors', 'seasons', 'sizes', 'fits', 'brands', 'tags'] as const
-
-type ListAxis = (typeof LIST_AXES)[number]
+/**
+ * The axes of `WardrobeFilters` that are removable value lists, named by
+ * subtraction rather than by hand.
+ *
+ * Adding an axis to `WardrobeFilters` therefore adds it here, and the `Record`
+ * below stops compiling until it is given a label. The previous hand-written
+ * list had already drifted — `categoryIds` was missing from it, so a filter set
+ * through that axis would have been applied by `applyFilters` and counted as
+ * zero here, leaving 초기화 disabled while the grid was filtered.
+ */
+type ListAxis = Exclude<
+  keyof WardrobeFilters,
+  'query' | 'groupIds' | 'status' | 'sort' | 'favoriteOnly'
+>
 
 export type FilterAxis = ListAxis | 'favoriteOnly'
 
@@ -30,19 +42,25 @@ export interface AppliedFilter {
   value?: string
 }
 
-function labelFor(axis: ListAxis, value: string): string {
-  if (axis === 'colors') return colorLabel(value as ColorId)
-  if (axis === 'seasons') return seasonLabel(value as SeasonId)
-  if (axis === 'tags') return `#${value}`
-  return value
+/** How each axis renders one of its values. Declaration order is chip order. */
+const AXIS_LABELS: Record<ListAxis, (value: string) => string> = {
+  categoryIds: (value) => categoryLabel(value as SubcategoryId),
+  colors: (value) => colorLabel(value as ColorId),
+  seasons: (value) => seasonLabel(value as SeasonId),
+  sizes: (value) => value,
+  fits: (value) => value,
+  brands: (value) => value,
+  tags: (value) => `#${value}`,
 }
+
+const LIST_AXES = Object.keys(AXIS_LABELS) as ListAxis[]
 
 export function appliedFilters(filters: WardrobeFilters): AppliedFilter[] {
   const applied: AppliedFilter[] = []
 
   for (const axis of LIST_AXES) {
     for (const value of filters[axis]) {
-      applied.push({ key: `${axis}:${value}`, label: labelFor(axis, value), axis, value })
+      applied.push({ key: `${axis}:${value}`, label: AXIS_LABELS[axis](value), axis, value })
     }
   }
 

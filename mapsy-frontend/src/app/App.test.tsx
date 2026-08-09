@@ -48,7 +48,10 @@ describe('App', () => {
 
     expect(screen.getByRole('heading', { name: /내 옷장/ })).toBeDefined()
     expect(screen.getByLabelText('옷 검색')).toBeDefined()
-    expect(screen.getByLabelText('옷 등록')).toBeDefined()
+    // The empty state's own CTA, not the FAB — the FAB is hidden while the
+    // wardrobe is empty so the screen offers one route to registration.
+    expect(screen.getByRole('link', { name: /첫 옷 등록하기/ })).toBeDefined()
+    expect(screen.queryByLabelText('옷 등록')).toBeNull()
   })
 
   it('says it is in preview mode when Supabase is unconfigured', () => {

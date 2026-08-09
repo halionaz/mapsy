@@ -23,8 +23,19 @@ export const toaster = createToaster({
   max: 3,
   gap: 10,
   duration: 3200,
-  // Cleared past the FAB on the wardrobe screen, which sits at 24px above the
-  // safe-area inset and would otherwise be covered by every toast. zag composes
-  // this with `env(safe-area-inset-bottom)` itself.
-  offsets: { top: '1rem', bottom: '5.5rem', left: '1rem', right: '1rem' },
+  // Cleared past the FAB on the wardrobe screen, which is centred on the same
+  // edge and whose top sits at `24px + safe-b + 44px`.
+  //
+  // The inset has to be added here rather than left to the machine: zag resolves
+  // the offset as `max(env(safe-area-inset-bottom), offset)`, not as a sum. A
+  // flat `5.5rem` therefore stayed at 88px while the FAB rose with the inset, so
+  // on every notched phone — 34px of inset puts the FAB's top at 102px — a toast
+  // covered the register button for its whole life. Desktop, where the inset is
+  // 0, was the only place it looked right.
+  offsets: {
+    top: '1rem',
+    bottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))',
+    left: '1rem',
+    right: '1rem',
+  },
 })

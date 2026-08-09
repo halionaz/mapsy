@@ -15,7 +15,8 @@ type IconButtonVariants = NonNullable<RecipeVariantProps<typeof iconButtonStyle>
 // clone, so a button that silently drops it is a dialog that cannot place focus.
 interface ButtonProps extends Omit<React.ComponentProps<'button'>, 'className'>, ButtonVariants {
   /**
-   * Swaps the label for a spinner and disables the button.
+   * Puts a spinner *before* the label and disables the button. It does not
+   * replace the label — callers that want one ("저장 중…") pass it themselves.
    *
    * Separate from `disabled` because the two mean different things to a screen
    * reader: `aria-busy` says the press was received and is being worked on,

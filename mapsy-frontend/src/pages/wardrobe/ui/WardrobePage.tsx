@@ -14,9 +14,9 @@ import {
   useWardrobe,
 } from '@/entities/item'
 import {
-  activeFilterCount,
   applyFilters,
   appliedFilters,
+  clearFilters,
   deriveFilterOptions,
   EMPTY_FILTERS,
   removeApplied,
@@ -54,15 +54,24 @@ export function WardrobePage() {
   const [filters, setFilters] = useState<WardrobeFilters>(EMPTY_FILTERS)
   const [sheetOpen, setSheetOpen] = useState(false)
   const stickSentinel = useRef<HTMLDivElement>(null)
-  const stuck = useScrolledPast(stickSentinel, 0)
+  const stuck = useScrolledPast(stickSentinel)
 
   const entries = useMemo(() => data ?? [], [data])
   const visible = useMemo(() => applyFilters(entries, filters), [entries, filters])
-  const options = useMemo(() => deriveFilterOptions(entries), [entries])
+  // From the same population the grid draws from, not from every row. The grid
+  // only ever shows `filters.status`, so a brand that exists solely on a
+  // disposed garment would be offered as a chip that cannot match anything —
+  // and a filter that returns nothing reads as the user's mistake.
+  const options = useMemo(
+    () => deriveFilterOptions(entries.filter((entry) => entry.status === filters.status)),
+    [entries, filters.status],
+  )
   const applied = appliedFilters(filters)
-  const filterCount = activeFilterCount(filters)
+  // The same list, not a second walk of the same axes.
+  const filterCount = applied.length
   const ownedCount = entries.filter((entry) => entry.status === 'owned').length
   const activeGroup = filters.groupIds[0] ?? null
+  const isEmpty = entries.length === 0 && pending.length === 0
 
   function setGroup(groupId: CategoryGroupId | null) {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
@@ -218,7 +227,7 @@ export function WardrobePage() {
             title="옷장을 불러오지 못했어요"
             description={errorMessage(error)}
           />
-        ) : entries.length === 0 && pending.length === 0 ? (
+        ) : isEmpty ? (
           <EmptyState
             icon={<Shirt size={24} />}
             title="아직 등록한 옷이 없어요"
@@ -238,7 +247,18 @@ export function WardrobePage() {
               <button
                 type="button"
                 className={buttonStyle({ variant: 'outline' })}
-                onClick={() => setFilters(EMPTY_FILTERS)}
+                // `clearFilters`, like the sheet's 초기화, plus the two things
+                // this button can also see: the search box and the category
+                // rail. `EMPTY_FILTERS` additionally reset the sort, so
+                // pressing it while reading 가격 높은순 silently went back to
+                // 최근 등록순 — two controls, one wording, different effects.
+                onClick={() =>
+                  setFilters((current) => ({
+                    ...clearFilters(current),
+                    query: '',
+                    groupIds: [],
+                  }))
+                }
               >
                 필터 모두 해제
               </button>
@@ -282,9 +302,14 @@ export function WardrobePage() {
         )}
       </main>
 
-      <Link to="/items/new" aria-label="옷 등록" className={cx(buttonStyle(), fab)}>
-        <Plus size={18} />옷 등록
-      </Link>
+      {/* Hidden while the wardrobe is empty: that screen already offers 첫 옷
+          등록하기 in the middle of it, and two identical pills pointing at the
+          same route is the app asking twice. */}
+      {!isEmpty && (
+        <Link to="/items/new" aria-label="옷 등록" className={cx(buttonStyle(), fab)}>
+          <Plus size={18} />옷 등록
+        </Link>
+      )}
 
       <WardrobeFilterSheet
         open={sheetOpen}
@@ -299,6 +324,11 @@ export function WardrobePage() {
 }
 
 const titleBlock = css({
+  // Positioned, so its text paints above the wash rather than under it. A
+  // non-positioned block's inline content is painted before positioned siblings
+  // with `z-index: auto` (CSS 2.1 Appendix E, step 7 before step 8), so the
+  // decoration was sitting on top of the screen's own name.
+  position: 'relative',
   px: '5',
   pt: 'calc({spacing.4} + var(--safe-t))',
   pb: '4',
@@ -368,7 +398,12 @@ const controls = css({
   display: 'flex',
   flexDirection: 'column',
   gap: '3',
-  pt: '1',
+  // The inset belongs to whichever surface reaches the top edge of the display,
+  // and once the title has scrolled away that is this bar. It used to live on
+  // the sticky header this bar was split out of; leaving it on the title block
+  // alone meant the search field spent every scroll under the clock, on any
+  // notched phone with `viewport-fit=cover`.
+  pt: 'calc({spacing.1} + var(--safe-t))',
   pb: '3',
   bg: 'transparent',
   borderBottomWidth: '1px',

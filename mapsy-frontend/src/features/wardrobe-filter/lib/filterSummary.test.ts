@@ -40,6 +40,19 @@ describe('appliedFilters', () => {
     expect(appliedFilters(filters({ groupIds: ['top'] }))).toEqual([])
   })
 
+  /**
+   * `categoryIds` was missing from the hand-written axis list while being a real
+   * field on `WardrobeFilters` that `applyFilters` honours — so a filter set
+   * through it would have narrowed the grid while counting as zero here, leaving
+   * 초기화 disabled over a filtered screen. The list is now derived from the
+   * type, and this holds that derivation down.
+   */
+  it('covers every value axis the filter type has, including the unused one', () => {
+    const applied = appliedFilters(filters({ categoryIds: ['top.tshirt_short'] }))
+    expect(applied).toHaveLength(1)
+    expect(applied[0].axis).toBe('categoryIds')
+  })
+
   it('does not treat the search query, status or sort as removable filters', () => {
     const busy = filters({ query: '플리스', status: 'disposed', sort: 'price_desc' })
     expect(appliedFilters(busy)).toEqual([])

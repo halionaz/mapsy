@@ -72,10 +72,6 @@ export default defineConfig({
           from: { opacity: '1', transform: 'scale(1)' },
           to: { opacity: '0', transform: 'scale(0.96)' },
         },
-        toastIn: {
-          from: { opacity: '0', transform: 'translateY(12px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
-        },
         spin: {
           to: { transform: 'rotate(360deg)' },
         },
@@ -135,7 +131,6 @@ export default defineConfig({
           sheetOut: { value: 'drawerOut {durations.normal} {easings.inOut}' },
           dialogIn: { value: 'popIn {durations.normal} {easings.out}' },
           dialogOut: { value: 'popOut {durations.fast} {easings.inOut}' },
-          toastIn: { value: 'toastIn {durations.normal} {easings.out}' },
           spin: { value: 'spin 0.8s linear infinite' },
         },
 
@@ -143,7 +138,6 @@ export default defineConfig({
           header: { value: 10 },
           fab: { value: 20 },
           overlay: { value: 40 },
-          toast: { value: 60 },
         },
 
         colors: {
@@ -273,10 +267,6 @@ export default defineConfig({
             elevatedHover: {
               value: { base: '{colors.neutral.100}', _dark: '{colors.neutral.800}' },
             },
-            // A pressed or currently-selected row.
-            active: {
-              value: { base: '{colors.neutral.200}', _dark: '{colors.neutral.850}' },
-            },
           },
 
           fg: {
@@ -328,7 +318,7 @@ export default defineConfig({
             text: {
               value: { base: '{colors.brand.700}', _dark: '{colors.brand.400}' },
             },
-            // A tinted surface: selected filter summary, the favourite pill.
+            // A tinted surface. One user today — the preview-mode banner.
             subtle: {
               value: { base: '{colors.brand.50}', _dark: '{colors.brand.tintDark}' },
             },
@@ -350,16 +340,6 @@ export default defineConfig({
         },
 
         shadows: {
-          // Cards do not float in light mode — a hairline does that job there,
-          // and a drop shadow under every tile in a 3-column grid is what makes
-          // a page look like a template. In dark mode there is no hairline worth
-          // seeing, so a soft shadow carries the separation instead.
-          card: {
-            value: {
-              base: '0 1px 2px rgba(12, 11, 10, 0.06)',
-              _dark: '0 2px 8px rgba(0, 0, 0, 0.5)',
-            },
-          },
           raised: {
             value: {
               base: '0 8px 24px rgba(12, 11, 10, 0.12)',

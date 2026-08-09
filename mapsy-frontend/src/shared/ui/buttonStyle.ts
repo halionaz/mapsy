@@ -93,6 +93,25 @@ export const buttonStyle = cva({
         color: 'danger',
         '&:hover:not(:disabled)': { bg: 'danger.subtle' },
       },
+      /**
+       * A filled destructive button — the confirm in a delete dialog.
+       *
+       * `danger` above is the text-button form, for a delete that is one option
+       * among several on a page. This is for the screen whose whole purpose is
+       * that one action.
+       *
+       * A variant rather than a `cx` with a red fill on top of `solid`, which is
+       * what this was and what it silently was not: `cx` joins class names, so
+       * `.bg_danger` and `.bg_accent` had equal specificity and the winner was
+       * whichever Panda wrote later — `.bg_accent`, by 389 bytes. The confirm
+       * button on an irreversible delete was drawn in brand orange, pixel for
+       * pixel identical to the sign-out one.
+       */
+      destructive: {
+        bg: 'danger',
+        color: 'danger.fg',
+        '&:hover:not(:disabled)': { opacity: 0.88 },
+      },
     },
 
     size: {

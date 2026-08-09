@@ -47,7 +47,18 @@ export function LoginPage() {
     <div className={screen}>
       <div className={glow} aria-hidden="true" />
 
-      <div className={vstack({ gap: '10', justify: 'center', flex: '1', width: 'full' })}>
+      {/* Positioned, so the wordmark paints above the glow. A non-positioned
+          block's inline content is painted before positioned siblings with
+          `z-index: auto`, which put the decoration in front of the app's name. */}
+      <div
+        className={vstack({
+          gap: '10',
+          justify: 'center',
+          flex: '1',
+          width: 'full',
+          position: 'relative',
+        })}
+      >
         <div className={vstack({ gap: '3' })}>
           <h1 className={wordmark}>mapsy</h1>
           <p className={css({ textStyle: 'body', color: 'fg.muted' })}>
@@ -145,6 +156,9 @@ const screen = css({
 /**
  * The one decorative element in the app: a wash of brand orange behind the
  * wordmark, clipped by the screen.
+ *
+ * Behind it only because the content wrapper above is positioned — see the note
+ * there. Left unpositioned, this paints over the text.
  *
  * A radial gradient rather than a blurred box — `filter: blur()` on an element
  * this large is a full-screen offscreen buffer on a phone, and it is the first

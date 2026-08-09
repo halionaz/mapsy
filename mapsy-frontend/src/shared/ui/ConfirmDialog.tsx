@@ -75,10 +75,10 @@ export function ConfirmDialog({
                 </Button>
               </Dialog.CloseTrigger>
               <Button
+                variant={destructive ? 'destructive' : 'solid'}
                 full
                 loading={pending}
                 onClick={onConfirm}
-                className={destructive ? destructiveFill : undefined}
               >
                 {confirmLabel}
               </Button>
@@ -89,21 +89,6 @@ export function ConfirmDialog({
     </Dialog.Root>
   )
 }
-
-/**
- * The destructive confirm button.
- *
- * A `danger` *fill* rather than another variant on `buttonStyle`: the recipe's
- * `danger` is a text button, used where deletion is one option among several on
- * a page. Here the whole dialog exists to ask about this one action, so it is
- * the filled button — and that is a property of this dialog, not a sixth button
- * variant the rest of the app can reach for.
- */
-const destructiveFill = css({
-  bg: 'danger',
-  color: 'danger.fg',
-  '&:hover:not(:disabled)': { bg: 'danger', opacity: 0.88 },
-})
 
 const backdrop = css({
   position: 'fixed',

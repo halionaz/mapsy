@@ -34,4 +34,23 @@ describe('buttonStyle', () => {
   it('keeps an ordinary button rigid', () => {
     expect(buttonStyle()).toContain('flex-sh_0')
   })
+
+  /**
+   * The confirm button on an irreversible delete has to be red.
+   *
+   * It was not. `destructive` was a red fill `cx`'d over `variant="solid"`, and
+   * `cx` joins class names without merging them — `.bg_danger` and `.bg_accent`
+   * had equal specificity, so the winner was whichever Panda happened to write
+   * later in the stylesheet, which was `.bg_accent`. The delete button rendered
+   * in brand orange, indistinguishable from the sign-out one.
+   *
+   * Asserting the accent is *absent* is the half that matters: a test that only
+   * checked for `bg_danger` would have passed against the broken version.
+   */
+  it('paints the destructive variant in danger, with no accent fill left behind', () => {
+    const classes = buttonStyle({ variant: 'destructive' })
+
+    expect(classes).toContain('bg_danger')
+    expect(classes).not.toContain('bg_accent')
+  })
 })

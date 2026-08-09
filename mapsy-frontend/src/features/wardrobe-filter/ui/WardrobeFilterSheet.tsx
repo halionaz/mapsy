@@ -71,7 +71,10 @@ export function WardrobeFilterSheet({
           label="정렬"
           options={SORT_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
           selected={[filters.sort]}
-          onChange={(next) => onChange({ ...filters, sort: (next[0] ?? 'recent') as SortId })}
+          // `next[0]`, unguarded: `clearable={false}` makes ChipGroup return
+          // early rather than call back when the active chip is tapped again,
+          // so every call that arrives carries exactly one value.
+          onChange={(next) => onChange({ ...filters, sort: next[0] as SortId })}
           // Sorting is not an axis that can be off — clearing it would leave the
           // grid in whatever order the last comparator happened to produce.
           clearable={false}

@@ -220,7 +220,11 @@ export function ItemDetailPage() {
         )}
 
         <div className={hstack({ gap: '2' })}>
-          <Link to={`/items/${item.id}/edit`} className={cx(buttonStyle({ full: true }), css({ flex: '1' }))}>
+          {/* No `flex: '1'` on top: `full` already means "take the rest of the
+              line", and stacking a `flex` shorthand on a recipe that sets
+              `flex-shrink` and `width` is the order-dependent override this
+              branch documented a rule against. */}
+          <Link to={`/items/${item.id}/edit`} className={buttonStyle({ full: true })}>
             <Pencil size={16} />
             편집
           </Link>
