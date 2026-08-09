@@ -43,6 +43,24 @@ export const buttonStyle = cva({
     transitionDuration: 'fast',
     transitionTimingFunction: 'out',
     layerStyle: 'focusable',
+    /**
+     * Every glyph inside a button, sized by the button.
+     *
+     * `--button-icon` reached only the spinner for a while, which left the swap
+     * half-bound: the icon a caller passed still carried its own number, so
+     * raising a size variant moved the spinner and left the icon behind — the
+     * jump this was meant to remove, in the other direction. It also let the
+     * same glyph be two sizes in one file, `Plus` at 17 in the empty state and
+     * 18 in the FAB, because nothing was comparing them.
+     *
+     * Here it covers the icon, the spinner and anything a `<Link>` wearing this
+     * recipe puts inside itself, so call sites stop passing a size at all.
+     */
+    '& > svg': {
+      width: 'var(--button-icon)',
+      height: 'var(--button-icon)',
+      flexShrink: 0,
+    },
     _disabled: {
       opacity: 0.4,
       cursor: 'not-allowed',

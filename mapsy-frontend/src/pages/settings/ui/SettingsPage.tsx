@@ -93,7 +93,7 @@ export function SettingsPage() {
             variant="outline"
             shape="block"
             full
-            icon={<LogOut size={16} />}
+            icon={<LogOut />}
             onClick={() => setConfirmingSignOut(true)}
             disabled={signingOut}
           >

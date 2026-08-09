@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router'
 
 import { Toaster } from '@/shared/ui/Toaster'
+import { ErrorBoundary } from '../ErrorBoundary'
 
 /**
  * Everything the screens need to be mounted inside, in one place — so `App`
@@ -34,7 +35,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        {children}
+        {/* Inside the router so the fallback is laid out like a screen, and
+            outside the screens so it survives whichever one threw. */}
+        <ErrorBoundary>{children}</ErrorBoundary>
         {/* Outside the router's screens on purpose: a toast raised by a mutation
             that navigates on success must outlive the screen that raised it. */}
         <Toaster />

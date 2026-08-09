@@ -39,16 +39,6 @@ interface ButtonProps extends Omit<React.ComponentProps<'button'>, 'className'>,
 }
 
 /**
- * The spinner that stands in for `icon`, sized by the button rather than by this
- * file — `buttonStyle`'s size variants publish `--button-icon`, so the component
- * never learns what the sizes are and the recipe's default keeps governing.
- */
-const buttonSpinner = css({
-  width: 'var(--button-icon, 16px)',
-  height: 'var(--button-icon, 16px)',
-})
-
-/**
  * Sets `type="button"` by default.
  *
  * The HTML default is `submit`, which inside `<form>` turns every unlabelled
@@ -76,7 +66,7 @@ export function Button({
       className={cx(buttonStyle({ variant, size, shape, full }), className)}
       {...props}
     >
-      {loading ? <Spinner className={buttonSpinner} /> : icon}
+      {loading ? <Spinner /> : icon}
       {children}
     </button>
   )
@@ -113,14 +103,19 @@ export function IconButton({
   )
 }
 
-export function Spinner({ size = 16, className }: { size?: number; className?: string }) {
+/**
+ * `size` is for spinners outside a button — a loading screen, a photo tile.
+ * Inside one, `buttonStyle` sizes every glyph it contains and this is ignored.
+ */
+export function Spinner({ size = 16 }: { size?: number }) {
   return (
     <LoaderCircle
       size={size}
       aria-hidden="true"
-      // `className` may override the width and height the `size` attribute sets;
-      // nothing in the base rule touches either, so there is no conflict to lose.
-      className={cx(css({ animation: 'spin', _motionReduce: { animation: 'none', opacity: 0.6 } }), className)}
+      className={css({
+        animation: 'spin',
+        _motionReduce: { animation: 'none', opacity: 0.6 },
+      })}
     />
   )
 }

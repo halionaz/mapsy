@@ -321,7 +321,7 @@ export function WardrobePage() {
             <Button
               size="sm"
               variant="outline"
-              icon={<RotateCcw size={14} />}
+              icon={<RotateCcw />}
               loading={isFetching}
               onClick={() => void refetch()}
             >
@@ -360,7 +360,7 @@ export function WardrobePage() {
               // silent seconds, and the user presses again — once per press.
               <Button
                 variant="outline"
-                icon={<RotateCcw size={16} />}
+                icon={<RotateCcw />}
                 loading={isFetching}
                 onClick={() => void refetch()}
               >
@@ -375,7 +375,7 @@ export function WardrobePage() {
             description="사진 찍고 이름만 붙이면 등록 끝. 나머지는 나중에 채워도 괜찮아요."
             action={
               <Link to="/items/new" className={buttonStyle()}>
-                <Plus size={17} />첫 옷 등록하기
+                <Plus />첫 옷 등록하기
               </Link>
             }
           />
@@ -452,7 +452,7 @@ export function WardrobePage() {
           identical pills pointing at the same route is the app asking twice. */}
       {view !== 'empty' && (
         <Link to="/items/new" aria-label="옷 등록" className={cx(buttonStyle(), fab)}>
-          <Plus size={18} />옷 등록
+          <Plus />옷 등록
         </Link>
       )}
 

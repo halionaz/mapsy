@@ -225,7 +225,7 @@ export function ItemDetailPage() {
               `flex-shrink` and `width` is the order-dependent override this
               branch documented a rule against. */}
           <Link to={`/items/${item.id}/edit`} className={buttonStyle({ full: true })}>
-            <Pencil size={16} />
+            <Pencil />
             편집
           </Link>
           <Button
@@ -244,7 +244,7 @@ export function ItemDetailPage() {
                 },
               )
             }
-            icon={disposed ? <ArchiveRestore size={16} /> : <PackageOpen size={16} />}
+            icon={disposed ? <ArchiveRestore /> : <PackageOpen />}
             loading={setStatus.isPending}
           >
             {disposed ? '다시 보유로' : '처분'}
@@ -271,7 +271,7 @@ export function ItemDetailPage() {
           variant="danger"
           shape="block"
           full
-          icon={<Trash2 size={16} />}
+          icon={<Trash2 />}
           onClick={() => setConfirmingDelete(true)}
           disabled={remove.isPending}
         >

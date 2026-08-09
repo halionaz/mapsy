@@ -20,19 +20,33 @@ import { buttonStyle } from './buttonStyle'
  * renames the utilities these fail loudly rather than quietly stopping to check
  * anything.
  */
+
+/**
+ * Class names, as a set of whole tokens.
+ *
+ * Substring matching was wrong here the moment the recipe grew a rule for its
+ * child glyphs: `[&>svg]:flex-sh_0` contains `flex-sh_0`, so an assertion that
+ * the button does not shrink started failing over a declaration that applies to
+ * an icon inside it. The atomic class is the unit being asserted, so compare
+ * against the units.
+ */
+function classes(recipe: string): Set<string> {
+  return new Set(recipe.split(/\s+/).filter(Boolean))
+}
+
 describe('buttonStyle', () => {
   it('lets a full-width button shrink, so it fills a flex row instead of overflowing it', () => {
-    const classes = buttonStyle({ full: true })
+    const applied = classes(buttonStyle({ full: true }))
 
-    expect(classes).toContain('flex-sh_1')
-    expect(classes).not.toContain('flex-sh_0')
+    expect(applied).toContain('flex-sh_1')
+    expect(applied).not.toContain('flex-sh_0')
     // Without this the label's min-content width is the floor and the shrink,
     // though permitted, has nowhere to go.
-    expect(classes).toContain('min-w_0')
+    expect(applied).toContain('min-w_0')
   })
 
   it('keeps an ordinary button rigid', () => {
-    expect(buttonStyle()).toContain('flex-sh_0')
+    expect(classes(buttonStyle())).toContain('flex-sh_0')
   })
 
   /**
@@ -48,9 +62,9 @@ describe('buttonStyle', () => {
    * checked for `bg_danger` would have passed against the broken version.
    */
   it('paints the destructive variant in danger, with no accent fill left behind', () => {
-    const classes = buttonStyle({ variant: 'destructive' })
+    const applied = classes(buttonStyle({ variant: 'destructive' }))
 
-    expect(classes).toContain('bg_danger')
-    expect(classes).not.toContain('bg_accent')
+    expect(applied).toContain('bg_danger')
+    expect(applied).not.toContain('bg_accent')
   })
 })
