@@ -109,7 +109,7 @@ export function WardrobePage() {
   // behind a load failure the moment a focus refetch missed.
   const answered = data !== undefined
 
-  const view = isLoading
+  const view: View = isLoading
     ? 'loading'
     : error != null && !answered
       ? 'failed'
@@ -122,12 +122,10 @@ export function WardrobePage() {
   /**
    * A failure worth mentioning over the top of a screen that still works.
    *
-   * Derived from `view` rather than re-tested against `hasWardrobe`, so it
-   * cannot disagree with the branch that is actually drawn. The listed views are
-   * spelled out rather than negated: a view added later has to be placed here on
-   * purpose instead of inheriting a banner nobody chose for it.
+   * Read off `view` rather than re-tested against `hasWardrobe`, so it cannot
+   * disagree with the branch that is actually drawn.
    */
-  const stale = error != null && (view === 'empty' || view === 'noMatches' || view === 'grid')
+  const stale = error != null && SHOWS_STALE_NOTICE[view]
 
   function setGroup(groupId: CategoryGroupId | null) {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
@@ -284,9 +282,13 @@ export function WardrobePage() {
           <div className={staleNotice}>
             <TriangleAlert size={15} aria-hidden="true" className={css({ flexShrink: 0 })} />
             <span className={css({ flex: '1' })}>최신 목록을 불러오지 못했어요</span>
+            {/* `outline`, not `ghost`: a ghost button's hover fill is
+                `bg.subtle`, which is what this banner is painted in, so hovering
+                changed only the text colour. An outline carries its own edge and
+                that edge is what moves. */}
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
               icon={<RotateCcw size={14} />}
               loading={isFetching}
               onClick={() => void refetch()}
@@ -440,6 +442,25 @@ export function WardrobePage() {
  * above it remembered to be `position: relative` — a contract kept by comments
  * in two files, and already only half kept: `main` never was.
  */
+type View = 'loading' | 'failed' | 'empty' | 'noMatches' | 'grid'
+
+/**
+ * Which screens the stale banner belongs on.
+ *
+ * A `Record` rather than a list of `view === …` comparisons: the comparisons
+ * said in prose that a new view "has to be placed here on purpose", and prose
+ * does not stop anyone — a sixth view would simply never get a banner, silently.
+ * Keyed by the union, adding one stops the compiler until it is answered for.
+ */
+const SHOWS_STALE_NOTICE: Record<View, boolean> = {
+  loading: false,
+  // The whole screen is already the failure; a banner on top would say it twice.
+  failed: false,
+  empty: true,
+  noMatches: true,
+  grid: true,
+}
+
 const page = cx(
   vstack({ gap: '0', alignItems: 'stretch', flex: '1' }),
   css({
@@ -578,13 +599,7 @@ const statusStripScrim = css({
 })
 
 /**
- * The line that says the list may be out of date.
- *
- * `role="alert"` rather than a toast: it has to stay while the condition does,
- * and a toast that slides away leaves no way to ask again.
- */
-/**
- * Informational, not alarming.
+ * The line that says the list may be out of date. Informational, not alarming.
  *
  * It was drawn in `danger`, the same pair as a validation error that blocks
  * submission and the confirm on a delete. Nothing here is broken — the garments

@@ -39,14 +39,6 @@ interface ButtonProps extends Omit<React.ComponentProps<'button'>, 'className'>,
 }
 
 /**
- * Sets `type="button"` by default.
- *
- * The HTML default is `submit`, which inside `<form>` turns every unlabelled
- * helper — 취소, a disclosure toggle — into a second submit button. The item form
- * had exactly that shape, so the default is inverted here once instead of being
- * remembered at each call site.
- */
-/**
  * What the spinner replaces the icon with, per size.
  *
  * Here rather than at the call site, because the call site already handed over
@@ -56,9 +48,21 @@ interface ButtonProps extends Omit<React.ComponentProps<'button'>, 'className'>,
  */
 const SPINNER_SIZE = { sm: 14, md: 16, lg: 18 } as const
 
+/**
+ * Sets `type="button"` by default.
+ *
+ * The HTML default is `submit`, which inside `<form>` turns every unlabelled
+ * helper — 취소, a disclosure toggle — into a second submit button. The item form
+ * had exactly that shape, so the default is inverted here once instead of being
+ * remembered at each call site.
+ */
 export function Button({
   variant,
-  size,
+  // Defaulted here rather than read as `size ?? 'md'` at the two places that
+  // need it. The recipe also defaults to `md`, and a literal in both spots is
+  // one to change and one to forget — raising the recipe's default to `lg` grew
+  // the button and left the spinner at 16px.
+  size = 'md',
   shape,
   full,
   icon,
@@ -76,7 +80,7 @@ export function Button({
       className={cx(buttonStyle({ variant, size, shape, full }), className)}
       {...props}
     >
-      {loading ? <Spinner size={SPINNER_SIZE[size ?? 'md']} /> : icon}
+      {loading ? <Spinner size={SPINNER_SIZE[size]} /> : icon}
       {children}
     </button>
   )

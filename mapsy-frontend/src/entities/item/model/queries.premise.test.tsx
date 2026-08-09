@@ -57,7 +57,11 @@ describe('react-query, the premise the wardrobe rests on', () => {
     // The three facts the screen reads, in the state that produced the bug: rows
     // still in hand, a failure to report, and no reason to draw skeletons.
     expect(result.current.data).toEqual(['마산 플리스'])
-    expect(result.current.error).not.toBeNull()
+    // `toBeInstanceOf`, not `not.toBeNull()` — that one is `!== null`, so an
+    // upgrade that reported failures as `undefined` would keep this test green
+    // while the screen's `error != null` quietly stopped matching and the
+    // failure went unmentioned. Which is the scenario this file exists for.
+    expect(result.current.error).toBeInstanceOf(Error)
     expect(result.current.isLoading).toBe(false)
   })
 })
