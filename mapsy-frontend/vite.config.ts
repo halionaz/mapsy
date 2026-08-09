@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -38,6 +39,12 @@ export default defineConfig({
       },
     }),
   ],
+
+  test: {
+    // Browser APIs jsdom does not implement. Runs for every test file, including
+    // the node-environment ones, where the stubs are simply never touched.
+    setupFiles: ['./vitest.setup.ts'],
+  },
 
   resolve: {
     alias: {

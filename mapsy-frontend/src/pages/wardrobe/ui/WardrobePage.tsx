@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Plus, Search, SearchX, Settings, Shirt, SlidersHorizontal, TriangleAlert, X } from 'lucide-react'
 import { Link } from 'react-router'
 import { css, cx } from 'styled-system/css'
@@ -31,6 +31,7 @@ import { chipStyle } from '@/shared/ui/chipStyle'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { inputStyle } from '@/shared/ui/fieldStyle'
 import { skeletonSurface } from '@/shared/ui/skeletonStyle'
+import { useScrolledPast } from '@/shared/ui/useScrolledPast'
 
 /**
  * 내 옷장 — the home screen (PRD §6.1).
@@ -52,6 +53,8 @@ export function WardrobePage() {
 
   const [filters, setFilters] = useState<WardrobeFilters>(EMPTY_FILTERS)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const stickSentinel = useRef<HTMLDivElement>(null)
+  const stuck = useScrolledPast(stickSentinel, 0)
 
   const entries = useMemo(() => data ?? [], [data])
   const visible = useMemo(() => applyFilters(entries, filters), [entries, filters])
@@ -68,9 +71,10 @@ export function WardrobePage() {
   const sortLabel = SORT_OPTIONS.find((option) => option.id === filters.sort)?.label ?? ''
 
   return (
-    <div className={vstack({ gap: '0', alignItems: 'stretch', flex: '1' })}>
+    <div className={vstack({ gap: '0', alignItems: 'stretch', flex: '1', position: 'relative' })}>
+      <div className={wash} aria-hidden="true" />
+
       <div className={titleBlock}>
-        <div className={glow} aria-hidden="true" />
         {/* `hstack` centres by default, and that default is the right one here:
             the title's line box is 29px tall and the settings button is a 44px
             tap target, so top-aligning them sat the gear about 8px below the
@@ -86,11 +90,19 @@ export function WardrobePage() {
         </div>
       </div>
 
+      {/* Zero height, and the whole trigger for the bar below.
+          It sits exactly where the bar's top edge rests, so the moment it
+          crosses the top of the viewport is the moment the bar becomes stuck —
+          which is the moment its background has to appear. Measuring the bar
+          itself instead would tie the trigger to its height, and the bar grows a
+          row whenever a filter is applied. */}
+      <div ref={stickSentinel} />
+
       {/* Pinned while the grid scrolls: these are the controls that change what
           is on screen, and having to scroll back up to reach them is what makes
           a long wardrobe tiring to browse. The title above is not a control and
           is allowed to leave. */}
-      <div className={controls}>
+      <div className={controls} data-stuck={stuck || undefined}>
         <div className={hstack({ gap: '2', px: '5' })}>
           <div className={css({ position: 'relative', flex: '1' })}>
             <Search size={16} aria-hidden="true" className={searchIcon} />
@@ -287,11 +299,37 @@ export function WardrobePage() {
 }
 
 const titleBlock = css({
-  position: 'relative',
   px: '5',
   pt: 'calc({spacing.4} + var(--safe-t))',
   pb: '4',
-  overflow: 'hidden',
+})
+
+/**
+ * The colour wash behind the top of the screen.
+ *
+ * Replaces a radial glow that came in from the top-right corner. A corner blob
+ * reads as a decoration someone put on the page; a full-width band that starts
+ * saturated at the very top edge and falls away into the page colour reads as
+ * the page having a top — which is the thing being borrowed here.
+ *
+ * Absolutely positioned inside the screen column rather than fixed, so it
+ * scrolls away with the title instead of sitting under the grid forever. It is
+ * behind the pinned bar (no z-index against the bar's `zIndex: header`), which
+ * is what lets the bar be transparent until it sticks.
+ *
+ * `pointer-events: none` because it covers the title row and the settings link.
+ */
+const wash = css({
+  position: 'absolute',
+  top: '0',
+  insetInline: '0',
+  height: '320px',
+  pointerEvents: 'none',
+  background: 'linear-gradient(180deg, {colors.accent} 0%, transparent 78%)',
+  // The gradient's own alpha does the shape; this sets how loud it starts.
+  // Louder in dark, where the wash has a near-black to sit on and the same
+  // strength would barely register.
+  opacity: { base: 0.1, _dark: 0.18 },
 })
 
 /**
@@ -310,25 +348,19 @@ const titleBlock = css({
 const settingsLink = cx(iconButtonStyle(), css({ mr: '-3' }))
 
 /**
- * A wash of brand orange behind the screen's name.
+ * The pinned control bar, and the two states it has.
  *
- * The same device as the login screen, at a quarter of the strength — enough
- * that the top of the page is not flat black, faint enough that it never
- * competes with a photograph. It scrolls away with the title rather than
- * sitting behind the pinned controls, which is what keeps the grid's background
- * a single colour.
+ * At rest it sits inside the wash and is transparent, so the colour runs
+ * unbroken from the top edge past the chips and out — the bar is part of the
+ * band rather than a panel laid on top of it. Once it sticks there is content
+ * scrolling underneath, so it takes an opaque background; the hairline arrives
+ * with it, because a rule over the wash would be drawing a border around
+ * nothing.
+ *
+ * The switch is exact rather than gradual: `position: sticky` has no in-between,
+ * so the frame the bar starts covering content is the frame the sentinel above
+ * crosses the viewport top. The transition only softens the colour change.
  */
-const glow = css({
-  position: 'absolute',
-  top: '-140%',
-  right: '-30%',
-  width: '90%',
-  aspectRatio: '1',
-  pointerEvents: 'none',
-  background: 'radial-gradient(circle at 50% 50%, {colors.brand.500} 0%, transparent 60%)',
-  opacity: { base: 0.14, _dark: 0.22 },
-})
-
 const controls = css({
   position: 'sticky',
   top: '0',
@@ -338,10 +370,15 @@ const controls = css({
   gap: '3',
   pt: '1',
   pb: '3',
-  bg: 'bg',
+  bg: 'transparent',
   borderBottomWidth: '1px',
   borderBottomStyle: 'solid',
-  borderColor: 'border.subtle',
+  borderColor: 'transparent',
+  transitionProperty: 'background-color, border-color',
+  transitionDuration: 'normal',
+  transitionTimingFunction: 'out',
+  '&[data-stuck]': { bg: 'bg', borderColor: 'border.subtle' },
+  _motionReduce: { transitionDuration: '1ms' },
 })
 
 const searchIcon = css({
