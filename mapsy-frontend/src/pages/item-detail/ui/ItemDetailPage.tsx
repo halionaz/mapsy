@@ -83,7 +83,16 @@ export function ItemDetailPage() {
   // one element across all three and announces each state as it arrives.
   if (isLoading) {
     return (
-      <ScreenHeader title="옷 상세" status="옷 정보를 불러오는 중이에요.">
+      <ScreenHeader
+        title="옷 상세"
+        status="옷 정보를 불러오는 중이에요."
+        // Through `hero`, not as the first thing in the body: the loaded screen
+        // puts its photo outside the body's padding, and a placeholder that sits
+        // inside it is a placeholder in the wrong place — the page would jump
+        // sideways and in by 20px at the moment the item arrives, which is the
+        // reflow these skeletons exist to prevent.
+        hero={<SquarePhoto src={null} alt="" shape="flush" />}
+      >
         <DetailSkeletonBody />
       </ScreenHeader>
     )
@@ -335,11 +344,9 @@ function PhotoStrip({
   const photoCount = photos.length
 
   return (
-    <section aria-label="사진" className={vstack({ gap: '3', alignItems: 'stretch', pt: '2' })}>
+    <section aria-label="사진" className={vstack({ gap: '3', alignItems: 'stretch' })}>
       {photoCount === 0 ? (
-        <div className={css({ px: '5' })}>
-          <SquarePhoto src={null} alt="" fallback="empty" />
-        </div>
+        <SquarePhoto src={null} alt="" fallback="empty" shape="flush" />
       ) : (
         <div ref={stripRef} onScroll={onScroll} className={strip}>
           {/* Driven by the image rows, not by the URLs: the count is known from
@@ -361,10 +368,15 @@ function PhotoStrip({
                 // is the case with a photo in it, where there is no fallback to
                 // draw.
                 fallback={slot.state === 'ready' ? undefined : slot.state}
-                // The stored original keeps the proportions it was shot in, so
-                // it is fitted into the square rather than cropped to it — half
-                // a long coat is not a picture of a coat.
-                fit="contain"
+                // Cropped to fill, not fitted. The stored original keeps the
+                // proportions it was shot in, so this does cut the ends off a
+                // tall garment — which is the trade being made: a hero that
+                // letterboxes a portrait photo puts two bars of page colour down
+                // the sides of the one thing the screen is about. The whole
+                // photograph is one tap away in the viewer, which fits it and
+                // lets it be pinched and panned.
+                fit="cover"
+                shape="flush"
                 // Only the first tile is on screen; the rest are a swipe away,
                 // and fetching all five 1280px originals to show one is a cost
                 // paid on the phone's connection.
@@ -396,24 +408,31 @@ function PhotoStrip({
   )
 }
 
+/**
+ * Full bleed, one photo per screen.
+ *
+ * No padding and no gap, so a tile is exactly the width of the column and a
+ * swipe moves by exactly one photograph. The previous version inset the strip by
+ * the body's padding and left the neighbours peeking, which advertised that
+ * there were more — but it also meant no photo was ever shown whole, and the
+ * item's own picture was the one thing on the screen that never filled it. The
+ * dots under the strip say the same thing without spending the width.
+ */
 const strip = css({
   display: 'flex',
-  gap: '3',
+  gap: '0',
   overflowX: 'auto',
   scrollSnapType: 'x mandatory',
-  // The first and last tiles line up with the body's padding, and the ones in
-  // between sit proud of it — so the strip reads as a row that continues past
-  // the screen rather than a single cropped photo.
-  scrollPaddingInline: '5',
-  px: '5',
   scrollbarWidth: 'none',
   '&::-webkit-scrollbar': { display: 'none' },
 })
 
 const tile = css({
-  flex: '0 0 calc(100% - {spacing.10})',
-  scrollSnapAlign: 'center',
-  rounded: 'card',
+  flex: '0 0 100%',
+  // `start`, not `center`. With the tile exactly as wide as the strip the two
+  // agree, but `start` keeps agreeing if the column ever gains padding, where
+  // centring would leave every snap position half a padding out.
+  scrollSnapAlign: 'start',
   cursor: 'zoom-in',
   _disabled: { cursor: 'default' },
   // Drawn inside the tile. The strip scrolls on x, which computes overflow-y to
@@ -458,8 +477,8 @@ const disposedNotice = hstack({
 function DetailSkeletonBody() {
   return (
     <div className={vstack({ gap: '7', alignItems: 'stretch' })} aria-hidden="true">
-      <SquarePhoto src={null} alt="" />
-
+      {/* The photo placeholder is the header's `hero`, so that it lands in the
+          same full-bleed square the real strip occupies. */}
       <div className={hstack({ gap: '2' })}>
         <div className={cx(inertButton, css({ flex: '1' }))} />
         <div className={cx(inertButton, css({ width: '24' }))} />

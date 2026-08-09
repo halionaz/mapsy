@@ -17,11 +17,16 @@ import { skeletonSurface } from './skeletonStyle'
  * coming and did not arrive), or the photo faded in over the skeleton.
  *
  * `fit` is the part worth reading before reusing this. Only the *thumbnails* are
- * square — `processPhoto` centre-crops those on upload — while the full-size
- * originals keep their own proportions. So a thumbnail can fill the box
- * (`cover`, and the crop is a no-op because it already happened), and a
- * full-size photo has to be fitted into it (`contain`), or the square would eat
- * the top and bottom of every tall garment.
+ * square — `processPhoto` centre-crops those on upload — so `cover` on a
+ * thumbnail is a no-op, the crop already happened. Full-size originals keep the
+ * proportions they were shot in, so `cover` on one of those genuinely cuts the
+ * top and bottom off a tall garment.
+ *
+ * The detail screen asks for exactly that anyway, on purpose: its photo is the
+ * top of the screen and a letterboxed hero with bars down two sides is not one.
+ * The crop is safe *there* because tapping it opens the full-screen viewer,
+ * which fits the whole photograph and lets it be pinched and panned. Anywhere
+ * that trade is not available, a full-size photo wants `contain`.
  */
 
 /**
@@ -42,8 +47,10 @@ interface SquarePhotoProps {
   alt: string
   /** What `src == null` means here. */
   fallback?: PhotoFallback
-  /** `cover` for pre-cropped thumbnails, `contain` for full-size originals. */
+  /** `cover` fills the square and crops; `contain` fits the whole photo in. */
   fit?: 'cover' | 'contain'
+  /** `flush` drops the corners and hairline, for a photo used as a page edge. */
+  shape?: 'card' | 'flush'
   /** `eager` for a photo that is already on screen, e.g. the first tile. */
   loading?: 'eager' | 'lazy'
   /**
@@ -68,17 +75,38 @@ const FALLBACK_LABELS: Record<Exclude<PhotoFallback, 'pending'>, string> = {
 
 // A span rather than a div: the detail screen wraps this in a <button>, whose
 // content model is phrasing content.
-const frame = css({
-  display: 'block',
-  position: 'relative',
-  aspectRatio: '1',
-  width: 'full',
-  rounded: 'card',
-  overflow: 'hidden',
-  bg: 'bg.subtle',
-  // A garment shot on a white sheet has no edge of its own; without this the
-  // tile bleeds into a light page and floats in a dark one.
-  boxShadow: 'inset 0 0 0 1px {colors.border.subtle}',
+const frame = cva({
+  base: {
+    display: 'block',
+    position: 'relative',
+    aspectRatio: '1',
+    width: 'full',
+    overflow: 'hidden',
+    bg: 'bg.subtle',
+  },
+  variants: {
+    shape: {
+      /** A tile on a page — the wardrobe grid, the picker. */
+      card: {
+        rounded: 'card',
+        // A garment shot on a white sheet has no edge of its own; without this
+        // the tile bleeds into a light page and floats in a dark one.
+        boxShadow: 'inset 0 0 0 1px {colors.border.subtle}',
+      },
+      /**
+       * Edge to edge, as the top of a screen. No corners and no hairline: both
+       * are ways of saying "this is an object on a page", and the point of a
+       * full-bleed photo is that it is the page.
+       *
+       * Stated rather than left to the base, so that giving the base a radius
+       * later cannot quietly round this one. `'0'`, not `'none'` — there is no
+       * `radii.none` token, and Panda passes an unknown value through, so
+       * `rounded: 'none'` emits `border-radius: none` and the browser drops it.
+       */
+      flush: { rounded: '0' },
+    },
+  },
+  defaultVariants: { shape: 'card' },
 })
 
 const skeleton = cx(skeletonSurface, css({ position: 'absolute', inset: '0' }))
@@ -128,6 +156,7 @@ export function SquarePhoto({
   alt,
   fallback = 'pending',
   fit = 'cover',
+  shape = 'card',
   loading = 'lazy',
   onLoadError,
   children,
@@ -208,7 +237,7 @@ export function SquarePhoto({
   const pending = showing === 'pending' || (src != null && outcome == null)
 
   return (
-    <span className={frame}>
+    <span className={frame({ shape })}>
       {pending && <span className={skeleton} />}
 
       {showing != null && showing !== 'pending' && (
