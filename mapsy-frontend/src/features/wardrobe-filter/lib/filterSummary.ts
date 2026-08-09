@@ -35,9 +35,16 @@ import { EMPTY_FILTERS, type WardrobeFilters } from '../model/filters'
  *
  * `groupIds` is the one deliberate exception — a list, but the category rail
  * above the grid already shows and clears it.
+ *
+ * `NonNullable` closes the obvious hole in "a list is an axis": a
+ * `string[] | null` field fails `extends readonly string[]` on the `null` arm
+ * alone and would have dropped out of the list in silence. Stripped of the null
+ * it is picked up as the axis it is, and the `for…of` below then refuses to
+ * compile until the nullability is dealt with — which is the machine catching it
+ * rather than a reader.
  */
 type StringListKey<T> = {
-  [K in keyof T]-?: T[K] extends readonly string[] ? K : never
+  [K in keyof T]-?: NonNullable<T[K]> extends readonly string[] ? K : never
 }[keyof T]
 
 type ListAxis = Exclude<StringListKey<WardrobeFilters>, 'groupIds'>

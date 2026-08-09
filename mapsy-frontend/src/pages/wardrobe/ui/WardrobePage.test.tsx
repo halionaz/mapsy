@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -24,13 +24,18 @@ import { WardrobePage } from './WardrobePage'
 
 const { useWardrobeMock } = vi.hoisted(() => ({ useWardrobeMock: vi.fn() }))
 
+/** The shape `useWardrobe` returns, with only what this screen reads. */
+function query(overrides: Record<string, unknown>) {
+  return { data: undefined, isLoading: false, isFetching: false, error: null, refetch: vi.fn(), ...overrides }
+}
+
 vi.mock('@/entities/item', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/entities/item')>()),
   useWardrobe: useWardrobeMock,
 }))
 
 function renderWardrobe() {
-  render(
+  return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter>
         <WardrobePage />
@@ -46,36 +51,76 @@ afterEach(cleanup)
 
 describe('WardrobePage — the route to registration', () => {
   it('keeps the register button while the wardrobe is still loading', () => {
-    useWardrobeMock.mockReturnValue({ data: undefined, isLoading: true, error: null })
+    useWardrobeMock.mockReturnValue(query({ isLoading: true, isFetching: true }))
     renderWardrobe()
 
     expect(registerFab()).not.toBeNull()
   })
 
   it('keeps the register button when the wardrobe failed to load', () => {
-    useWardrobeMock.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      error: new Error('offline'),
-    })
+    useWardrobeMock.mockReturnValue(query({ error: new Error('offline') }))
     renderWardrobe()
 
     // Otherwise the screen is a dead end: no grid, no empty-state action, and
     // nothing in the corner either.
     expect(registerFab()).not.toBeNull()
-    expect(screen.getByRole('button', { name: /다시 시도/ })).toBeDefined()
+  })
+
+  /**
+   * The retry has to be wired, not merely present.
+   *
+   * Asserting the button exists is the same mistake as asserting a destructive
+   * button carries `bg_danger` without checking that the accent fill is gone: it
+   * passes against a button that does nothing.
+   */
+  it('actually refetches when the retry is pressed', () => {
+    const refetch = vi.fn()
+    useWardrobeMock.mockReturnValue(query({ error: new Error('offline'), refetch }))
+    renderWardrobe()
+
+    fireEvent.click(screen.getByRole('button', { name: /다시 시도/ }))
+
+    expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('will not queue a second refetch while one is in flight', () => {
+    const refetch = vi.fn()
+    useWardrobeMock.mockReturnValue(
+      query({ error: new Error('offline'), isFetching: true, refetch }),
+    )
+    renderWardrobe()
+
+    fireEvent.click(screen.getByRole('button', { name: /다시 시도/ }))
+
+    expect(refetch).not.toHaveBeenCalled()
   })
 
   it('hands the empty wardrobe its own call to action, and only that one', () => {
-    useWardrobeMock.mockReturnValue({ data: [], isLoading: false, error: null })
+    useWardrobeMock.mockReturnValue(query({ data: [] }))
     renderWardrobe()
 
     expect(screen.getByRole('link', { name: /첫 옷 등록하기/ })).toBeDefined()
     expect(registerFab()).toBeNull()
   })
 
+  /**
+   * The wash is `position: absolute` and the page column is what it is measured
+   * against. `isolation: isolate` opens a stacking context but establishes no
+   * containing block, and swapping one property for the other once already sent
+   * the wash to the viewport — an orange band across the full width of any
+   * window wider than the 480px column.
+   */
+  it('keeps the screen column a containing block as well as a stacking context', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    const { container } = renderWardrobe()
+    const column = container.firstElementChild
+
+    expect(column?.className).toContain('pos_relative')
+    expect(column?.className).toContain('isolation_isolate')
+  })
+
   it('shows the register button once there is something in the wardrobe', () => {
-    useWardrobeMock.mockReturnValue({ data: [item()], isLoading: false, error: null })
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
     renderWardrobe()
 
     expect(registerFab()).not.toBeNull()

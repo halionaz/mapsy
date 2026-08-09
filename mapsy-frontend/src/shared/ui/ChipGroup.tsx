@@ -1,7 +1,7 @@
 import { css } from 'styled-system/css'
 import { hstack } from 'styled-system/patterns'
 
-import { chipStyle } from './chipStyle'
+import { chipLegend, chipStyle } from './chipStyle'
 
 /**
  * Selectable chips — the single control the whole app uses for choosing from a
@@ -66,7 +66,7 @@ export function ChipGroup<T extends string>({
 
   return (
     <fieldset className={css({ border: 'none', p: '0', m: '0' })}>
-      <legend className={css({ textStyle: 'caption', color: 'fg.muted', mb: '2.5' })}>
+      <legend className={chipLegend}>
         {label}
         {max != null && (
           <span className={css({ color: 'fg.subtle' })}>{` · 최대 ${max}개`}</span>

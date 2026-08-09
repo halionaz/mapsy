@@ -1,4 +1,3 @@
-import { css } from 'styled-system/css'
 import { vstack } from 'styled-system/patterns'
 
 import { CLOTHING_COLORS, type ColorId } from '@/shared/config/colors'
@@ -6,7 +5,7 @@ import { SEASONS, type SeasonId } from '@/shared/config/seasons'
 import { Button } from '@/shared/ui/Button'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
 import { ChipSelect } from '@/shared/ui/ChipSelect'
-import { chipStyle } from '@/shared/ui/chipStyle'
+import { chipLegend, chipStyle } from '@/shared/ui/chipStyle'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
 import { Sheet } from '@/shared/ui/Sheet'
 import { activeFilterCount, clearFilters } from '../lib/filterSummary'
@@ -80,7 +79,7 @@ export function WardrobeFilterSheet({
         />
 
         <div>
-          <p className={sectionLabel}>즐겨찾기</p>
+          <p className={chipLegend}>즐겨찾기</p>
           <button
             type="button"
             aria-pressed={filters.favoriteOnly}
@@ -154,7 +153,3 @@ export function WardrobeFilterSheet({
     </Sheet>
   )
 }
-
-// Matches ChipGroup's <legend>, so the one section that is a lone toggle rather
-// than a group lines up with the ones around it.
-const sectionLabel = css({ textStyle: 'caption', color: 'fg.muted', mb: '2.5' })

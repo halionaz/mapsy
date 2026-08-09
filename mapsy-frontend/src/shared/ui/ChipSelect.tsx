@@ -1,7 +1,7 @@
 import { css } from 'styled-system/css'
 import { hstack } from 'styled-system/patterns'
 
-import { chipStyle } from './chipStyle'
+import { chipLegend, chipStyle } from './chipStyle'
 import type { ChipOption } from './ChipGroup'
 
 /**
@@ -25,8 +25,12 @@ import type { ChipOption } from './ChipGroup'
  * its label goes blank.
  *
  * Here the empty answer cannot be constructed: `onChange` hands back a value,
- * not a list, and a tap on the already-selected chip is a no-op rather than a
- * clear.
+ * not a list, and a tap on the already-selected chip does nothing at all.
+ *
+ * The chips carry `aria-pressed` rather than radio semantics, matching the
+ * category rail on the home screen. A radiogroup would say "exactly one of
+ * these" more precisely, but doing it properly means roving tabindex and arrow
+ * keys; that is a change to every chip in the app, not to this file.
  */
 interface ChipSelectProps<T extends string> {
   label: string
@@ -44,7 +48,7 @@ export function ChipSelect<T extends string>({
 }: ChipSelectProps<T>) {
   return (
     <fieldset className={css({ border: 'none', p: '0', m: '0' })}>
-      <legend className={css({ textStyle: 'caption', color: 'fg.muted', mb: '2.5' })}>
+      <legend className={chipLegend}>
         {label}
       </legend>
       <div className={hstack({ gap: '2', flexWrap: 'wrap' })}>
@@ -53,7 +57,12 @@ export function ChipSelect<T extends string>({
             key={option.value}
             type="button"
             aria-pressed={value === option.value}
-            onClick={() => onChange(option.value)}
+            // Guarded, so that re-tapping the current choice really is the
+            // no-op this component promises. Unguarded it fired `onChange` with
+            // the value that was already set, and callers do more than store it:
+            // the item form clears 사이즈 and 핏 when the category changes, so
+            // tapping 반팔티 a second time silently emptied both.
+            onClick={() => option.value !== value && onChange(option.value)}
             className={chipStyle({ active: value === option.value })}
           >
             {option.icon}

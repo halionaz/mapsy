@@ -57,7 +57,7 @@ import { useScrolledPast } from '@/shared/ui/useScrolledPast'
  * writable against a single object.
  */
 export function WardrobePage() {
-  const { data, isLoading, error, refetch } = useWardrobe()
+  const { data, isLoading, isFetching, error, refetch } = useWardrobe()
   const pending = usePendingUploads()
   const retry = useRetryUpload()
   const discard = useDiscardUpload()
@@ -257,8 +257,17 @@ export function WardrobePage() {
             title="옷장을 불러오지 못했어요"
             description={errorMessage(error)}
             action={
-              <Button variant="outline" onClick={() => void refetch()}>
-                <RotateCcw size={16} />
+              // `isFetching`, not `isLoading`: once a query has errored its
+              // status stays 'error' through the retry, so `isLoading` is false
+              // the whole time. With `retry: 2` in the providers that is several
+              // silent seconds, and the user presses again — once per press.
+              <Button
+                variant="outline"
+                loading={isFetching}
+                disabled={isFetching}
+                onClick={() => void refetch()}
+              >
+                {!isFetching && <RotateCcw size={16} />}
                 다시 시도
               </Button>
             }
@@ -280,9 +289,8 @@ export function WardrobePage() {
             title="조건에 맞는 옷이 없어요"
             description="검색어를 줄이거나 필터를 풀어보세요."
             action={
-              <button
-                type="button"
-                className={buttonStyle({ variant: 'outline' })}
+              <Button
+                variant="outline"
                 // `clearFilters`, like the sheet's 초기화, plus the two things
                 // this button can also see: the search box and the category
                 // rail. `EMPTY_FILTERS` additionally reset the sort, so
@@ -297,7 +305,7 @@ export function WardrobePage() {
                 }
               >
                 필터 모두 해제
-              </button>
+              </Button>
             }
           />
         ) : (
@@ -372,7 +380,21 @@ export function WardrobePage() {
  */
 const page = cx(
   vstack({ gap: '0', alignItems: 'stretch', flex: '1' }),
-  css({ isolation: 'isolate' }),
+  css({
+    // Both, and they do different jobs. `position: relative` is what makes this
+    // the containing block for the absolutely positioned wash — `isolation` only
+    // opens a stacking context, and is not on the short list of properties that
+    // establish a containing block. Swapping one for the other left the wash
+    // resolving `inset-inline: 0` against the viewport: on any window wider than
+    // the 480px column it painted an orange band across the whole page with the
+    // phone column floating in the middle of it, and in preview mode it started
+    // above the banner instead of behind the title.
+    position: 'relative',
+    // Lets the wash sit at `z-index: -1` and land behind this screen's content
+    // rather than behind the page background, where an unisolated negative index
+    // would put it — invisibly.
+    isolation: 'isolate',
+  }),
 )
 
 const titleBlock = css({

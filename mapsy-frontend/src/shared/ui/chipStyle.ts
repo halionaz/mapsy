@@ -1,4 +1,4 @@
-import { cva } from 'styled-system/css'
+import { css, cva } from 'styled-system/css'
 
 /**
  * Chip appearance, kept in its own module so `ChipGroup.tsx` exports nothing but
@@ -56,3 +56,13 @@ export const chipStyle = cva({
   },
   defaultVariants: { active: false },
 })
+
+/**
+ * The caption above a rail of chips.
+ *
+ * Here rather than in each of the three components that draw one, which is what
+ * it was: `ChipGroup`'s legend, `ChipSelect`'s legend, and the filter sheet's
+ * lone favourite toggle each carried their own copy, with a comment in the third
+ * saying it matched the first. Three copies and a comment is not a match.
+ */
+export const chipLegend = css({ textStyle: 'caption', color: 'fg.muted', mb: '2.5' })
