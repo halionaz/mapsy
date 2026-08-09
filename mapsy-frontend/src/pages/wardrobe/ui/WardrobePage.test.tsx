@@ -95,6 +95,34 @@ describe('WardrobePage — the route to registration', () => {
     expect(refetch).not.toHaveBeenCalled()
   })
 
+  /**
+   * A failed refetch must not throw away the wardrobe that is already here.
+   *
+   * react-query keeps `data` when a background refetch fails — `error` is set
+   * alongside it, not instead of it. The screen branched on `error` before it
+   * looked at `data`, so every row could be in memory and the grid would still
+   * be replaced by 옷장을 불러오지 못했어요.
+   *
+   * The path is ordinary rather than exotic: `refetchOnWindowFocus` is on
+   * deliberately (AppProviders), so browsing a wardrobe, backgrounding the app
+   * and coming back somewhere without signal is enough to lose the screen.
+   */
+  it('keeps showing the wardrobe it already has when a refetch fails', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()], error: new Error('offline') }))
+    renderWardrobe()
+
+    expect(screen.getByText('마산 플리스')).toBeDefined()
+    expect(screen.queryByText('옷장을 불러오지 못했어요')).toBeNull()
+  })
+
+  it('says so, without taking the wardrobe away, when a refetch fails', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()], error: new Error('offline') }))
+    renderWardrobe()
+
+    expect(screen.getByRole('button', { name: /다시 시도/ })).toBeDefined()
+    expect(registerFab()).not.toBeNull()
+  })
+
   it('hands the empty wardrobe its own call to action, and only that one', () => {
     useWardrobeMock.mockReturnValue(query({ data: [] }))
     renderWardrobe()

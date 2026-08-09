@@ -83,12 +83,37 @@ export function WardrobePage() {
   const filterCount = applied.length
   const ownedCount = entries.filter((entry) => entry.status === 'owned').length
   const activeGroup = filters.groupIds[0] ?? null
-  const isEmpty = entries.length === 0 && pending.length === 0
-  // Not `isEmpty`: `entries` is `data ?? []`, so a wardrobe that is still
-  // loading and one that failed to load are both "empty". Hiding the FAB on
-  // those left the error screen with no route to 옷 등록 at all — and
-  // registration is the one action that still works offline, since it queues.
-  const showsEmptyStateCta = !isLoading && !error && isEmpty
+  const hasWardrobe = entries.length > 0 || pending.length > 0
+
+  /**
+   * Which of the five things this screen can be, decided once.
+   *
+   * The conditions used to be spelled out again at each branch and once more
+   * for the FAB, and that duplication has been wrong twice — both times because
+   * a value that means "no rows to draw" was read as "the wardrobe is empty".
+   * First `entries`, which is `data ?? []` and so is empty while loading; then
+   * `error`, which react-query sets *alongside* `data` rather than instead of
+   * it. A failed background refetch therefore replaced a wardrobe that was
+   * entirely in memory with an error screen — and `refetchOnWindowFocus` is on
+   * deliberately (AppProviders), so coming back to the app without signal was
+   * enough to trigger it.
+   *
+   * `failed` is now only the cold case: the fetch failed and there is nothing
+   * cached to fall back on. A failure with rows in hand is `staleWarning`, drawn
+   * over the grid rather than in place of it.
+   */
+  const failedCold = error != null && !hasWardrobe
+  const staleWarning = error != null && hasWardrobe
+
+  const view = isLoading
+    ? 'loading'
+    : failedCold
+      ? 'failed'
+      : !hasWardrobe
+        ? 'empty'
+        : visible.length === 0 && pending.length === 0
+          ? 'noMatches'
+          : 'grid'
 
   function setGroup(groupId: CategoryGroupId | null) {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
@@ -226,14 +251,32 @@ export function WardrobePage() {
             Absolutely positioned by `srOnly`, so it is out of flow and does not
             take a slot in the column's gap. */}
         <p role="status" className={css({ srOnly: true })}>
-          {isLoading
+          {view === 'loading'
             ? '옷장을 불러오는 중이에요.'
-            : error
+            : view === 'failed'
               ? '옷장을 불러오지 못했어요.'
-              : `옷 ${visible.length}벌`}
+              : `옷 ${visible.length}벌${staleWarning ? '. 최신 목록은 불러오지 못했어요.' : ''}`}
         </p>
 
-        {isLoading ? (
+        {/* Over the wardrobe, not instead of it. The rows on screen are real —
+            they just may be a few minutes old. */}
+        {staleWarning && (
+          <div role="alert" className={staleNotice}>
+            <TriangleAlert size={15} aria-hidden="true" className={css({ flexShrink: 0 })} />
+            <span className={css({ flex: '1' })}>최신 목록을 불러오지 못했어요</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<RotateCcw size={14} />}
+              loading={isFetching}
+              onClick={() => void refetch()}
+            >
+              다시 시도
+            </Button>
+          </div>
+        )}
+
+        {view === 'loading' ? (
           <div className={vstack({ gap: '4', alignItems: 'stretch' })}>
             {/* The placeholders are decoration — six empty list items is not
                 what a screen reader should be given to walk through. */}
@@ -250,7 +293,7 @@ export function WardrobePage() {
               ))}
             </ul>
           </div>
-        ) : error ? (
+        ) : view === 'failed' ? (
           <EmptyState
             tone="danger"
             icon={<TriangleAlert size={24} />}
@@ -263,16 +306,15 @@ export function WardrobePage() {
               // silent seconds, and the user presses again — once per press.
               <Button
                 variant="outline"
+                icon={<RotateCcw size={16} />}
                 loading={isFetching}
-                disabled={isFetching}
                 onClick={() => void refetch()}
               >
-                {!isFetching && <RotateCcw size={16} />}
                 다시 시도
               </Button>
             }
           />
-        ) : isEmpty ? (
+        ) : view === 'empty' ? (
           <EmptyState
             icon={<Shirt size={24} />}
             title="아직 등록한 옷이 없어요"
@@ -283,7 +325,7 @@ export function WardrobePage() {
               </Link>
             }
           />
-        ) : visible.length === 0 && pending.length === 0 ? (
+        ) : view === 'noMatches' ? (
           <EmptyState
             icon={<SearchX size={24} />}
             title="조건에 맞는 옷이 없어요"
@@ -349,7 +391,7 @@ export function WardrobePage() {
       {/* Hidden only while the empty-wardrobe screen is the one on show: that
           screen already offers 첫 옷 등록하기 in the middle of it, and two
           identical pills pointing at the same route is the app asking twice. */}
-      {!showsEmptyStateCta && (
+      {view !== 'empty' && (
         <Link to="/items/new" aria-label="옷 등록" className={cx(buttonStyle(), fab)}>
           <Plus size={18} />옷 등록
         </Link>
@@ -513,6 +555,23 @@ const statusStripScrim = css({
   transitionTimingFunction: 'out',
   '&[data-stuck]': { opacity: 1 },
   _motionReduce: { transitionDuration: '1ms' },
+})
+
+/**
+ * The line that says the list may be out of date.
+ *
+ * `role="alert"` rather than a toast: it has to stay while the condition does,
+ * and a toast that slides away leaves no way to ask again.
+ */
+const staleNotice = hstack({
+  gap: '2',
+  mb: '4',
+  px: '3',
+  py: '2',
+  rounded: 'field',
+  bg: 'danger.subtle',
+  color: 'danger',
+  textStyle: 'caption',
 })
 
 const searchIcon = css({

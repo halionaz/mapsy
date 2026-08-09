@@ -60,11 +60,11 @@ export function LoginPage() {
             variant="inverted"
             size="lg"
             full
+            icon={<GoogleMark />}
             loading={pending}
             disabled={!isSupabaseConfigured}
             onClick={() => void signIn()}
           >
-            {!pending && <GoogleMark />}
             {pending ? '이동 중…' : 'Google로 계속하기'}
           </Button>
 

@@ -389,7 +389,7 @@ export function ItemForm({
       )}
 
       <div className={actionBar}>
-        <Button type="submit" size="lg" full loading={pending} disabled={pending}>
+        <Button type="submit" size="lg" full loading={pending}>
           {pending ? '저장 중…' : submitLabel}
         </Button>
         <Button variant="ghost" size="lg" onClick={onCancel}>

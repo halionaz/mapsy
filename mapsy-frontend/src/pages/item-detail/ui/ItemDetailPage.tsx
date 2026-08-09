@@ -244,9 +244,9 @@ export function ItemDetailPage() {
                 },
               )
             }
+            icon={disposed ? <ArchiveRestore size={16} /> : <PackageOpen size={16} />}
             loading={setStatus.isPending}
           >
-            {disposed ? <ArchiveRestore size={16} /> : <PackageOpen size={16} />}
             {disposed ? '다시 보유로' : '처분'}
           </Button>
         </div>
@@ -271,10 +271,10 @@ export function ItemDetailPage() {
           variant="danger"
           shape="block"
           full
+          icon={<Trash2 size={16} />}
           onClick={() => setConfirmingDelete(true)}
           disabled={remove.isPending}
         >
-          <Trash2 size={16} />
           삭제
         </Button>
       </div>

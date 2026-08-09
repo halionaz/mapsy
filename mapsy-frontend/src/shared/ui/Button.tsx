@@ -15,8 +15,20 @@ type IconButtonVariants = NonNullable<RecipeVariantProps<typeof iconButtonStyle>
 // clone, so a button that silently drops it is a dialog that cannot place focus.
 interface ButtonProps extends Omit<React.ComponentProps<'button'>, 'className'>, ButtonVariants {
   /**
-   * Puts a spinner *before* the label and disables the button. It does not
-   * replace the label — callers that want one ("저장 중…") pass it themselves.
+   * A glyph before the label.
+   *
+   * A prop rather than the first child, so that `loading` has somewhere to put
+   * the spinner. When the icon lived in `children` the spinner was *added* in
+   * front of it and every call site had to remember to hide its own —
+   * `{!pending && <GoogleMark />}` — which two of the three did. The third put
+   * three glyphs on one line for the length of a mutation.
+   */
+  icon?: React.ReactNode
+  /**
+   * Swaps `icon` for a spinner and disables the button.
+   *
+   * The label is left alone; a caller that wants one ("저장 중…") passes it.
+   * Callers do not need `disabled` as well — that is set here.
    *
    * Separate from `disabled` because the two mean different things to a screen
    * reader: `aria-busy` says the press was received and is being worked on,
@@ -39,6 +51,7 @@ export function Button({
   size,
   shape,
   full,
+  icon,
   loading = false,
   disabled,
   children,
@@ -53,7 +66,7 @@ export function Button({
       className={cx(buttonStyle({ variant, size, shape, full }), className)}
       {...props}
     >
-      {loading && <Spinner />}
+      {loading ? <Spinner /> : icon}
       {children}
     </button>
   )
