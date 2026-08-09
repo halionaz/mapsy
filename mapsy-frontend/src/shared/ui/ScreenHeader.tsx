@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { useNavigate } from 'react-router'
-import { css } from 'styled-system/css'
+import { css, cva } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
 import { IconButton } from './Button'
@@ -26,6 +26,7 @@ export function ScreenHeader({
   action,
   hero,
   status,
+  flushBottom = false,
   children,
 }: {
   title: string
@@ -46,6 +47,16 @@ export function ScreenHeader({
    * the wait and its result are two values of one element.
    */
   status?: string
+  /**
+   * Lets the body run all the way to the bottom edge of the screen.
+   *
+   * The default padding is what keeps the last line of a scrolling page clear of
+   * the home indicator. A screen that pins something to that edge itself — the
+   * item form's action bar — has to be able to reach it, and then owns the safe
+   * area inset instead. The choice lives here rather than as a negative margin
+   * at the call site so the padding is still stated in exactly one place.
+   */
+  flushBottom?: boolean
   children: React.ReactNode
 }) {
   const navigate = useNavigate()
@@ -80,7 +91,7 @@ export function ScreenHeader({
 
       {hero}
 
-      <main className={main}>
+      <main className={main({ flushBottom })}>
         <div ref={titleRef} className={vstack({ gap: '1.5', alignItems: 'stretch', mb: '6' })}>
           {eyebrow && (
             <p className={css({ textStyle: 'eyebrow', color: 'accent.text' })}>{eyebrow}</p>
@@ -137,9 +148,31 @@ const barTitle = css({
   _motionReduce: { transitionDuration: '1ms' },
 })
 
-const main = css({
-  flex: '1',
-  px: '5',
-  pt: '5',
-  pb: 'calc({spacing.12} + var(--safe-b))',
+/**
+ * A recipe rather than a `css()` with a ternary in it.
+ *
+ * Panda reads source at build time and cannot see through
+ * `pb: flush ? '0' : '…'` — it would emit neither value and the body would
+ * silently lose its bottom padding on every screen. Variants are the supported
+ * way to branch.
+ *
+ * A flex column so a child can claim the leftover height: the item form's action
+ * bar uses `margin-top: auto` to sit on the bottom edge when the form is shorter
+ * than the screen, which a block container has no free space to give it.
+ */
+const main = cva({
+  base: {
+    flex: '1',
+    display: 'flex',
+    flexDirection: 'column',
+    px: '5',
+    pt: '5',
+  },
+  variants: {
+    flushBottom: {
+      true: { pb: '0' },
+      false: { pb: 'calc({spacing.12} + var(--safe-b))' },
+    },
+  },
+  defaultVariants: { flushBottom: false },
 })

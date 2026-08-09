@@ -72,7 +72,10 @@ export function ItemEditPage() {
   }
 
   return (
-    <ScreenHeader title="옷 편집" status={`${item.title} 편집`}>
+    // Same form, so the same pinned action bar — and the same reason for it: the
+    // optional section opens by default when an item already has values in it,
+    // which is exactly the case where 저장 is furthest from the last field.
+    <ScreenHeader title="옷 편집" status={`${item.title} 편집`} flushBottom>
       <ItemForm
         initial={item}
         showPhotos={false}

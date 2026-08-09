@@ -32,7 +32,15 @@ export function ItemNewPage() {
   }
 
   return (
-    <ScreenHeader title="옷 등록" subtitle="사진과 이름, 카테고리만 있으면 끝나요.">
+    <ScreenHeader
+      title="옷 등록"
+      subtitle="사진과 이름, 카테고리만 있으면 끝나요."
+      // Only when the form is what renders: it is the form's action bar that
+      // pins itself to the bottom edge and takes over the safe-area inset. The
+      // preview-mode notice below is ordinary scrolling content and still wants
+      // the body's own padding.
+      flushBottom={userId != null}
+    >
       {userId ? (
         <ItemForm
           submitLabel="등록"

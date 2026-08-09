@@ -189,7 +189,13 @@ export function ItemForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className={vstack({ gap: '6', alignItems: 'stretch' })}>
+    <form
+      onSubmit={handleSubmit}
+      // `flex: 1` so the action bar below can push itself to the bottom edge on
+      // a form short enough not to scroll. Its parent is `ScreenHeader`'s
+      // `<main>`, which is a flex column for this reason.
+      className={vstack({ gap: '6', alignItems: 'stretch', flex: '1' })}
+    >
       {showPhotos && (
         <Field label="사진" required hint={`최대 ${MAX_PHOTOS}장 · 첫 번째가 대표 사진`}>
           <PhotoPicker photos={photos} onChange={setPhotos} />
@@ -382,7 +388,7 @@ export function ItemForm({
         </p>
       )}
 
-      <div className={hstack({ gap: '2', pt: '2' })}>
+      <div className={actionBar}>
         <Button type="submit" size="lg" full loading={pending} disabled={pending}>
           {pending ? '저장 중…' : submitLabel}
         </Button>
@@ -393,6 +399,47 @@ export function ItemForm({
     </form>
   )
 }
+
+/**
+ * 등록 / 저장, pinned to the bottom edge.
+ *
+ * The form is eleven fields with a category picker in the middle of it, so the
+ * button that ends the job was several screens below the fold — and the one
+ * moment it is most wanted is right after the last thing you typed, wherever
+ * that was. Sticky keeps it in reach without taking it out of the form, so it is
+ * still a real submit button in document order and still the last thing a
+ * keyboard reaches.
+ *
+ * Two rules make it behave in both directions: `bottom: 0` holds it against the
+ * viewport while the form is long enough to scroll, and `margin-top: auto`
+ * drops it to the bottom of the screen when the form is short — otherwise a
+ * collapsed edit form would leave the bar floating mid-screen with a rule under
+ * it, which reads as a section divider rather than as the foot of the page.
+ *
+ * Requires `flushBottom` on the ScreenHeader around it. Without it the body
+ * keeps its bottom padding, and the bar's resting place is that far above the
+ * bottom edge — so at full scroll it visibly lifts off.
+ */
+const actionBar = css({
+  position: 'sticky',
+  bottom: '0',
+  mt: 'auto',
+  display: 'flex',
+  gap: '2',
+  // Pulled back out over `<main>`'s inset so the bar spans the column. Inset by
+  // the same amount as the fields, it reads as a widget sitting on the page
+  // rather than as the bottom of the screen.
+  mx: '-5',
+  px: '5',
+  pt: '3',
+  // The screen now reaches the bottom edge, so clearing the home indicator is
+  // this bar's job rather than the body's.
+  pb: 'calc({spacing.4} + var(--safe-b))',
+  bg: 'bg',
+  borderTopWidth: '1px',
+  borderTopStyle: 'solid',
+  borderColor: 'border.subtle',
+})
 
 const disclosure = cx(
   hstack({ justify: 'space-between' }),
