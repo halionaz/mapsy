@@ -18,19 +18,29 @@ import { EMPTY_FILTERS, type WardrobeFilters } from '../model/filters'
  */
 
 /**
- * The axes of `WardrobeFilters` that are removable value lists, named by
- * subtraction rather than by hand.
+ * The axes of `WardrobeFilters` that are removable value lists — derived by
+ * *addition*: a key qualifies by holding a list of strings, not by failing to
+ * appear on a list of exceptions.
  *
- * Adding an axis to `WardrobeFilters` therefore adds it here, and the `Record`
- * below stops compiling until it is given a label. The previous hand-written
- * list had already drifted — `categoryIds` was missing from it, so a filter set
- * through that axis would have been applied by `applyFilters` and counted as
- * zero here, leaving 초기화 disabled while the grid was filtered.
+ * The direction is the point. Named by subtraction, a new scalar field — say
+ * `purchasedAfter: string` — would default to being an axis, satisfy the label
+ * `Record` with a one-line function, and then be walked character by character
+ * into one chip per letter; removing one of those chips would hand a string to
+ * `removeApplied`'s array cast and throw. Named by addition, a new scalar is
+ * simply not an axis and a new list is, which is the safer default both ways.
+ *
+ * A hand-written list was worse than either: `categoryIds` was already missing
+ * from it, so a filter set through that axis would have narrowed the grid while
+ * counting as zero here, leaving 초기화 disabled over a filtered screen.
+ *
+ * `groupIds` is the one deliberate exception — a list, but the category rail
+ * above the grid already shows and clears it.
  */
-type ListAxis = Exclude<
-  keyof WardrobeFilters,
-  'query' | 'groupIds' | 'status' | 'sort' | 'favoriteOnly'
->
+type StringListKey<T> = {
+  [K in keyof T]-?: T[K] extends readonly string[] ? K : never
+}[keyof T]
+
+type ListAxis = Exclude<StringListKey<WardrobeFilters>, 'groupIds'>
 
 export type FilterAxis = ListAxis | 'favoriteOnly'
 
@@ -82,7 +92,7 @@ export function removeApplied(
 ): WardrobeFilters {
   if (applied.axis === 'favoriteOnly') return { ...filters, favoriteOnly: false }
 
-  // The six list axes hold different element types (`ColorId[]`, `SeasonId[]`,
+  // The list axes hold different element types (`ColorId[]`, `SeasonId[]`,
   // `string[]`), so there is no signature under which one `filter` call covers
   // all of them. Widening to `string[]` here is the whole cast: the values being
   // removed came out of these same arrays, so nothing can be narrowed away that

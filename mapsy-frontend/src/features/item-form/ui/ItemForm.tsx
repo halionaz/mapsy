@@ -15,6 +15,7 @@ import { sizePresetsFor } from '@/shared/config/sizes'
 import { releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
 import { Button } from '@/shared/ui/Button'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
+import { ChipSelect } from '@/shared/ui/ChipSelect'
 import { Field, FieldError } from '@/shared/ui/Field'
 import { inputStyle } from '@/shared/ui/fieldStyle'
 import type { ItemDraft } from '@/entities/item'
@@ -218,19 +219,18 @@ export function ItemForm({
       <Field label="카테고리" required>
         <div className={vstack({ gap: '4', alignItems: 'stretch' })}>
           {CATEGORY_GROUPS.map((group) => (
-            <ChipGroup
+            <ChipSelect
               key={group.id}
               label={group.label}
               options={group.subcategories.map((sub) => ({ value: sub.id, label: sub.label }))}
-              selected={categoryId ? [categoryId] : []}
+              value={categoryId}
               onChange={(next) => {
-                setCategoryId((next[0] as SubcategoryId | undefined) ?? null)
+                setCategoryId(next)
                 // Size and fit belong to the old category's vocabulary; keeping
                 // them would silently store "270" on a knit.
                 setSize('')
                 setFit('')
               }}
-              clearable={false}
             />
           ))}
         </div>

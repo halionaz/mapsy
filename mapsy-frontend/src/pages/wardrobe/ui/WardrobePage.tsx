@@ -1,5 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
-import { Plus, Search, SearchX, Settings, Shirt, SlidersHorizontal, TriangleAlert, X } from 'lucide-react'
+import {
+  Plus,
+  RotateCcw,
+  Search,
+  SearchX,
+  Settings,
+  Shirt,
+  SlidersHorizontal,
+  TriangleAlert,
+  X,
+} from 'lucide-react'
 import { Link } from 'react-router'
 import { css, cx } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
@@ -26,6 +36,7 @@ import {
 } from '@/features/wardrobe-filter'
 import { CATEGORY_GROUPS, type CategoryGroupId } from '@/shared/config/categories'
 import { errorMessage } from '@/shared/lib/errorMessage'
+import { Button } from '@/shared/ui/Button'
 import { buttonStyle, iconButtonStyle } from '@/shared/ui/buttonStyle'
 import { chipStyle } from '@/shared/ui/chipStyle'
 import { EmptyState } from '@/shared/ui/EmptyState'
@@ -46,7 +57,7 @@ import { useScrolledPast } from '@/shared/ui/useScrolledPast'
  * writable against a single object.
  */
 export function WardrobePage() {
-  const { data, isLoading, error } = useWardrobe()
+  const { data, isLoading, error, refetch } = useWardrobe()
   const pending = usePendingUploads()
   const retry = useRetryUpload()
   const discard = useDiscardUpload()
@@ -54,7 +65,8 @@ export function WardrobePage() {
   const [filters, setFilters] = useState<WardrobeFilters>(EMPTY_FILTERS)
   const [sheetOpen, setSheetOpen] = useState(false)
   const stickSentinel = useRef<HTMLDivElement>(null)
-  const stuck = useScrolledPast(stickSentinel)
+  const statusStrip = useRef<HTMLDivElement>(null)
+  const stuck = useScrolledPast(stickSentinel, statusStrip)
 
   const entries = useMemo(() => data ?? [], [data])
   const visible = useMemo(() => applyFilters(entries, filters), [entries, filters])
@@ -72,6 +84,11 @@ export function WardrobePage() {
   const ownedCount = entries.filter((entry) => entry.status === 'owned').length
   const activeGroup = filters.groupIds[0] ?? null
   const isEmpty = entries.length === 0 && pending.length === 0
+  // Not `isEmpty`: `entries` is `data ?? []`, so a wardrobe that is still
+  // loading and one that failed to load are both "empty". Hiding the FAB on
+  // those left the error screen with no route to 옷 등록 at all — and
+  // registration is the one action that still works offline, since it queues.
+  const showsEmptyStateCta = !isLoading && !error && isEmpty
 
   function setGroup(groupId: CategoryGroupId | null) {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
@@ -80,7 +97,7 @@ export function WardrobePage() {
   const sortLabel = SORT_OPTIONS.find((option) => option.id === filters.sort)?.label ?? ''
 
   return (
-    <div className={vstack({ gap: '0', alignItems: 'stretch', flex: '1', position: 'relative' })}>
+    <div className={page}>
       <div className={wash} aria-hidden="true" />
 
       <div className={titleBlock}>
@@ -98,6 +115,19 @@ export function WardrobePage() {
           </Link>
         </div>
       </div>
+
+      {/*
+        The strip the bar leaves uncovered once it is pinned below the inset.
+        Fixed rather than sticky so its height never enters the flow — a bar that
+        grew by the inset at the moment it stuck would shove the whole grid down
+        by 47px in one frame.
+
+        It is also the measuring stick for the trigger below: its height *is*
+        `--safe-t`, so the line the sentinel has to cross and the distance the bar
+        is offset by are the same number read from the same element, and cannot
+        drift apart.
+      */}
+      <div ref={statusStrip} className={statusStripScrim} data-stuck={stuck || undefined} aria-hidden="true" />
 
       {/* Zero height, and the whole trigger for the bar below.
           It sits exactly where the bar's top edge rests, so the moment it
@@ -226,6 +256,12 @@ export function WardrobePage() {
             icon={<TriangleAlert size={24} />}
             title="옷장을 불러오지 못했어요"
             description={errorMessage(error)}
+            action={
+              <Button variant="outline" onClick={() => void refetch()}>
+                <RotateCcw size={16} />
+                다시 시도
+              </Button>
+            }
           />
         ) : isEmpty ? (
           <EmptyState
@@ -302,10 +338,10 @@ export function WardrobePage() {
         )}
       </main>
 
-      {/* Hidden while the wardrobe is empty: that screen already offers 첫 옷
-          등록하기 in the middle of it, and two identical pills pointing at the
-          same route is the app asking twice. */}
-      {!isEmpty && (
+      {/* Hidden only while the empty-wardrobe screen is the one on show: that
+          screen already offers 첫 옷 등록하기 in the middle of it, and two
+          identical pills pointing at the same route is the app asking twice. */}
+      {!showsEmptyStateCta && (
         <Link to="/items/new" aria-label="옷 등록" className={cx(buttonStyle(), fab)}>
           <Plus size={18} />옷 등록
         </Link>
@@ -323,12 +359,23 @@ export function WardrobePage() {
   )
 }
 
+/**
+ * The screen column, and a stacking context.
+ *
+ * `isolation: isolate` is what lets the wash sit at `z-index: -1` and stay
+ * visible: without a stacking context of its own here, a negative index would
+ * put the wash behind the shell's background instead of behind this screen's
+ * content, and it would simply disappear. The pair replaces the previous
+ * arrangement, where the wash stayed behind only for as long as every sibling
+ * above it remembered to be `position: relative` — a contract kept by comments
+ * in two files, and already only half kept: `main` never was.
+ */
+const page = cx(
+  vstack({ gap: '0', alignItems: 'stretch', flex: '1' }),
+  css({ isolation: 'isolate' }),
+)
+
 const titleBlock = css({
-  // Positioned, so its text paints above the wash rather than under it. A
-  // non-positioned block's inline content is painted before positioned siblings
-  // with `z-index: auto` (CSS 2.1 Appendix E, step 7 before step 8), so the
-  // decoration was sitting on top of the screen's own name.
-  position: 'relative',
   px: '5',
   pt: 'calc({spacing.4} + var(--safe-t))',
   pb: '4',
@@ -351,6 +398,7 @@ const titleBlock = css({
  */
 const wash = css({
   position: 'absolute',
+  zIndex: -1,
   top: '0',
   insetInline: '0',
   height: '320px',
@@ -393,17 +441,19 @@ const settingsLink = cx(iconButtonStyle(), css({ mr: '-3' }))
  */
 const controls = css({
   position: 'sticky',
-  top: '0',
+  // Pinned *below* the inset rather than at the viewport edge, so the search
+  // field never sits under the clock. The inset itself is counted once, by
+  // `titleBlock`, which is the surface at the top of the page while the page is
+  // at rest; adding it here too — the previous attempt — pushed a 47px band of
+  // nothing between the title and the search box on every notched phone, since
+  // both are in flow until the bar sticks. Padding cannot be right in both
+  // states, so the bar moves its anchor instead of growing.
+  top: 'var(--safe-t)',
   zIndex: 'header',
   display: 'flex',
   flexDirection: 'column',
   gap: '3',
-  // The inset belongs to whichever surface reaches the top edge of the display,
-  // and once the title has scrolled away that is this bar. It used to live on
-  // the sticky header this bar was split out of; leaving it on the title block
-  // alone meant the search field spent every scroll under the clock, on any
-  // notched phone with `viewport-fit=cover`.
-  pt: 'calc({spacing.1} + var(--safe-t))',
+  pt: '1',
   pb: '3',
   bg: 'transparent',
   borderBottomWidth: '1px',
@@ -413,6 +463,33 @@ const controls = css({
   transitionDuration: 'normal',
   transitionTimingFunction: 'out',
   '&[data-stuck]': { bg: 'bg', borderColor: 'border.subtle' },
+  _motionReduce: { transitionDuration: '1ms' },
+})
+
+/**
+ * Covers the safe-area strip above the pinned bar, and only while it is pinned.
+ *
+ * Constrained to the app column rather than the window: the shell centres a
+ * 480px column, and a full-width strip would paint over the page on either side
+ * of it on a tablet, where the top inset is not always zero.
+ */
+const statusStripScrim = css({
+  position: 'fixed',
+  top: '0',
+  left: '50%',
+  translate: 'auto',
+  translateX: '-1/2',
+  width: 'full',
+  maxWidth: 'app',
+  height: 'var(--safe-t)',
+  zIndex: 'header',
+  bg: 'bg',
+  opacity: 0,
+  pointerEvents: 'none',
+  transitionProperty: 'opacity',
+  transitionDuration: 'normal',
+  transitionTimingFunction: 'out',
+  '&[data-stuck]': { opacity: 1 },
   _motionReduce: { transitionDuration: '1ms' },
 })
 

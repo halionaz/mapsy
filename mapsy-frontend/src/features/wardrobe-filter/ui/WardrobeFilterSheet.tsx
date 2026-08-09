@@ -5,12 +5,13 @@ import { CLOTHING_COLORS, type ColorId } from '@/shared/config/colors'
 import { SEASONS, type SeasonId } from '@/shared/config/seasons'
 import { Button } from '@/shared/ui/Button'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
+import { ChipSelect } from '@/shared/ui/ChipSelect'
 import { chipStyle } from '@/shared/ui/chipStyle'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
 import { Sheet } from '@/shared/ui/Sheet'
 import { activeFilterCount, clearFilters } from '../lib/filterSummary'
 import type { FilterOptions } from '../lib/filterOptions'
-import { SORT_OPTIONS, type SortId, type WardrobeFilters } from '../model/filters'
+import { SORT_OPTIONS, type WardrobeFilters } from '../model/filters'
 
 /**
  * 필터 바텀시트 — the axes the category rail above the grid cannot express
@@ -67,17 +68,15 @@ export function WardrobeFilterSheet({
       }
     >
       <div className={vstack({ gap: '6', alignItems: 'stretch' })}>
-        <ChipGroup
+        {/* Sorting is not an axis that can be off — clearing it would leave the
+            grid in whatever order the last comparator happened to produce, and
+            `applyFilters`' comparator has no branch for "no sort". `ChipSelect`
+            is what makes that unrepresentable rather than merely avoided. */}
+        <ChipSelect
           label="정렬"
           options={SORT_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
-          selected={[filters.sort]}
-          // `next[0]`, unguarded: `clearable={false}` makes ChipGroup return
-          // early rather than call back when the active chip is tapped again,
-          // so every call that arrives carries exactly one value.
-          onChange={(next) => onChange({ ...filters, sort: next[0] as SortId })}
-          // Sorting is not an axis that can be off — clearing it would leave the
-          // grid in whatever order the last comparator happened to produce.
-          clearable={false}
+          value={filters.sort}
+          onChange={(sort) => onChange({ ...filters, sort })}
         />
 
         <div>

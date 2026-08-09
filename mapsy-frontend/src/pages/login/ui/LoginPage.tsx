@@ -47,18 +47,7 @@ export function LoginPage() {
     <div className={screen}>
       <div className={glow} aria-hidden="true" />
 
-      {/* Positioned, so the wordmark paints above the glow. A non-positioned
-          block's inline content is painted before positioned siblings with
-          `z-index: auto`, which put the decoration in front of the app's name. */}
-      <div
-        className={vstack({
-          gap: '10',
-          justify: 'center',
-          flex: '1',
-          width: 'full',
-          position: 'relative',
-        })}
-      >
+      <div className={vstack({ gap: '10', justify: 'center', flex: '1', width: 'full' })}>
         <div className={vstack({ gap: '3' })}>
           <h1 className={wordmark}>mapsy</h1>
           <p className={css({ textStyle: 'body', color: 'fg.muted' })}>
@@ -136,6 +125,10 @@ function GoogleMark() {
 
 const screen = css({
   position: 'relative',
+  // A stacking context, so the glow below can sit at `z-index: -1` and land
+  // behind this screen's content instead of behind the page background — where a
+  // negative index without an isolating ancestor would put it, invisibly.
+  isolation: 'isolate',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
@@ -156,9 +149,7 @@ const screen = css({
 /**
  * The one decorative element in the app: a wash of brand orange behind the
  * wordmark, clipped by the screen.
- *
- * Behind it only because the content wrapper above is positioned — see the note
- * there. Left unpositioned, this paints over the text.
+
  *
  * A radial gradient rather than a blurred box — `filter: blur()` on an element
  * this large is a full-screen offscreen buffer on a phone, and it is the first
@@ -166,6 +157,10 @@ const screen = css({
  */
 const glow = css({
   position: 'absolute',
+  // Behind every descendant of `screen`, unconditionally. Relying on each
+  // sibling to be `position: relative` instead left the decoration painting over
+  // the wordmark, and kept working only for as long as everyone remembered.
+  zIndex: -1,
   top: '-20%',
   left: '50%',
   translate: 'auto',
