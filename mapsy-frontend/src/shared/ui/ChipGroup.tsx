@@ -16,6 +16,14 @@ import { chipStyle } from './chipStyle'
 export interface ChipOption<T extends string> {
   value: T
   label: string
+  /**
+   * Drawn before the label — a colour dot, a small glyph.
+   *
+   * Separate from `label` rather than widening it to `ReactNode`: the label is
+   * also the accessible name of the chip, and a node cannot be relied on to
+   * produce one.
+   */
+  icon?: React.ReactNode
 }
 
 interface ChipGroupProps<T extends string> {
@@ -58,9 +66,11 @@ export function ChipGroup<T extends string>({
 
   return (
     <fieldset className={css({ border: 'none', p: '0', m: '0' })}>
-      <legend className={css({ fontSize: 'xs', color: 'fg.muted', mb: '2' })}>
+      <legend className={css({ textStyle: 'caption', color: 'fg.muted', mb: '2.5' })}>
         {label}
-        {max != null && ` (최대 ${max}개)`}
+        {max != null && (
+          <span className={css({ color: 'fg.subtle' })}>{` · 최대 ${max}개`}</span>
+        )}
       </legend>
       <div
         className={hstack({
@@ -79,6 +89,7 @@ export function ChipGroup<T extends string>({
               onClick={() => toggle(option.value)}
               className={chipStyle({ active })}
             >
+              {option.icon}
               {option.label}
             </button>
           )

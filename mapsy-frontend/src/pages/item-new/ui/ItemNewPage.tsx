@@ -1,9 +1,12 @@
-import { useNavigate } from 'react-router'
+import { Unplug } from 'lucide-react'
+import { Link, useNavigate } from 'react-router'
 
 import { useCreateItem } from '@/entities/item'
 import { useCurrentUserId } from '@/features/auth'
 import { ItemForm, type ItemFormValues } from '@/features/item-form'
 import { newId } from '@/shared/lib/id'
+import { buttonStyle } from '@/shared/ui/buttonStyle'
+import { EmptyState } from '@/shared/ui/EmptyState'
 import { ScreenHeader } from '@/shared/ui/ScreenHeader'
 
 /**
@@ -29,7 +32,7 @@ export function ItemNewPage() {
   }
 
   return (
-    <ScreenHeader title="옷 등록">
+    <ScreenHeader title="옷 등록" subtitle="사진과 이름, 카테고리만 있으면 끝나요.">
       {userId ? (
         <ItemForm
           submitLabel="등록"
@@ -37,7 +40,16 @@ export function ItemNewPage() {
           onCancel={() => navigate('/')}
         />
       ) : (
-        <p>Supabase 미설정 상태라 등록은 할 수 없어요.</p>
+        <EmptyState
+          icon={<Unplug size={24} />}
+          title="등록은 아직 할 수 없어요"
+          description="Supabase 환경변수가 없는 미리보기 모드예요. 화면은 둘러볼 수 있어요."
+          action={
+            <Link to="/" className={buttonStyle({ variant: 'outline' })}>
+              내 옷장으로
+            </Link>
+          }
+        />
       )}
     </ScreenHeader>
   )

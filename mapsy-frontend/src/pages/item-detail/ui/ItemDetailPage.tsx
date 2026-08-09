@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { ArchiveRestore, PackageOpen, Pencil, SearchX, Star, Trash2 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { css, cx } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
@@ -8,20 +9,26 @@ import {
   useSetFavorite,
   useSetStatus,
   useWardrobe,
+  type ItemImage,
   type WardrobeItem,
 } from '@/entities/item'
 import { useCurrentUserId } from '@/features/auth'
-import { PhotoViewer, useItemPhotos } from '@/features/item-photos'
+import { PhotoViewer, useItemPhotos, type PhotoSlot } from '@/features/item-photos'
 import { categoryLabel } from '@/shared/config/categories'
 import { colorLabel } from '@/shared/config/colors'
 import { seasonLabel } from '@/shared/config/seasons'
 import { clamp } from '@/shared/lib/clamp'
 import { errorMessage } from '@/shared/lib/errorMessage'
 import { formatDate, formatPrice } from '@/shared/lib/format'
+import { Button, IconButton } from '@/shared/ui/Button'
+import { buttonStyle } from '@/shared/ui/buttonStyle'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
+import { EmptyState } from '@/shared/ui/EmptyState'
 import { ScreenHeader } from '@/shared/ui/ScreenHeader'
 import { skeletonSurface } from '@/shared/ui/skeletonStyle'
 import { SquarePhoto } from '@/shared/ui/SquarePhoto'
+import { toaster } from '@/shared/ui/toast'
 
 /**
  * 옷 상세 (PRD §6.3).
@@ -47,6 +54,7 @@ export function ItemDetailPage() {
   const setFavorite = useSetFavorite()
   const setStatus = useSetStatus()
   const remove = useDeleteItem()
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const item = data?.find((entry) => entry.id === id)
   // Sorted, signed and paired in one place — the URLs are matched to the photos
@@ -84,17 +92,22 @@ export function ItemDetailPage() {
   if (!item) {
     return (
       <ScreenHeader title="옷 상세" status="이 옷을 찾을 수 없어요.">
-        <div className={vstack({ gap: '3' })}>
-          <p className={css({ fontSize: 'sm' })}>이 옷을 찾을 수 없어요.</p>
-          <Link to="/" className={css({ fontSize: 'sm', color: 'accent', textDecoration: 'underline' })}>
-            내 옷장으로
-          </Link>
-        </div>
+        <EmptyState
+          icon={<SearchX size={24} />}
+          title="이 옷을 찾을 수 없어요"
+          description="삭제됐거나 주소가 잘못됐을 수 있어요."
+          action={
+            <Link to="/" className={buttonStyle({ variant: 'outline' })}>
+              내 옷장으로
+            </Link>
+          }
+        />
       </ScreenHeader>
     )
   }
 
   const photoCount = photos.length
+  const disposed = item.status === 'disposed'
 
   /**
    * Which photo is centred, read back from the scroll position.
@@ -132,139 +145,100 @@ export function ItemDetailPage() {
 
   async function handleDelete() {
     if (!userId || !item) return
-    if (!window.confirm(`'${item.title}'을(를) 삭제할까요? 되돌릴 수 없어요.`)) return
     try {
       await remove.mutateAsync({ id: item.id, userId })
+      setConfirmingDelete(false)
       navigate('/', { replace: true })
-    } catch {
-      // Swallowed here so it isn't an unhandled rejection; the message is
-      // rendered from `remove.error` below. Without that the button looked
-      // simply broken — nothing happened and nothing was said.
+      toaster.create({ title: `'${item.title}'을(를) 삭제했어요.`, type: 'success' })
+    } catch (e) {
+      // The dialog stays open: the message names a failure of the thing it is
+      // still asking about, and closing it would leave the user looking at an
+      // item that is still there with no idea whether the press registered.
+      toaster.create({
+        title: '삭제하지 못했어요',
+        description: errorMessage(e, '잠시 후 다시 시도해주세요.'),
+        type: 'error',
+      })
     }
   }
 
   return (
     <ScreenHeader
       title={item.title}
+      eyebrow={categoryLabel(item.categoryId)}
+      subtitle={item.brand}
       // A sentence, not the bare title: the title is already the heading two
       // elements away, and hearing the same words twice in a row reads as a
       // stutter rather than as an arrival.
       status={`${item.title} 정보를 불러왔어요.`}
       action={
-        <button
-          type="button"
-          aria-label={item.isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+        <IconButton
+          label={item.isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
           aria-pressed={item.isFavorite}
-          onClick={() => setFavorite.mutate({ id: item.id, isFavorite: !item.isFavorite })}
-          className={css({
-            fontSize: 'lg',
-            p: '2',
-            rounded: 'md',
-            cursor: 'pointer',
-            color: item.isFavorite ? 'accent' : 'fg.subtle',
-            _focusVisible: {
-              outline: '2px solid',
-              outlineColor: 'accent',
-              outlineOffset: '2px',
-            },
-          })}
+          active={item.isFavorite}
+          onClick={() =>
+            setFavorite.mutate(
+              { id: item.id, isFavorite: !item.isFavorite },
+              {
+                onError: () =>
+                  toaster.create({ title: '즐겨찾기를 바꾸지 못했어요.', type: 'error' }),
+              },
+            )
+          }
         >
-          {item.isFavorite ? '★' : '☆'}
-        </button>
+          <Star size={20} fill={item.isFavorite ? 'currentColor' : 'none'} />
+        </IconButton>
+      }
+      hero={
+        <PhotoStrip
+          item={item}
+          slots={slots}
+          photos={photos}
+          photoIndex={photoIndex}
+          stripRef={stripRef}
+          onScroll={handleStripScroll}
+          onOpen={(photoId) => navigate(location.pathname, { state: { photoId } })}
+          onLoadError={markUnloadable}
+        />
       }
     >
-      <div className={vstack({ gap: '6', alignItems: 'stretch' })}>
-        <section aria-label="사진" className={vstack({ gap: '2', alignItems: 'stretch' })}>
-          {photoCount === 0 ? (
-            <SquarePhoto src={null} alt="" fallback="empty" />
-          ) : (
-            <div
-              ref={stripRef}
-              onScroll={handleStripScroll}
-              className={css({
-                display: 'flex',
-                gap: '2',
-                overflowX: 'auto',
-                scrollSnapType: 'x mandatory',
-                scrollbarWidth: 'none',
-                '&::-webkit-scrollbar': { display: 'none' },
-              })}
-            >
-              {/* Driven by the image rows, not by the URLs: the count is known
-                  from the cache immediately, so the right number of squares is
-                  on screen before any signing has come back. */}
-              {slots.map((slot, index) => (
-                <button
-                  key={slot.id}
-                  type="button"
-                  disabled={slot.state !== 'ready'}
-                  aria-label={`사진 ${index + 1} 크게 보기`}
-                  onClick={() => navigate(location.pathname, { state: { photoId: slot.id } })}
-                  className={css({
-                    flex: '0 0 100%',
-                    scrollSnapAlign: 'center',
-                    rounded: 'lg',
-                    cursor: 'zoom-in',
-                    _disabled: { cursor: 'default' },
-                    _focusVisible: {
-                      // Drawn inside the tile. The strip scrolls on x, which
-                      // computes overflow-y to auto as well, so a ring offset
-                      // outwards is clipped on all four sides — the tile is
-                      // exactly as wide as the strip and exactly as tall.
-                      outline: '2px solid',
-                      outlineColor: 'accent',
-                      outlineOffset: '-3px',
-                    },
-                  })}
-                >
-                  <SquarePhoto
-                    src={slot.url}
-                    alt={`${item.title} 사진 ${index + 1}`}
-                    // The slot's own state, once `ready` is taken out of it —
-                    // that is the case with a photo in it, where there is no
-                    // fallback to draw.
-                    fallback={slot.state === 'ready' ? undefined : slot.state}
-                    // The stored original keeps the proportions it was shot in,
-                    // so it is fitted into the square rather than cropped to
-                    // it — half a long coat is not a picture of a coat.
-                    fit="contain"
-                    // Only the first tile is on screen; the rest are a swipe
-                    // away, and fetching all five 1280px originals to show one
-                    // is a cost paid on the phone's connection. Browsers judge
-                    // "near the viewport" generously — a good deal more than one
-                    // tile's width — so this defers the far end of a long strip
-                    // rather than everything past the first.
-                    loading={index === 0 ? 'eager' : 'lazy'}
-                    // Feeds back into `slots`, which disables this button and
-                    // drops the photo from what the viewer will open.
-                    onLoadError={() => markUnloadable(slot.id)}
-                  />
-                </button>
-              ))}
-            </div>
-          )}
+      <div className={vstack({ gap: '7', alignItems: 'stretch' })}>
+        {disposed && (
+          <p className={disposedNotice}>
+            <PackageOpen size={15} aria-hidden="true" />
+            처분한 옷이에요. 옷장 목록에는 보이지 않아요.
+          </p>
+        )}
 
-          {/* Reserved whether or not there is more than one photo, so the block
-              below starts at the same height on every item. */}
-          <div className={hstack({ gap: '1.5', justify: 'center', height: '2' })}>
-            {photoCount > 1 &&
-              photos.map((image, index) => (
-                <span
-                  key={image.id}
-                  className={css({
-                    width: '6px',
-                    height: '6px',
-                    rounded: 'full',
-                    // Clamped rather than read straight: a photo deleted from
-                    // under the screen leaves the index pointing past the end.
-                    bg: index === clamp(photoIndex, 0, photoCount - 1) ? 'fg.muted' : 'border',
-                  })}
-                />
-              ))}
-          </div>
-        </section>
+        <div className={hstack({ gap: '2' })}>
+          <Link to={`/items/${item.id}/edit`} className={cx(buttonStyle({ full: true }), css({ flex: '1' }))}>
+            <Pencil size={16} />
+            편집
+          </Link>
+          <Button
+            variant="outline"
+            onClick={() =>
+              setStatus.mutate(
+                { id: item.id, status: disposed ? 'owned' : 'disposed' },
+                {
+                  onSuccess: () =>
+                    toaster.create({
+                      title: disposed ? '다시 보유로 옮겼어요.' : '처분 처리했어요.',
+                      type: 'success',
+                    }),
+                  onError: () =>
+                    toaster.create({ title: '상태를 바꾸지 못했어요.', type: 'error' }),
+                },
+              )
+            }
+            loading={setStatus.isPending}
+          >
+            {disposed ? <ArchiveRestore size={16} /> : <PackageOpen size={16} />}
+            {disposed ? '다시 보유로' : '처분'}
+          </Button>
+        </div>
 
-        <dl className={vstack({ gap: '3', alignItems: 'stretch' })}>
+        <dl className={vstack({ gap: '0', alignItems: 'stretch' })}>
           {DETAIL_FIELDS.map((field) => (
             <div key={field.label} className={detailRow}>
               <dt className={detailLabel}>{field.label}</dt>
@@ -280,58 +254,28 @@ export function ItemDetailPage() {
           ))}
         </dl>
 
-        <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
-          <Link to={`/items/${item.id}/edit`} className={actionButton}>
-            편집
-          </Link>
-          <button
-            type="button"
-            onClick={() =>
-              setStatus.mutate({
-                id: item.id,
-                status: item.status === 'owned' ? 'disposed' : 'owned',
-              })
-            }
-            disabled={setStatus.isPending}
-            className={actionButton}
-          >
-            {item.status === 'owned' ? '처분 처리' : '다시 보유로'}
-          </button>
-
-          {(setStatus.error || setFavorite.error) && (
-            <p role="alert" className={css({ fontSize: 'xs', color: 'danger', textAlign: 'center' })}>
-              변경 사항을 저장하지 못했어요.
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => void handleDelete()}
-            disabled={remove.isPending}
-            className={css({
-              py: '3',
-              rounded: 'lg',
-              fontSize: 'sm',
-              color: 'danger',
-              cursor: 'pointer',
-              _disabled: { opacity: 0.4, cursor: 'not-allowed' },
-              _focusVisible: {
-                outline: '2px solid',
-                outlineColor: 'accent',
-                outlineOffset: '2px',
-              },
-            })}
-          >
-            {remove.isPending ? '삭제 중…' : '삭제'}
-          </button>
-
-          {remove.error && (
-            <p role="alert" className={css({ fontSize: 'xs', color: 'danger', textAlign: 'center' })}>
-              삭제하지 못했어요.{' '}
-              {errorMessage(remove.error, '잠시 후 다시 시도해주세요.')}
-            </p>
-          )}
-        </div>
+        <Button
+          variant="danger"
+          shape="block"
+          full
+          onClick={() => setConfirmingDelete(true)}
+          disabled={remove.isPending}
+        >
+          <Trash2 size={16} />
+          삭제
+        </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title="이 옷을 삭제할까요?"
+        description={`'${item.title}'과(와) 사진이 모두 지워져요. 되돌릴 수 없어요.`}
+        confirmLabel="삭제"
+        destructive
+        pending={remove.isPending}
+        onConfirm={() => void handleDelete()}
+      />
 
       {/* Mounted only while open, so it starts from a known state every time
           rather than holding a stale index and zoom from the last photo.
@@ -363,6 +307,143 @@ export function ItemDetailPage() {
 }
 
 /**
+ * The photo carousel, full-bleed above the title.
+ *
+ * Edge to edge rather than inside the body's padding: this is the one thing on
+ * the screen the user came to look at, and a garment photograph with a 20px
+ * margin on each side is a garment photograph 10% smaller for no reason.
+ */
+function PhotoStrip({
+  item,
+  slots,
+  photos,
+  photoIndex,
+  stripRef,
+  onScroll,
+  onOpen,
+  onLoadError,
+}: {
+  item: WardrobeItem
+  slots: PhotoSlot[]
+  photos: ItemImage[]
+  photoIndex: number
+  stripRef: React.RefObject<HTMLDivElement | null>
+  onScroll: () => void
+  onOpen: (photoId: string) => void
+  onLoadError: (photoId: string) => void
+}) {
+  const photoCount = photos.length
+
+  return (
+    <section aria-label="사진" className={vstack({ gap: '3', alignItems: 'stretch', pt: '2' })}>
+      {photoCount === 0 ? (
+        <div className={css({ px: '5' })}>
+          <SquarePhoto src={null} alt="" fallback="empty" />
+        </div>
+      ) : (
+        <div ref={stripRef} onScroll={onScroll} className={strip}>
+          {/* Driven by the image rows, not by the URLs: the count is known from
+              the cache immediately, so the right number of squares is on screen
+              before any signing has come back. */}
+          {slots.map((slot, index) => (
+            <button
+              key={slot.id}
+              type="button"
+              disabled={slot.state !== 'ready'}
+              aria-label={`사진 ${index + 1} 크게 보기`}
+              onClick={() => onOpen(slot.id)}
+              className={tile}
+            >
+              <SquarePhoto
+                src={slot.url}
+                alt={`${item.title} 사진 ${index + 1}`}
+                // The slot's own state, once `ready` is taken out of it — that
+                // is the case with a photo in it, where there is no fallback to
+                // draw.
+                fallback={slot.state === 'ready' ? undefined : slot.state}
+                // The stored original keeps the proportions it was shot in, so
+                // it is fitted into the square rather than cropped to it — half
+                // a long coat is not a picture of a coat.
+                fit="contain"
+                // Only the first tile is on screen; the rest are a swipe away,
+                // and fetching all five 1280px originals to show one is a cost
+                // paid on the phone's connection.
+                loading={index === 0 ? 'eager' : 'lazy'}
+                // Feeds back into `slots`, which disables this button and drops
+                // the photo from what the viewer will open.
+                onLoadError={() => onLoadError(slot.id)}
+              />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Reserved whether or not there is more than one photo, so the block
+          below starts at the same height on every item. */}
+      <div className={hstack({ gap: '1.5', justify: 'center', height: '1.5' })}>
+        {photoCount > 1 &&
+          photos.map((image, index) => (
+            <span
+              key={image.id}
+              className={dot}
+              // Clamped rather than read straight: a photo deleted from under
+              // the screen leaves the index pointing past the end.
+              data-current={index === clamp(photoIndex, 0, photoCount - 1) || undefined}
+            />
+          ))}
+      </div>
+    </section>
+  )
+}
+
+const strip = css({
+  display: 'flex',
+  gap: '3',
+  overflowX: 'auto',
+  scrollSnapType: 'x mandatory',
+  // The first and last tiles line up with the body's padding, and the ones in
+  // between sit proud of it — so the strip reads as a row that continues past
+  // the screen rather than a single cropped photo.
+  scrollPaddingInline: '5',
+  px: '5',
+  scrollbarWidth: 'none',
+  '&::-webkit-scrollbar': { display: 'none' },
+})
+
+const tile = css({
+  flex: '0 0 calc(100% - {spacing.10})',
+  scrollSnapAlign: 'center',
+  rounded: 'card',
+  cursor: 'zoom-in',
+  _disabled: { cursor: 'default' },
+  // Drawn inside the tile. The strip scrolls on x, which computes overflow-y to
+  // auto as well, so a ring offset outwards is clipped on all four sides.
+  layerStyle: 'focusableInset',
+})
+
+const dot = css({
+  width: '1.5',
+  height: '1.5',
+  rounded: 'full',
+  bg: 'border.strong',
+  transitionProperty: 'background-color, width',
+  transitionDuration: 'fast',
+  // The current page is a stadium rather than a bigger circle — it reads at 6px
+  // where a diameter change does not.
+  '&[data-current]': { width: '4', bg: 'accent' },
+})
+
+const disposedNotice = hstack({
+  gap: '2',
+  px: '4',
+  py: '3',
+  rounded: 'field',
+  bg: 'bg.subtle',
+  color: 'fg.muted',
+  textStyle: 'caption',
+})
+
+/**
  * The screen before the item is known.
  *
  * Built from the same field list as the real screen, in the same rows at the
@@ -376,13 +457,15 @@ export function ItemDetailPage() {
  */
 function DetailSkeletonBody() {
   return (
-    <div className={vstack({ gap: '6', alignItems: 'stretch' })} aria-hidden="true">
-      <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
-        <SquarePhoto src={null} alt="" />
-        <div className={css({ height: '2' })} />
+    <div className={vstack({ gap: '7', alignItems: 'stretch' })} aria-hidden="true">
+      <SquarePhoto src={null} alt="" />
+
+      <div className={hstack({ gap: '2' })}>
+        <div className={cx(inertButton, css({ flex: '1' }))} />
+        <div className={cx(inertButton, css({ width: '24' }))} />
       </div>
 
-      <dl className={vstack({ gap: '3', alignItems: 'stretch' })}>
+      <dl className={vstack({ gap: '0', alignItems: 'stretch' })}>
         {DETAIL_FIELDS.map((field) => (
           <div key={field.label} className={detailRow}>
             <dt className={detailLabel}>{field.label}</dt>
@@ -397,18 +480,6 @@ function DetailSkeletonBody() {
           </div>
         ))}
       </dl>
-
-      <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
-        <div className={inertButton}>
-          <span className={valueBar} style={{ width: '3rem' }} />
-        </div>
-        <div className={inertButton}>
-          <span className={valueBar} style={{ width: '4rem' }} />
-        </div>
-        <div className={css({ py: '3', fontSize: 'sm', textAlign: 'center' })}>
-          <span className={valueBar} style={{ width: '2.5rem' }} />
-        </div>
-      </div>
     </div>
   )
 }
@@ -417,6 +488,18 @@ function DetailSkeletonBody() {
 const valueBar = cx(
   skeletonSurface,
   css({ display: 'inline-block', height: '2.5', rounded: 'sm', verticalAlign: 'middle' }),
+)
+
+/**
+ * A button-shaped box that is not a button.
+ *
+ * Borrows the real button's height so the reserved space is exactly right, and
+ * gives back everything that promises it can be pressed — no cursor, no hover,
+ * and `aria-hidden` on the block above keeps it away from assistive technology.
+ */
+const inertButton = cx(
+  skeletonSurface,
+  css({ minHeight: 'tap', rounded: 'full' }),
 )
 
 /**
@@ -485,47 +568,31 @@ const DETAIL_FIELDS: {
   { label: '메모', skeletonWidth: '70%', value: (item) => item.memo },
 ]
 
-const detailRow = hstack({ gap: '4', alignItems: 'flex-start' })
-
-const detailLabel = css({ width: '64px', flexShrink: 0, fontSize: 'xs', color: 'fg.muted' })
-
-const detailValue = css({ m: '0', flex: '1', fontSize: 'sm', whiteSpace: 'pre-wrap' })
-
 /**
- * Kept as a style object rather than a class name, so the skeleton below can be
- * built by overriding parts of it.
+ * One field, as a row with a rule under it.
  *
- * `cx` would not do: it joins class names without looking at them, so both
- * `cursor` rules would survive and which one won would come down to the order
- * Panda happened to emit them in. `css(a, b)` merges the objects first and emits
- * one rule, which is a decision rather than a coincidence.
+ * Rules rather than the gap the list used to have. Eleven label/value pairs
+ * floating in whitespace is a wall of text where nothing says which value
+ * belongs to which label once a value wraps to two lines; a hairline per row
+ * makes it a table without drawing one.
  */
-const actionButtonStyle = css.raw({
+const detailRow = css({
+  display: 'flex',
+  gap: '4',
+  alignItems: 'flex-start',
   py: '3',
-  rounded: 'lg',
-  fontSize: 'sm',
-  fontWeight: 'medium',
-  textAlign: 'center',
-  borderWidth: '1px',
-  borderStyle: 'solid',
-  borderColor: 'border',
-  color: 'fg',
-  cursor: 'pointer',
-  _hover: { borderColor: 'fg.subtle' },
-  _focusVisible: { outline: '2px solid', outlineColor: 'accent', outlineOffset: '2px' },
+  borderBottomWidth: '1px',
+  borderBottomStyle: 'solid',
+  borderColor: 'border.subtle',
+  '&:last-of-type': { borderBottomWidth: '0' },
 })
 
-const actionButton = css(actionButtonStyle)
-
-/**
- * A button-shaped box that is not a button.
- *
- * Borrows the real button's metrics so the reserved space is exactly right, and
- * gives back the parts that promise it can be pressed — `aria-hidden` keeps a
- * placeholder away from assistive technology, but a pointer would still find a
- * hand cursor and a border that answers to hover.
- */
-const inertButton = css(actionButtonStyle, {
-  cursor: 'default',
-  _hover: { borderColor: 'border' },
+const detailLabel = css({
+  width: '68px',
+  flexShrink: 0,
+  textStyle: 'caption',
+  color: 'fg.muted',
+  pt: '0.5',
 })
+
+const detailValue = css({ m: '0', flex: '1', textStyle: 'body', whiteSpace: 'pre-wrap' })

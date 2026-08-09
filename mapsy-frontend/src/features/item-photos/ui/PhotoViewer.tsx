@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { css } from 'styled-system/css'
 
 import { clamp } from '@/shared/lib/clamp'
@@ -670,25 +671,26 @@ export function PhotoViewer({
           aria-label="사진 닫기"
           onClick={() => dialogRef.current?.close()}
           className={css({
-            fontSize: 'xl',
-            lineHeight: '1',
+            display: 'grid',
+            placeItems: 'center',
+            width: 'tap',
+            height: 'tap',
+            ml: '1',
             color: 'overlay.fg',
-            px: '3',
-            py: '2',
-            rounded: 'md',
+            rounded: 'full',
             cursor: 'pointer',
             pointerEvents: 'auto',
+            // The page's own focus ring is an orange that has to be legible over
+            // an arbitrary photograph; here it is drawn in the overlay's
+            // foreground colour, which the scrim above guarantees contrast for.
             _focusVisible: { outline: '2px solid', outlineColor: 'overlay.fg', outlineOffset: '0' },
           })}
         >
-          ✕
+          <X size={22} />
         </button>
 
         {slots.length > 1 && (
-          <span
-            aria-live="polite"
-            className={css({ fontSize: 'sm', color: 'overlay.fg', px: '3', py: '2' })}
-          >
+          <span aria-live="polite" className={counter}>
             {index + 1} / {slots.length}
           </span>
         )}
@@ -696,3 +698,21 @@ export function PhotoViewer({
     </dialog>
   )
 }
+
+/**
+ * The page counter, in a pill rather than loose over the photo.
+ *
+ * The gradient above it fades out before the counter's baseline on a tall photo,
+ * so the text was relying on whatever happened to be behind it.
+ */
+const counter = css({
+  px: '3',
+  py: '1.5',
+  mr: '2',
+  rounded: 'full',
+  bg: 'overlay.scrim',
+  backdropFilter: 'blur(6px)',
+  color: 'overlay.fg',
+  textStyle: 'caption',
+  fontVariantNumeric: 'tabular-nums',
+})

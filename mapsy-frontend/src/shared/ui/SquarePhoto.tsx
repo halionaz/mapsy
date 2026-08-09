@@ -73,9 +73,12 @@ const frame = css({
   position: 'relative',
   aspectRatio: '1',
   width: 'full',
-  rounded: 'lg',
+  rounded: 'card',
   overflow: 'hidden',
   bg: 'bg.subtle',
+  // A garment shot on a white sheet has no edge of its own; without this the
+  // tile bleeds into a light page and floats in a dark one.
+  boxShadow: 'inset 0 0 0 1px {colors.border.subtle}',
 })
 
 const skeleton = cx(skeletonSurface, css({ position: 'absolute', inset: '0' }))
@@ -88,7 +91,7 @@ const notice = css({
   px: '2',
   textAlign: 'center',
   color: 'fg.subtle',
-  fontSize: 'xs',
+  textStyle: 'caption',
 })
 
 const photo = cva({

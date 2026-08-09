@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { css } from 'styled-system/css'
+import { ChevronDown } from 'lucide-react'
+import { css, cx } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
 import {
@@ -12,7 +13,10 @@ import { fitPresetsFor, hasFitField } from '@/shared/config/fits'
 import { MAX_SEASONS_PER_ITEM, SEASONS, type SeasonId } from '@/shared/config/seasons'
 import { sizePresetsFor } from '@/shared/config/sizes'
 import { releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
+import { Button } from '@/shared/ui/Button'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
+import { Field, FieldError } from '@/shared/ui/Field'
+import { inputStyle } from '@/shared/ui/fieldStyle'
 import type { ItemDraft } from '@/entities/item'
 import { LIMITS, MAX_PHOTOS } from '../model/limits'
 import { PhotoPicker } from './PhotoPicker'
@@ -200,7 +204,7 @@ export function ItemForm({
           maxLength={LIMITS.title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="예) 마산 플리스"
-          className={inputStyle}
+          className={inputStyle({ invalid: touched && missingTitle })}
         />
         {touched && missingTitle && <FieldError>이름을 입력해주세요.</FieldError>}
       </Field>
@@ -227,24 +231,18 @@ export function ItemForm({
         {touched && missingCategory && <FieldError>카테고리를 골라주세요.</FieldError>}
       </Field>
 
+      {/* A full-width row rather than a text link. The optional section holds
+          nine of the eleven fields, so this is the form's main fork and was
+          drawn as its smallest control. */}
       <button
         type="button"
         onClick={() => setShowOptional((v) => !v)}
-        className={css({
-          alignSelf: 'flex-start',
-          fontSize: 'sm',
-          color: 'accent',
-          cursor: 'pointer',
-          textDecoration: 'underline',
-          _focusVisible: {
-            outline: '2px solid',
-            outlineColor: 'accent',
-            outlineOffset: '2px',
-          },
-        })}
+        className={disclosure}
+        data-open={showOptional || undefined}
         aria-expanded={showOptional}
       >
-        {showOptional ? '선택 항목 접기' : '선택 항목 더 쓰기'}
+        <span>{showOptional ? '선택 항목 접기' : '선택 항목 더 쓰기'}</span>
+        <ChevronDown size={16} aria-hidden="true" className={disclosureChevron} />
       </button>
 
       {showOptional && (
@@ -282,7 +280,7 @@ export function ItemForm({
                   maxLength={LIMITS.size}
                   aria-label="사이즈 직접 입력"
                   placeholder="직접 입력"
-                  className={inputStyle}
+                  className={inputStyle()}
                 />
               </div>
             </Field>
@@ -303,7 +301,7 @@ export function ItemForm({
               value={brand}
               maxLength={LIMITS.brand}
               onChange={(e) => setBrand(e.target.value)}
-              className={inputStyle}
+              className={inputStyle()}
             />
           </Field>
 
@@ -314,7 +312,7 @@ export function ItemForm({
               onChange={(e) => setPrice(e.target.value)}
               inputMode="numeric"
               placeholder="220000"
-              className={inputStyle}
+              className={inputStyle({ invalid: priceProblem != null })}
             />
             {priceProblem && <FieldError>{priceProblem}</FieldError>}
           </Field>
@@ -325,7 +323,7 @@ export function ItemForm({
               type="date"
               value={purchasedAt}
               onChange={(e) => setPurchasedAt(e.target.value)}
-              className={inputStyle}
+              className={inputStyle()}
             />
           </Field>
 
@@ -335,7 +333,7 @@ export function ItemForm({
               value={purchasePlace}
               maxLength={LIMITS.purchasePlace}
               onChange={(e) => setPurchasePlace(e.target.value)}
-              className={inputStyle}
+              className={inputStyle()}
             />
           </Field>
 
@@ -345,7 +343,7 @@ export function ItemForm({
               value={tagText}
               onChange={(e) => setTagText(e.target.value)}
               placeholder="출근용, 러닝"
-              className={inputStyle}
+              className={inputStyle({ invalid: tagProblem != null })}
             />
             {tagProblem && <FieldError>{tagProblem}</FieldError>}
           </Field>
@@ -357,7 +355,7 @@ export function ItemForm({
               maxLength={LIMITS.memo}
               onChange={(e) => setMemo(e.target.value)}
               rows={3}
-              className={css({ ...inputBase, resize: 'vertical' })}
+              className={cx(inputStyle(), css({ resize: 'vertical' }))}
             />
           </Field>
         </div>
@@ -371,7 +369,7 @@ export function ItemForm({
       {touched && !showOptional && hiddenProblems.length > 0 && (
         <div role="alert" className={vstack({ gap: '1', alignItems: 'stretch' })}>
           {hiddenProblems.map((problem) => (
-            <p key={problem} className={css({ fontSize: 'sm', color: 'danger' })}>
+            <p key={problem} className={css({ textStyle: 'caption', color: 'danger' })}>
               {problem}
             </p>
           ))}
@@ -379,113 +377,57 @@ export function ItemForm({
       )}
 
       {error && (
-        <p role="alert" className={css({ fontSize: 'sm', color: 'danger' })}>
+        <p role="alert" className={formError}>
           {error}
         </p>
       )}
 
-      <div className={hstack({ gap: '2' })}>
-        <button type="submit" disabled={pending} className={primaryButton}>
+      <div className={hstack({ gap: '2', pt: '2' })}>
+        <Button type="submit" size="lg" full loading={pending} disabled={pending}>
           {pending ? '저장 중…' : submitLabel}
-        </button>
-        <button type="button" onClick={onCancel} className={secondaryButton}>
+        </Button>
+        <Button variant="ghost" size="lg" onClick={onCancel}>
           취소
-        </button>
+        </Button>
       </div>
     </form>
   )
 }
 
-const inputBase = {
-  width: 'full',
-  bg: 'bg.subtle',
-  color: 'fg',
-  rounded: 'lg',
-  px: '3.5',
-  py: '2.5',
-  fontSize: 'sm',
-  _placeholder: { color: 'fg.subtle' },
-  _focusVisible: {
-    outline: '2px solid',
-    outlineColor: 'accent',
-    outlineOffset: '2px',
-  },
-} as const
+const disclosure = cx(
+  hstack({ justify: 'space-between' }),
+  css({
+    width: 'full',
+    px: '4',
+    minHeight: 'tap',
+    rounded: 'field',
+    bg: 'bg.subtle',
+    color: 'accent.text',
+    textStyle: 'label',
+    cursor: 'pointer',
+    transitionProperty: 'background-color',
+    transitionDuration: 'fast',
+    _hover: { bg: 'bg.elevatedHover' },
+    layerStyle: 'focusable',
+  }),
+)
 
-const inputStyle = css(inputBase)
-
-const primaryButton = css({
-  flex: '1',
-  bg: 'accent',
-  color: 'accent.fg',
-  rounded: 'lg',
-  py: '3',
-  fontSize: 'sm',
-  fontWeight: 'semibold',
-  cursor: 'pointer',
-  _hover: { opacity: 0.92 },
-  _disabled: { opacity: 0.4, cursor: 'not-allowed' },
-  _focusVisible: { outline: '2px solid', outlineColor: 'accent', outlineOffset: '2px' },
+const disclosureChevron = css({
+  transitionProperty: 'rotate',
+  transitionDuration: 'fast',
+  transitionTimingFunction: 'out',
+  '[data-open] &': { rotate: '180deg' },
+  _motionReduce: { transitionDuration: '1ms' },
 })
 
-const secondaryButton = css({
-  px: '5',
-  rounded: 'lg',
+const formError = css({
+  textStyle: 'caption',
+  color: 'danger',
+  bg: 'danger.subtle',
+  px: '4',
   py: '3',
-  fontSize: 'sm',
-  color: 'fg.muted',
-  borderWidth: '1px',
-  borderStyle: 'solid',
-  borderColor: 'border',
-  cursor: 'pointer',
-  _hover: { color: 'fg' },
-  _focusVisible: { outline: '2px solid', outlineColor: 'accent', outlineOffset: '2px' },
+  rounded: 'field',
 })
-
-/**
- * A labelled block.
- *
- * Renders a real `<label>` only when it wraps exactly one form control
- * (`htmlFor`). Wrapping everything in one was invalid HTML the moment the child
- * was a `<fieldset>` of chips or a picker with its own `<label>` — and it had
- * teeth: tapping the word "카테고리" activated the first labelable descendant,
- * so it silently selected 반팔티. Tapping "사진" opened the file picker.
- */
-function Field({
-  label,
-  htmlFor,
-  required,
-  hint,
-  children,
-}: {
-  label: string
-  htmlFor?: string
-  required?: boolean
-  hint?: string
-  children: React.ReactNode
-}) {
-  const caption = (
-    <>
-      {label}
-      {required && <span className={css({ color: 'danger', ml: '1' })}>*</span>}
-      {hint && <span className={css({ ml: '2', color: 'fg.subtle' })}>{hint}</span>}
-    </>
-  )
-  const captionStyle = css({ fontSize: 'xs', color: 'fg.muted' })
-
-  return (
-    <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
-      {htmlFor ? (
-        <label htmlFor={htmlFor} className={captionStyle}>
-          {caption}
-        </label>
-      ) : (
-        <span className={captionStyle}>{caption}</span>
-      )}
-      {children}
-    </div>
-  )
-}
 
 /** True when an existing item has anything in the optional section. */
 function hasOptionalValues(initial: Partial<ItemFormValues> | undefined): boolean {
@@ -501,13 +443,5 @@ function hasOptionalValues(initial: Partial<ItemFormValues> | undefined): boolea
       initial.colors?.length ||
       initial.seasons?.length ||
       initial.tags?.length,
-  )
-}
-
-function FieldError({ children }: { children: React.ReactNode }) {
-  return (
-    <span role="alert" className={css({ fontSize: 'xs', color: 'danger' })}>
-      {children}
-    </span>
   )
 }

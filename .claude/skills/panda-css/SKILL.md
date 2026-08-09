@@ -119,6 +119,13 @@ docs can't tell you them.
 | Layout — rows, columns, grids, spacing | a **pattern** (`hstack`, `vstack`, `grid`, `container`) rather than hand-rolled flex |
 | A component with variants (Button, Chip, Card, Badge) | a **recipe** — `cva` for local, `defineRecipe` in config for shared |
 | A multi-part component sharing variants (BottomSheet, ItemCard) | a **slot recipe** |
+| Type sizes | `textStyle: 'title' \| 'body' \| 'label' \| …` — never a raw `fontSize`/`fontWeight` pair |
+| The focus ring | `layerStyle: 'focusable'` (or `focusableInset` inside a scroller) |
+
+The shared component layer lives in `src/shared/ui/`: `buttonStyle.ts` / `chipStyle.ts` /
+`fieldStyle.ts` hold the recipes, `Button.tsx` / `Field.tsx` / `Sheet.tsx` /
+`ConfirmDialog.tsx` / `Toaster.tsx` the components. Overlays are Ark UI primitives styled with
+our tokens. Reach for one of these before writing a new `css()` for a button, input or chip.
 
 Reach for patterns before writing `display: flex` by hand. The whole point is that layout
 intent reads at a glance and stays consistent across screens — mapsy's item grid, filter chip
@@ -157,6 +164,37 @@ css({ color: c })
 If you genuinely need a runtime value (a user-chosen color swatch, a computed width), pass it
 as a **CSS custom property** through `style={{ '--swatch': hex }}` and reference `var(--swatch)`
 in the Panda style. That keeps the generated CSS static while the value stays dynamic.
+
+The same applies to values you were about to factor out. `const TILE = '84px'` and then
+`css({ width: TILE })` asks the extractor to resolve a variable; write the literal twice and
+say why in a comment instead.
+
+### Two traps this repo has already paid for
+
+**`_enabled` compiles to `:enabled`, which no `<a>` matches.** Several buttons in mapsy are
+react-router `<Link>`s wearing `buttonStyle` (the FAB, 편집, 내 옷장으로). Guarding a hover or
+press rule with `_enabled` removes it from every one of them, silently. Write
+`'&:hover:not(:disabled)'` — true for an anchor, false for a disabled button. The guard is
+needed at all because a `_hover` rule and a `_disabled` rule have equal specificity.
+
+**`cx` joins class names; it does not merge styles.** Two atomic classes setting the same
+property have the same specificity, so the winner is whichever Panda emitted later — a
+coincidence, not a decision. `cx(buttonStyle({ size: 'sm' }), css({ px: '2' }))` is a bug
+waiting for a stylesheet reorder. Either add a variant to the recipe, or merge the objects
+first with `css(a.raw?.() ?? a, b)` / `css(styleObject, override)` so one rule is emitted.
+`cx` is fine when the classes touch disjoint properties — that is the only safe case.
+
+### Checking that CSS was actually emitted
+
+Because a wrong shape produces no error, verify rather than assume:
+
+```bash
+cd mapsy-frontend && npx panda cssgen --outfile /tmp/check.css
+grep -c 'colors-accent-hover' /tmp/check.css
+```
+
+Worth doing after adding a token group, a keyframe, an arbitrary selector
+(`'&[data-state=open]'`, `'[data-open] &'`), or anything with a vendor prefix.
 
 ### Color and dark mode
 
