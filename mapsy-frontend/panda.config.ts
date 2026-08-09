@@ -46,9 +46,21 @@ export default defineConfig({
           from: { transform: 'translateY(100%)' },
           to: { transform: 'translateY(0)' },
         },
-        slideDown: {
-          from: { transform: 'translateY(0)' },
-          to: { transform: 'translateY(100%)' },
+        /**
+         * The sheet leaving, from wherever it currently is.
+         *
+         * `--drawer-translate-y` is written to the content by Ark's drawer on
+         * every frame of a swipe, so starting the keyframe from it means a sheet
+         * flicked halfway down carries on from halfway down. A fixed
+         * `from: translateY(0)` would snap it back up to the top and then play
+         * the exit — a jump on exactly the gesture this animation exists for.
+         *
+         * The fallback covers the other ways out (backdrop, Esc, 결과 보기),
+         * where nothing has been dragged and the sheet starts at rest.
+         */
+        drawerOut: {
+          from: { transform: 'translate3d(0, var(--drawer-translate-y, 0px), 0)' },
+          to: { transform: 'translate3d(0, 100%, 0)' },
         },
         // Centred dialogs grow from slightly under full size rather than sliding:
         // a confirm box has no edge to come from.
@@ -120,7 +132,7 @@ export default defineConfig({
           fadeIn: { value: 'fadeIn {durations.normal} {easings.out}' },
           fadeOut: { value: 'fadeOut {durations.fast} {easings.out}' },
           sheetIn: { value: 'slideUp {durations.slow} {easings.out}' },
-          sheetOut: { value: 'slideDown {durations.normal} {easings.inOut}' },
+          sheetOut: { value: 'drawerOut {durations.normal} {easings.inOut}' },
           dialogIn: { value: 'popIn {durations.normal} {easings.out}' },
           dialogOut: { value: 'popOut {durations.fast} {easings.inOut}' },
           toastIn: { value: 'toastIn {durations.normal} {easings.out}' },
