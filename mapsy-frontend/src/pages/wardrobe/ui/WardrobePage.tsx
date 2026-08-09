@@ -71,12 +71,16 @@ export function WardrobePage() {
     <div className={vstack({ gap: '0', alignItems: 'stretch', flex: '1' })}>
       <div className={titleBlock}>
         <div className={glow} aria-hidden="true" />
-        <div className={hstack({ justify: 'space-between', alignItems: 'flex-start' })}>
+        {/* `hstack` centres by default, and that default is the right one here:
+            the title's line box is 29px tall and the settings button is a 44px
+            tap target, so top-aligning them sat the gear about 8px below the
+            title's optical centre. */}
+        <div className={hstack({ justify: 'space-between' })}>
           <h1 className={css({ textStyle: 'title' })}>
             내 옷장
             <span className={css({ ml: '2', color: 'fg.subtle' })}>{ownedCount}</span>
           </h1>
-          <Link to="/settings" aria-label="설정" className={iconButtonStyle()}>
+          <Link to="/settings" aria-label="설정" className={settingsLink}>
             <Settings size={20} />
           </Link>
         </div>
@@ -289,6 +293,21 @@ const titleBlock = css({
   pb: '4',
   overflow: 'hidden',
 })
+
+/**
+ * The settings button, pulled out to the screen's optical margin.
+ *
+ * A 20px glyph centred in a 44px tap target has 12px of air on each side, so a
+ * button whose *box* ends at the 20px page inset leaves the glyph ending at 32px
+ * — visibly further in than everything under it, because the filter button below
+ * is filled and its box is what the eye lines up against. Pulling the box out by
+ * that 12px puts the two visible right edges on the same line and leaves the tap
+ * target its full size.
+ *
+ * `ScreenHeader`'s bar needs no equivalent: its own inset is already 8px, which
+ * is the 20px body inset minus the back chevron's 11px of internal air.
+ */
+const settingsLink = cx(iconButtonStyle(), css({ mr: '-3' }))
 
 /**
  * A wash of brand orange behind the screen's name.
