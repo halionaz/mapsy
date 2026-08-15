@@ -185,11 +185,14 @@ export function WardrobePage() {
    * whether the sort control names the grouping (`orderLabel` below).
    *
    * Deliberately not "is 전체 selected". A lone heading names everything on the
-   * screen, which the title above already does — and measured, every one of the
-   * ten filter axes this screen can reach leaves one section standing all by
-   * itself: the chip and the search, but equally 즐겨찾기만 보기, a colour, a
-   * size, a brand. With the wardrobe simply having one group so far, that is
-   * eleven ways in. A rule each would be eleven rules; the count is one.
+   * screen, which the title above already does — and measured, every filter axis
+   * that has a control leaves one section standing all by itself: the rail and
+   * the search box here, 즐겨찾기 and six more in the sheet. Nine, and with the
+   * wardrobe simply having one group so far, ten ways in. A rule each would be
+   * ten rules; the count is one.
+   *
+   * Nine rather than `applyFilters`' eleven predicates: `status` is fixed to
+   * owned, and nothing in the app writes `categoryIds`.
    */
   const sectioned = sections.length > 1
 
