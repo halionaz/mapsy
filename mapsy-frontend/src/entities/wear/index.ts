@@ -10,6 +10,9 @@
 
 export type { WearEntry, WearSummary, Worn } from './model/types'
 
-export { useSetWears, useToggleWear, useWears } from './model/queries'
+export { dropItemWears, useSetWears, useToggleWear, useWears } from './model/queries'
 
-export { attachWears, itemIdsWornOn, summarizeWears } from './lib/wearStats'
+// `summarizeWears` is deliberately not here. Its only caller is `attachWears`
+// beside it, and its own tests reach it through the module — exporting it was
+// surface with nothing behind it.
+export { attachWears, itemIdsWornOn } from './lib/wearStats'

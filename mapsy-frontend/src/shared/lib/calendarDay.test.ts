@@ -18,8 +18,10 @@ describe('todayLocal', () => {
     if (env) env.TZ = 'Asia/Seoul'
     try {
       const morning = new Date('2026-08-14T23:30:00Z') // 15일 08:30 KST
-      // Self-check: if pinning the timezone stopped working, the assertion below
-      // would pass for the wrong reason.
+      // What the replaced one-liner answers, written down. `toISOString` is UTC
+      // whatever the process timezone is, so this is a record of the wrong
+      // answer and not a check on the pinning above — if `env.TZ` stopped taking
+      // effect the assertion below would fail, loudly, which is the whole guard.
       expect(morning.toISOString().slice(0, 10)).toBe('2026-08-14')
       expect(todayLocal(morning)).toBe('2026-08-15')
     } finally {

@@ -20,13 +20,7 @@ import {
   type ItemImage,
   type WardrobeItem,
 } from '@/entities/item'
-import {
-  attachWears,
-  itemIdsWornOn,
-  useToggleWear,
-  useWears,
-  type Worn,
-} from '@/entities/wear'
+import { attachWears, useToggleWear, useWears, type Worn } from '@/entities/wear'
 import { useCurrentUserId } from '@/features/auth'
 import { PhotoViewer, useItemPhotos, type PhotoSlot } from '@/features/item-photos'
 import { categoryLabel } from '@/shared/config/categories'
@@ -89,8 +83,12 @@ export function ItemDetailPage() {
     () => (found ? attachWears([found], wears)[0] : undefined),
     [found, wears],
   )
+  // `some`, not `itemIdsWornOn(...).has(...)`: that builds a Set of every
+  // garment worn that day to answer a question about one of them.
   const wornToday = useMemo(
-    () => (found ? itemIdsWornOn(wears, today).has(found.id) : false),
+    () =>
+      found != null &&
+      wears.some((entry) => entry.itemId === found.id && entry.wornOn === today),
     [found, wears, today],
   )
   // Sorted, signed and paired in one place — the URLs are matched to the photos

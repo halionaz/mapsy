@@ -28,7 +28,15 @@ function read(): LocalDays {
  *
  * `visibilitychange` is what actually catches that: a phone that crossed
  * midnight has had its screen off, and coming back to it is the event. `focus`
- * covers the desktop tab that never went hidden.
+ * adds the tab that was clicked away from and back to without ever being
+ * hidden — a second window, another app on a desktop.
+ *
+ * Neither fires for a window that is simply left in front, so a screen watched
+ * across midnight without a single interruption keeps yesterday's answer. That
+ * gap is not closed here: a timer to midnight would be a background wake-up on
+ * every screen that reads this, and the write path guards itself — the draft is
+ * dropped once its day is no longer one of the two (`wearDraft.isUsable`), so
+ * the failure is a selection that closes rather than a day recorded wrong.
  *
  * The state is replaced only when the strings differ, so the ordinary case —
  * every focus that is not the first after midnight — does not re-render anything.

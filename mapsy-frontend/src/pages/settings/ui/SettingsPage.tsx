@@ -33,8 +33,13 @@ export function SettingsPage() {
   /**
    * Wear history is attached here too, and it is worth more on this screen than
    * on the wardrobe: the card's line reads as the last time the garment was worn
-   * before it was let go. Filtered before the merge rather than after, so the
-   * summarising walks the disposed few instead of the whole collection.
+   * before it was let go.
+   *
+   * Filtered before the merge rather than after, which spends less — though not
+   * where it first looked. `attachWears` summarises the whole wear log either
+   * way (`summarizeWears` walks the entries, not the items), so what filtering
+   * first saves is the `map` afterwards: a summary is attached to the few
+   * garments this screen draws instead of to every garment in the wardrobe.
    */
   const disposed = useMemo(
     () => attachWears((data ?? []).filter((item) => item.status === 'disposed'), wearData ?? []),

@@ -35,6 +35,7 @@ import {
   WearFab,
   WearSelectionBar,
 } from '@/features/wear-log'
+import { useCurrentUserId } from '@/features/auth'
 import { CATEGORY_GROUPS, groupIdOf, type CategoryGroupId } from '@/shared/config/categories'
 import { assertNever } from '@/shared/lib/assertNever'
 import { errorMessage } from '@/shared/lib/errorMessage'
@@ -99,8 +100,12 @@ export function WardrobePage() {
   const retry = useRetryUpload()
   const discard = useDiscardUpload()
 
-  const { today, yesterday } = useLocalDays()
-  const draft = useWearDraft()
+  const userId = useCurrentUserId()
+  const days = useLocalDays()
+  const { today, yesterday } = days
+  // Both guards live in the store: whose draft it is, and whether its day is
+  // still one of the two the app writes. See `wearDraft.isUsable`.
+  const draft = useWearDraft(userId, days)
 
   const [filters, setFilters] = useState<WardrobeFilters>(EMPTY_FILTERS)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -111,12 +116,9 @@ export function WardrobePage() {
   /**
    * The wear log, and whether it has answered yet.
    *
-   * `wearsAnswered` gates every part of selection mode below, and it is not
-   * politeness about a spinner. Submitting rewrites a whole day — the set that
-   * is sent *replaces* what the day held — so a selection seeded from a
-   * collection that has not arrived is an empty set about to be written over
-   * real records. `data !== undefined`, not "there are rows": a person who has
-   * never recorded anything gets `[]`, which is an answer.
+   * `data !== undefined`, not "there are rows": somebody who has never recorded
+   * anything gets `[]`, and that is an answer. What the distinction is for is in
+   * `canRecord` below.
    */
   const wears = useMemo(() => wearData ?? [], [wearData])
   const wearsAnswered = wearData !== undefined
@@ -283,7 +285,36 @@ export function WardrobePage() {
    * button would then write that empty set over the day. Everything below reads
    * `selecting`, never `draft`, and the mode simply appears a moment later.
    */
-  const selecting = wearsAnswered ? draft : null
+  /**
+   * Whether this screen can record at all.
+   *
+   * Not on 옷장을 불러오지 못했어요 and not on the empty wardrobe — the first has
+   * no collection to pick from and the second has nothing in it. `noMatches`
+   * keeps it: the filters are still reachable from inside the mode, so a search
+   * that currently matches nothing is a state to type out of, not a dead end.
+   *
+   * `wearsAnswered` is the load-bearing term and not politeness about a spinner:
+   * submitting rewrites a whole day, so a selection seeded from a collection
+   * that has not arrived is an empty set about to be written over real records.
+   */
+  const canRecord =
+    wearsAnswered && userId !== null && (view === 'grid' || view === 'noMatches')
+
+  /**
+   * Whether a selection is actually in progress, which is not the same question
+   * as whether a draft exists.
+   *
+   * A draft survives a reload, so on a cold start it is here before either query
+   * is — and the wear log usually lands first, because the wardrobe fetch also
+   * signs every cover URL. Without the gate the submit bar drew over the loading
+   * skeletons, and over 옷장을 불러오지 못했어요: a mode for picking garments, on a
+   * screen with no garments to pick. Both measured.
+   *
+   * `canRecord`, not `wearsAnswered`, so every screen the mode is wrong on is
+   * excluded by one condition rather than by a list that has to be kept in step
+   * with `View`.
+   */
+  const selecting = canRecord ? draft : null
 
   /**
    * Which day the wear button is about when nothing is being picked: yesterday.
@@ -295,22 +326,35 @@ export function WardrobePage() {
    * common case is the default and the other one is reachable.
    */
   const activeDay = selecting?.wornOn ?? yesterday
-  // `=== today` rather than `!== yesterday`, so a draft for some third day —
-  // which `wearDraft` refuses to restore, and nothing else can produce — reads
-  // as 어제 rather than silently borrowing 오늘's label.
-  const dayLabel = activeDay === today ? '오늘' : '어제'
-  const recordedIds = useMemo(() => itemIdsWornOn(wears, activeDay), [wears, activeDay])
-  const selectedIds = useMemo(() => (selecting ? new Set(selecting.itemIds) : null), [selecting])
 
   /**
-   * Where the button is offered at all.
+   * Which of the two days is being written, decided once.
    *
-   * Not on 옷장을 불러오지 못했어요 and not on the empty wardrobe — the first has
-   * no collection to pick from and the second has nothing in it. `noMatches`
-   * keeps it: the filters are still reachable from inside the mode, so a search
-   * that currently matches nothing is a state to type out of, not a dead end.
+   * Everything that needs the answer reads this rather than comparing the label
+   * strings back to each other. The previous version derived the *other* day's
+   * name from `dayLabel === '오늘'`, which is a fact already established here
+   * being re-inferred from how it was rendered.
+   *
+   * `useWearDraft` is what guarantees `activeDay` is one of the two — a tab left
+   * open across midnight otherwise holds a day that is neither, and this
+   * comparison would have called the day before yesterday 어제.
    */
-  const canRecord = wearsAnswered && (view === 'grid' || view === 'noMatches')
+  const isToday = activeDay === today
+  const dayLabel = isToday ? '오늘' : '어제'
+
+  /**
+   * What the day holds — every wear recorded against it, disposed garments
+   * included.
+   *
+   * That is a different population from the grid, which draws `owned` only, so
+   * the two can disagree: dispose of something worn yesterday and the button
+   * says 어제 2벌 over a single card. The count is right — it describes the
+   * record — and narrowing it to what is on screen would be worse, because the
+   * hidden garment stays in the submitted set either way and would then be
+   * neither visible nor counted.
+   */
+  const recordedIds = useMemo(() => itemIdsWornOn(wears, activeDay), [wears, activeDay])
+  const selectedIds = useMemo(() => (selecting ? new Set(selecting.itemIds) : null), [selecting])
 
   function setGroup(groupId: CategoryGroupId | null) {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
@@ -318,7 +362,10 @@ export function WardrobePage() {
 
   /** Opens a day, seeded with what it already holds — also how the date switches. */
   function startSelecting(day: string) {
-    openWearDraft(day, itemIdsWornOn(wears, day))
+    // Unreachable while `canRecord` gates every caller, and kept because it is
+    // what makes that gate a type-level fact rather than a convention.
+    if (!userId) return
+    openWearDraft(userId, day, itemIdsWornOn(wears, day))
   }
 
   function submitSelection() {
@@ -698,11 +745,11 @@ export function WardrobePage() {
         <WearSelectionBar
           wornOn={selecting.wornOn}
           dayLabel={dayLabel}
-          otherDayLabel={dayLabel === '오늘' ? '어제' : '오늘'}
+          otherDayLabel={isToday ? '어제' : '오늘'}
           selectedCount={selecting.itemIds.length}
           recordedCount={recordedIds.size}
           submitting={submitWears.isPending}
-          onToggleDay={() => startSelecting(activeDay === today ? yesterday : today)}
+          onToggleDay={() => startSelecting(isToday ? yesterday : today)}
           onSubmit={submitSelection}
           onCancel={closeWearDraft}
         />

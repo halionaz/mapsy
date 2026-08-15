@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import * as api from '../api/wearApi'
@@ -23,6 +23,32 @@ export function useWears() {
     // and `getSupabase()` throws.
     enabled: isSupabaseConfigured,
   })
+}
+
+/**
+ * Takes a deleted garment's wears out of the cache.
+ *
+ * Called by `useDeleteItem`, which is an import from the item entity into this
+ * one and is meant to be: the database cascades these rows away with the item
+ * (`item_wears_item_fk ... on delete cascade`), so a cache that keeps them is a
+ * cache disagreeing with the schema. Leaving the two caches independent looked
+ * like the tidier layering and produced this, measured:
+ *
+ *   delete a garment recorded yesterday → the wear button still counts it →
+ *   opening the day seeds the selection with an id that has no card, so it
+ *   cannot be unticked → submit sends it → `item_wears_item_fk` → the whole
+ *   function rolls back and the day cannot be recorded at all. `staleTime` is
+ *   30 minutes and focus refetch respects it, so nothing clears it in between.
+ *
+ * The cancel matters for the same reason it does in every mutation here: a wear
+ * fetch already in flight holds rows from before the delete, and would put the
+ * ghost straight back.
+ */
+export async function dropItemWears(queryClient: QueryClient, itemId: string): Promise<void> {
+  await queryClient.cancelQueries({ queryKey: wearKeys.all })
+  queryClient.setQueryData<WearEntry[]>(wearKeys.list(), (entries) =>
+    entries ? entries.filter((entry) => entry.itemId !== itemId) : entries,
+  )
 }
 
 function useWearCache() {

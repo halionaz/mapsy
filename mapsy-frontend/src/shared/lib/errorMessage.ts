@@ -48,13 +48,15 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   item_images_dimensions_positive: '사진 크기를 읽지 못했어요.',
   item_images_item_sort_key: '사진 순서가 중복됐어요.',
   item_images_item_fk: '사진을 붙일 옷을 찾을 수 없어요.',
-  // The wear log's three. None is reachable from the app as it stands — writing
-  // a whole day goes through `set_item_wears`, which is `on conflict do
-  // nothing`, the single toggle is an `ignoreDuplicates` upsert, and the item
-  // ids can only come out of a wardrobe that has already loaded. Listed anyway,
-  // for the reason the fit entry above is: the map is a mirror of the schema,
-  // and deciding which unreachable names to leave out is the judgement that put
-  // gaps in it three times.
+  // The wear log's three. The two unique ones are hard to reach — writing a
+  // whole day goes through `set_item_wears`, which is `on conflict do nothing`,
+  // and the single toggle is an `ignoreDuplicates` upsert.
+  //
+  // The foreign key is not. A submit sends ids the wardrobe cache is holding,
+  // and that cache can be behind the database: delete the garment on another
+  // device, or in another tab, and this is the message that comes back. It is
+  // the reachable one of the three, and the reason the sentence names the thing
+  // the user was doing rather than the constraint.
   item_wears_item_date_key: '그날 입은 옷으로 이미 기록돼 있어요.',
   item_wears_item_fk: '착용 기록을 붙일 옷을 찾을 수 없어요.',
   items_id_user_key: '이미 있는 옷이에요.',

@@ -5,9 +5,12 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PendingUpload, WardrobeItem } from '@/entities/item'
-import { closeWearDraft } from '@/features/wear-log'
+import { closeWearDraft, openWearDraft } from '@/features/wear-log'
 import { todayLocal, yesterdayLocal } from '@/shared/lib/calendarDay'
 import { WardrobePage } from './WardrobePage'
+
+/** The signed-in user these tests run as. Matches the item fixture's `userId`. */
+const OWNER = 'u1'
 
 /**
  * Which screens offer a way to register a garment.
@@ -24,14 +27,19 @@ import { WardrobePage } from './WardrobePage'
  * it queues.
  */
 
-const { useWardrobeMock, usePendingUploadsMock, useWearsMock, submitWearsMock } = vi.hoisted(
-  () => ({
-    useWardrobeMock: vi.fn(),
-    usePendingUploadsMock: vi.fn(),
-    useWearsMock: vi.fn(),
-    submitWearsMock: vi.fn(),
-  }),
-)
+const {
+  useWardrobeMock,
+  usePendingUploadsMock,
+  useWearsMock,
+  submitWearsMock,
+  useCurrentUserIdMock,
+} = vi.hoisted(() => ({
+  useWardrobeMock: vi.fn(),
+  usePendingUploadsMock: vi.fn(),
+  useWearsMock: vi.fn(),
+  submitWearsMock: vi.fn(),
+  useCurrentUserIdMock: vi.fn(),
+}))
 
 /** The shape `useWardrobe` returns, with only what this screen reads. */
 function query(overrides: Record<string, unknown>) {
@@ -70,6 +78,18 @@ vi.mock('@/entities/wear', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/entities/wear')>()),
   useWears: useWearsMock,
   useSetWears: () => ({ mutate: submitWearsMock, isPending: false }),
+}))
+
+/**
+ * The signed-in user, because a draft now carries whose it is.
+ *
+ * There is no Supabase in a unit run, so the real hook answers `null` — which
+ * the screen reads as "cannot record" and would have taken the whole feature off
+ * every screen below.
+ */
+vi.mock('@/features/auth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/auth')>()),
+  useCurrentUserId: useCurrentUserIdMock,
 }))
 
 const uploading: PendingUpload = {
@@ -113,6 +133,8 @@ beforeEach(() => {
   // the log has replied — is a case some tests below ask for on purpose.
   useWearsMock.mockReturnValue({ data: [] })
   submitWearsMock.mockReset()
+  useCurrentUserIdMock.mockReset()
+  useCurrentUserIdMock.mockReturnValue(OWNER)
   // A module-level store that outlives a render, so it has to be put back
   // between tests or a selection left open leaks into the next one.
   closeWearDraft()
@@ -600,6 +622,69 @@ describe('WardrobePage — 착용 기록', () => {
     // same 기록 없음, which is a caption rather than information.
     expect(screen.getByText('어제')).toBeDefined()
     expect(screen.queryByText('기록 없음')).toBeNull()
+  })
+
+  /**
+   * A draft outlives a reload, so it can be here before there is a screen for it
+   * to be on. Three ways that goes wrong, and all three were reachable.
+   */
+  describe('열려 있던 초안', () => {
+    it('옷장이 아직 오는 중이면 고르는 모드를 열지 않는다', () => {
+      // Measured: the wear log usually lands first — the wardrobe fetch signs
+      // every cover URL on the way — so the submit bar drew over the loading
+      // skeletons, a mode for picking garments on a screen with none to pick.
+      openWearDraft(OWNER, yesterday, ['i1'])
+      useWardrobeMock.mockReturnValue(query({ isLoading: true, isFetching: true }))
+      renderWardrobe()
+
+      expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
+      expect(screen.queryByRole('button', { name: /벌 기록|옷을 골라주세요/ })).toBeNull()
+      // The register button is untouched — it works with the network down.
+      expect(registerFab()).not.toBeNull()
+    })
+
+    it('옷장을 불러오지 못한 화면에서도 열지 않는다', () => {
+      openWearDraft(OWNER, yesterday, ['i1'])
+      useWardrobeMock.mockReturnValue(query({ error: new Error('offline') }))
+      renderWardrobe()
+
+      expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
+    })
+
+    /**
+     * The one that would have written the wrong day.
+     *
+     * `wearDraft` used to check the day only when restoring, so a tab left open
+     * across midnight kept a draft whose date had aged out. `dayLabel` compares
+     * against today and calls anything else 어제 — the bar would have read
+     * `8.14 (어제)` on the 16th, and submitting would have put the 15th's
+     * clothes on the 14th.
+     */
+    it('자정을 넘겨 날짜가 밀린 초안은 열지 않는다', () => {
+      // Noon on `yesterday` in local time, stepped back once more — the day
+      // before yesterday, without any UTC arithmetic.
+      const dayBefore = yesterdayLocal(new Date(`${yesterday}T12:00:00`))
+      openWearDraft(OWNER, dayBefore, ['i1'])
+      useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+      renderWardrobe()
+
+      expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
+      // And the way back in opens on a day that is actually editable.
+      fireEvent.click(wearButton()!)
+      expect(dateButton().textContent).toBe(`${monthDay(yesterday)} (어제)`)
+    })
+
+    it('다른 사용자의 초안은 열지 않는다', () => {
+      // localStorage survives a sign-out. Without the owner check the next
+      // person's screen opens holding a stranger's picks, with none of the
+      // ticked cards visible, and the submit fails on the foreign key.
+      openWearDraft('another-user', yesterday, ['i1'])
+      useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+      renderWardrobe()
+
+      expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
+      expect(wearButton()).not.toBeNull()
+    })
   })
 })
 
