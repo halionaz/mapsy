@@ -48,6 +48,7 @@ pnpm dev
 | `pnpm build` | 타입 체크 후 프로덕션 빌드 |
 | `pnpm typecheck` | 전체 패키지 `tsc -b` |
 | `pnpm lint` | oxlint |
+| `pnpm format` | oxfmt — 코드 포맷 (CI는 `format:check`로 막는다) |
 | `pnpm test` | vitest — 순수 로직 단위 테스트 |
 | `pnpm test:db` | Docker에 Postgres를 띄워 마이그레이션·RLS 검사 |
 | `pnpm codegen` | Panda CSS 재생성 |

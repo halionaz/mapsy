@@ -16,6 +16,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
+    "format": "pnpm -r format",
+    "format:check": "pnpm -r format:check",
     "test": "pnpm -r test",
     "test:db": "bash supabase/tests/run.sh",
     "cf:deploy": "pnpm --filter mapsy-frontend cf:deploy",
