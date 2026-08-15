@@ -7,10 +7,11 @@ on:
   push:
     branches: [main]
 
-# 같은 브랜치에 새 커밋이 오면 돌던 실행을 버린다.
+# 같은 브랜치에 새 커밋이 오면 돌던 실행을 버린다. main은 예외다 — PR 둘이 연달아 머지되면
+# 앞 커밋의 실행이 취소되고, 그 커밋은 완료된 결과를 영영 갖지 못한다.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -43,8 +44,8 @@ jobs:
           run_install: false
       - uses: actions/setup-node@v7
         with:
-          # engines의 하한. 하한이 도는지가 CI에서 알 수 있는 값이다 —
-          # Workers Builds는 이미지 기본값 24로 빌드한다(docs/DEPLOY.md §4).
+          # 22 계열 최신이 깔린다. 하한은 여기 적지 않는다 — 같은 숫자가 두 곳이 되고,
+          # 하한은 install이 부르는 scripts/only-pnpm.mjs가 engines.node로 막는다.
           node-version: 22
           cache: pnpm
       # 락파일이 package.json과 어긋나면 여기서 멈춘다. prepare 훅이 panda codegen을 돌려
