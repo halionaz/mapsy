@@ -136,9 +136,9 @@ export function WardrobePage() {
    *
    * Not because an axis ought to offer only what exists — the sheet's 색상 and
    * 계절 list their whole preset on purpose, and `filterOptions.ts` sets out
-   * why. Because of where this axis lives. The sheet has to be opened, so an
-   * unowned colour chip is only ever met by someone who went looking for it; an
-   * unowned category chip lies across the home screen for everyone, every time.
+   * why. Because of where this axis lives: an unowned colour chip sits behind a
+   * sheet somebody has to open, while an unowned category chip lies across the
+   * home screen for everyone, every time.
    *
    * The active group is kept in the list even once it holds nothing. Disposing
    * of the last pair of shoes while 신발 is selected otherwise takes the lit chip
@@ -185,9 +185,11 @@ export function WardrobePage() {
    * whether the sort control names the grouping (`orderLabel` below).
    *
    * Deliberately not "is 전체 selected". A lone heading names everything on the
-   * screen, which the title above already does, and the three ways that happens
-   * — a chip is lit, the search narrowed to one category, the wardrobe is
-   * nothing but 상의 so far — are one sentence rather than a rule each.
+   * screen, which the title above already does — and measured, every one of the
+   * ten filter axes this screen can reach leaves one section standing all by
+   * itself: the chip and the search, but equally 즐겨찾기만 보기, a colour, a
+   * size, a brand. With the wardrobe simply having one group so far, that is
+   * eleven ways in. A rule each would be eleven rules; the count is one.
    */
   const sectioned = sections.length > 1
 
