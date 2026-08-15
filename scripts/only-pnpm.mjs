@@ -61,9 +61,15 @@ const { engines = {} } = JSON.parse(readFileSync(join(here, '..', 'package.json'
 /**
  * Lowest version a `>=x.y.z` range allows, as [major, minor, patch].
  *
- * Only handles the `>=` form, which is all this repo declares. Anything else is
- * treated as "no constraint" rather than guessed at — a guard that silently
- * misreads its own config is worse than one that doesn't check.
+ * Only handles the `>=` form, which is all this repo declares. Anything else
+ * returns null, and check() turns that into a loud failure rather than a guess:
+ * a guard that silently skips its own check is indistinguishable from one that
+ * ran and passed.
+ *
+ * The trap is real. README documents jsdom's range
+ * (`^22.22.2 || ^24.15.0 || >=26.0.0`) as the reason for the floor, and copying
+ * that string into engines.node is the obvious next edit — which, before the
+ * check below existed, disabled the Node check entirely and said nothing.
  */
 function minimumOf(range) {
   const match = /^>=\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(range?.trim() ?? '')
@@ -87,6 +93,15 @@ function isBelow(actual, minimum) {
 function check(label, actualVersion, range, howToFix) {
   const minimum = minimumOf(range)
   const actual = parse(actualVersion)
+
+  if (range && !minimum) {
+    fail(
+      `engines.${label.toLowerCase()}의 범위를 읽지 못했습니다: ${range}\n\n` +
+        `  이 가드는 ">=x.y.z" 형태만 읽습니다.\n` +
+        `  범위 형식을 바꿨다면 scripts/only-pnpm.mjs의 minimumOf도 같이 고쳐야 합니다.`,
+    )
+  }
+
   if (!minimum || !actual) return
 
   if (isBelow(actual, minimum)) {
