@@ -4,7 +4,9 @@ import { css } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
 import { ItemCard, useWardrobe } from '@/entities/item'
+import { attachWears, useWears } from '@/entities/wear'
 import { signOut, useSession } from '@/features/auth'
+import { useLocalDays } from '@/shared/lib/useLocalDays'
 import { Button } from '@/shared/ui/Button'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { ScreenHeader } from '@/shared/ui/ScreenHeader'
@@ -21,14 +23,22 @@ import { toaster } from '@/shared/ui/toast'
 export function SettingsPage() {
   const session = useSession()
   const { data } = useWardrobe()
+  const { data: wearData } = useWears()
+  const { today } = useLocalDays()
   const [confirmingSignOut, setConfirmingSignOut] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 
   const user = session.status === 'authenticated' ? session.session.user : null
   const email = user?.email ?? null
+  /**
+   * Wear history is attached here too, and it is worth more on this screen than
+   * on the wardrobe: the card's line reads as the last time the garment was worn
+   * before it was let go. Filtered before the merge rather than after, so the
+   * summarising walks the disposed few instead of the whole collection.
+   */
   const disposed = useMemo(
-    () => (data ?? []).filter((item) => item.status === 'disposed'),
-    [data],
+    () => attachWears((data ?? []).filter((item) => item.status === 'disposed'), wearData ?? []),
+    [data, wearData],
   )
 
   async function handleSignOut() {
@@ -81,7 +91,7 @@ export function SettingsPage() {
             <ul className={grid}>
               {disposed.map((item) => (
                 <li key={item.id}>
-                  <ItemCard item={item} />
+                  <ItemCard item={item} today={today} />
                 </li>
               ))}
             </ul>
@@ -149,7 +159,7 @@ const emptyNote = hstack({
 })
 
 // Same three tracks as the wardrobe grid, for the same reason — see the note on
-// `minmax(0, 1fr)` in WardrobePage.
+// `minmax(0, 1fr)` in `pages/wardrobe/ui/WardrobeGrid.tsx`.
 const grid = css({
   display: 'grid',
   gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',

@@ -14,15 +14,8 @@ import { Link } from 'react-router'
 import { css, cx } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
-import {
-  CardSkeleton,
-  ItemCard,
-  PendingCard,
-  useDiscardUpload,
-  usePendingUploads,
-  useRetryUpload,
-  useWardrobe,
-} from '@/entities/item'
+import { useDiscardUpload, usePendingUploads, useRetryUpload, useWardrobe } from '@/entities/item'
+import { attachWears, itemIdsWornOn, useSetWears, useWears } from '@/entities/wear'
 import {
   applyFilters,
   appliedFilters,
@@ -34,17 +27,28 @@ import {
   WardrobeFilterSheet,
   type WardrobeFilters,
 } from '@/features/wardrobe-filter'
+import {
+  closeWearDraft,
+  openWearDraft,
+  toggleWearDraftItem,
+  useWearDraft,
+  WearFab,
+  WearModeBar,
+} from '@/features/wear-log'
 import { CATEGORY_GROUPS, groupIdOf, type CategoryGroupId } from '@/shared/config/categories'
 import { assertNever } from '@/shared/lib/assertNever'
 import { errorMessage } from '@/shared/lib/errorMessage'
+import { useLocalDays } from '@/shared/lib/useLocalDays'
 import { Button } from '@/shared/ui/Button'
 import { buttonStyle, iconButtonStyle } from '@/shared/ui/buttonStyle'
 import { chipStyle } from '@/shared/ui/chipStyle'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { inputStyle } from '@/shared/ui/fieldStyle'
 import { skeletonSurface } from '@/shared/ui/skeletonStyle'
+import { toaster } from '@/shared/ui/toast'
 import { useScrolledPast } from '@/shared/ui/useScrolledPast'
 import { groupSections } from '../lib/sections'
+import { GridSkeleton, WardrobeGrid } from './WardrobeGrid'
 
 /**
  * The five things this screen can be.
@@ -89,9 +93,14 @@ const SHOWS_STALE_NOTICE: Record<View, boolean> = {
  */
 export function WardrobePage() {
   const { data, isLoading, isFetching, error, refetch } = useWardrobe()
+  const { data: wearData } = useWears()
+  const submitWears = useSetWears()
   const pending = usePendingUploads()
   const retry = useRetryUpload()
   const discard = useDiscardUpload()
+
+  const { today, yesterday } = useLocalDays()
+  const draft = useWearDraft()
 
   const [filters, setFilters] = useState<WardrobeFilters>(EMPTY_FILTERS)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -99,7 +108,27 @@ export function WardrobePage() {
   const statusStrip = useRef<HTMLDivElement>(null)
   const stuck = useScrolledPast(stickSentinel, statusStrip)
 
-  const entries = useMemo(() => data ?? [], [data])
+  /**
+   * The wear log, and whether it has answered yet.
+   *
+   * `wearsAnswered` gates every part of selection mode below, and it is not
+   * politeness about a spinner. Submitting rewrites a whole day — the set that
+   * is sent *replaces* what the day held — so a selection seeded from a
+   * collection that has not arrived is an empty set about to be written over
+   * real records. `data !== undefined`, not "there are rows": a person who has
+   * never recorded anything gets `[]`, which is an answer.
+   */
+  const wears = useMemo(() => wearData ?? [], [wearData])
+  const wearsAnswered = wearData !== undefined
+
+  /**
+   * The wardrobe with each garment's wear history on it.
+   *
+   * Merged here rather than in either query, so a wear toggle never touches the
+   * item cache — refetching that entry re-signs every cover URL and reloads every
+   * thumbnail in the grid.
+   */
+  const entries = useMemo(() => attachWears(data ?? [], wears), [data, wears])
   const visible = useMemo(() => applyFilters(entries, filters), [entries, filters])
   /**
    * What is in the wardrobe, before search and before any chip.
@@ -244,8 +273,73 @@ export function WardrobePage() {
    */
   const stale = error != null && SHOWS_STALE_NOTICE[view]
 
+  /**
+   * Whether a selection is actually in progress, which is not the same question
+   * as whether a draft exists.
+   *
+   * A draft survives a reload (`wearDraft.ts`), so on a cold start it is here
+   * before the wear log is. Rendering the mode from it that early would put
+   * checkboxes on the cards while `recordedIds` is still empty — and the submit
+   * button would then write that empty set over the day. Everything below reads
+   * `selecting`, never `draft`, and the mode simply appears a moment later.
+   */
+  const selecting = wearsAnswered ? draft : null
+  const activeDay = selecting?.wornOn ?? today
+  // `=== yesterday` rather than `!== today`, so a draft for some third day —
+  // which `wearDraft` refuses to restore, and nothing else can produce — would
+  // read as 오늘 rather than silently borrowing 어제's label.
+  const dayLabel = activeDay === yesterday ? '어제' : '오늘'
+  const recordedIds = useMemo(() => itemIdsWornOn(wears, activeDay), [wears, activeDay])
+  const selectedIds = useMemo(() => (selecting ? new Set(selecting.itemIds) : null), [selecting])
+
+  /**
+   * Where the button is offered at all.
+   *
+   * Not on 옷장을 불러오지 못했어요 and not on the empty wardrobe — the first has
+   * no collection to pick from and the second has nothing in it. `noMatches`
+   * keeps it: the filters are still reachable from inside the mode, so a search
+   * that currently matches nothing is a state to type out of, not a dead end.
+   */
+  const canRecord = wearsAnswered && (view === 'grid' || view === 'noMatches')
+
   function setGroup(groupId: CategoryGroupId | null) {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
+  }
+
+  /** Opens a day, seeded with what it already holds — also how 오늘/어제 switch. */
+  function startSelecting(day: string) {
+    openWearDraft(day, itemIdsWornOn(wears, day))
+  }
+
+  function submitSelection() {
+    if (!selecting) return
+    const { wornOn, itemIds } = selecting
+
+    submitWears.mutate(
+      { wornOn, itemIds },
+      {
+        // The mode closes on success and only on success. A failure has to leave
+        // the user still holding what they picked — there is nowhere else for it
+        // to be, and asking someone to walk the grid a second time is the worst
+        // possible answer to a dropped request.
+        onSuccess: () => {
+          closeWearDraft()
+          toaster.create({
+            title:
+              itemIds.length > 0
+                ? `${dayLabel} 입은 옷 ${itemIds.length}벌을 기록했어요.`
+                : `${dayLabel} 기록을 지웠어요.`,
+            type: 'success',
+          })
+        },
+        onError: (e) =>
+          toaster.create({
+            title: '기록하지 못했어요',
+            description: errorMessage(e, '잠시 후 다시 시도해주세요.'),
+            type: 'error',
+          }),
+      },
+    )
   }
 
   const sortLabel = SORT_OPTIONS.find((option) => option.id === filters.sort)?.label ?? ''
@@ -313,6 +407,19 @@ export function WardrobePage() {
           a long wardrobe tiring to browse. The title above is not a control and
           is allowed to leave. */}
       <div className={controls} data-stuck={stuck || undefined}>
+        {/* Above the search box and inside the same pinned bar, so the way out
+            of the mode and the day being written stay reachable from the bottom
+            of a long wardrobe. */}
+        {selecting && (
+          <WearModeBar
+            wornOn={selecting.wornOn}
+            today={today}
+            yesterday={yesterday}
+            onPickDay={startSelecting}
+            onCancel={closeWearDraft}
+          />
+        )}
+
         <div className={hstack({ gap: '2', px: '5' })}>
           <div className={css({ position: 'relative', flex: '1' })}>
             <Search size={16} aria-hidden="true" className={searchIcon} />
@@ -403,6 +510,12 @@ export function WardrobePage() {
             Absolutely positioned by `srOnly`, so it is out of flow and does not
             take a slot in the column's gap. */}
         <p role="status" className={css({ srOnly: true })}>
+          {/* Entering and leaving selection mode changes what a tap on the grid
+              does, and nothing else says so out loud — the checkboxes are drawn,
+              and `aria-pressed` only speaks when a card is activated. Constant
+              while the mode is on, so this is announced on the way in and on the
+              way out rather than at every tap. */}
+          {selecting ? `${dayLabel} 입은 옷을 고르는 중이에요. ` : ''}
           {view === 'loading'
             ? '옷장을 불러오는 중이에요.'
             : view === 'failed'
@@ -449,13 +562,7 @@ export function WardrobePage() {
                 className={cx(skeletonSurface, css({ width: '10', height: '2.5', rounded: 'sm' }))}
               />
             </div>
-            <ul className={grid} aria-hidden="true">
-              {SKELETON_KEYS.map((key) => (
-                <li key={key}>
-                  <CardSkeleton />
-                </li>
-              ))}
-            </ul>
+            <GridSkeleton />
           </div>
         ) : view === 'failed' ? (
           <EmptyState
@@ -533,50 +640,16 @@ export function WardrobePage() {
               </button>
             </div>
 
-            {/* Pinned to the top, in a grid of their own, and outside both the
-                filters and the sections. Filing an upload under its category
-                would bury it — a failed one has to stay where the retry can be
-                found, and hiding it behind a heading reads as data loss while
-                its photos are still going up. */}
-            {pending.length > 0 && (
-              <ul className={grid}>
-                {pending.map((entry) => (
-                  <li key={entry.tempId}>
-                    <PendingCard pending={entry} onRetry={retry} onDiscard={discard} />
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {/* Tidiness, not a fix: with only an upload in flight this would be
-                a flex column holding nothing. No test — the DOM says plainly
-                whether it is there, but nothing on screen depends on it. */}
-            {sections.length > 0 && (
-              <div className={vstack({ gap: '7', alignItems: 'stretch' })}>
-                {sections.map((section) => (
-                  <section
-                    key={section.group.id}
-                    className={vstack({ gap: '3', alignItems: 'stretch' })}
-                  >
-                    {sectioned && (
-                      <h2 className={sectionHeading}>
-                        {section.group.label}
-                        <span className={css({ ml: '2', color: 'fg.subtle' })}>
-                          {section.items.length}
-                        </span>
-                      </h2>
-                    )}
-                    <ul className={grid}>
-                      {section.items.map((item) => (
-                        <li key={item.id}>
-                          <ItemCard item={item} />
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ))}
-              </div>
-            )}
+            <WardrobeGrid
+              sections={sections}
+              pending={pending}
+              onRetry={retry}
+              onDiscard={discard}
+              sectioned={sectioned}
+              today={today}
+              selectedIds={selectedIds}
+              onToggleItem={toggleWearDraftItem}
+            />
           </div>
         ) : (
           // Unreachable: every member of `View` is named above, which is the
@@ -586,14 +659,38 @@ export function WardrobePage() {
         )}
       </main>
 
-      {/* Hidden only while the empty-wardrobe screen is the one on show: that
-          screen already offers 첫 옷 등록하기 in the middle of it, and two
-          identical pills pointing at the same route is the app asking twice. */}
-      {view !== 'empty' && (
-        <Link to="/items/new" aria-label="옷 등록" className={cx(buttonStyle(), fab)}>
-          <Plus />옷 등록
-        </Link>
-      )}
+      <div className={fabRow}>
+        {/* Hidden while the empty-wardrobe screen is on show: it already offers
+            첫 옷 등록하기 in the middle of it, and two identical pills pointing
+            at the same route is the app asking twice.
+
+            Hidden again while garments are being picked. Registering a new one
+            is not what that mode is for, and taking it away is what leaves the
+            submit button the row to itself — 어제 8벌 기록 is the longest label
+            the corner ever carries. */}
+        {view !== 'empty' && selecting === null && (
+          <Link to="/items/new" aria-label="옷 등록" className={cx(buttonStyle(), fab)}>
+            <Plus />옷 등록
+          </Link>
+        )}
+
+        {canRecord && (
+          <WearFab
+            dayLabel={dayLabel}
+            recordedCount={recordedIds.size}
+            selectedCount={selecting ? selecting.itemIds.length : null}
+            // The same signal the control bar sticks on, rather than a second
+            // scroll listener that could disagree with it about where the top of
+            // the page ended.
+            collapsed={stuck}
+            submitting={submitWears.isPending}
+            // Always 오늘 from out here. 어제 is reachable, but only from inside
+            // the mode, where the day is on screen and can be seen to change.
+            onOpen={() => startSelecting(today)}
+            onSubmit={submitSelection}
+          />
+        )}
+      </div>
 
       <WardrobeFilterSheet
         open={sheetOpen}
@@ -606,14 +703,6 @@ export function WardrobePage() {
     </div>
   )
 }
-
-/**
- * A category's name over its cards.
- *
- * `heading` rather than `subheading`: it is the only thing standing between two
- * grids of photographs, and it has to survive being read past at a scroll.
- */
-const sectionHeading = css({ textStyle: 'heading' })
 
 /**
  * The screen column, and a stacking context.
@@ -834,37 +923,6 @@ const main = css({
 })
 
 /**
- * Shared by the loaded grid and the loading one, so the placeholders sit on the
- * same lines the cards will occupy and the screen doesn't reflow when the data
- * lands.
- */
-const grid = css({
-  display: 'grid',
-  // `minmax(0, …)`, not a bare `1fr`.
-  //
-  // `1fr` is shorthand for `minmax(auto, 1fr)`, and that `auto` is the item's
-  // automatic minimum size — which for a card is the min-content width of its
-  // title. Titles are `white-space: nowrap`, so a title's min-content width is
-  // the whole untruncated string: `overflow: hidden` decides what is *drawn*,
-  // never what the text asks for. The result was a grid whose columns were
-  // sized by how long each garment's name happened to be — 와이드진 wide, 흰 티
-  // narrow — and since the photo is a square that fills its column, the longer
-  // name also produced a taller card. Every card looked like a different size
-  // because every name was a different length.
-  //
-  // A zero floor lets the three tracks be equal and leaves the clipping to the
-  // title, which is what was asked of it.
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  // The same automatic minimum applies to the item inside the track, where it
-  // would push the card back out over the track it was just made to fit.
-  '& > li': { minWidth: 0 },
-  gap: '3',
-  listStyle: 'none',
-  p: '0',
-  m: '0',
-})
-
-/**
  * The count-and-sort line above the grid.
  *
  * Given a fixed height so the loading state can reserve exactly this much — a
@@ -879,22 +937,45 @@ const listMeta = css({
   height: '9',
 })
 
-const SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e', 'f']
-
 /**
- * The register button, pinned above the home indicator.
+ * The floating actions, pinned above the home indicator.
  *
- * Centred rather than in a corner: this is a one-handed screen with a single
- * action, and the middle of the bottom edge is the part of a phone both thumbs
- * reach. `fixed` positions it against the viewport, so it stays put while the
- * grid scrolls under it.
+ * Centred rather than tucked into a corner: this is a one-handed screen and the
+ * middle of the bottom edge is the part of a phone both thumbs reach. `fixed`
+ * positions it against the viewport — nothing between here and the root has a
+ * transform, so the app column's own `position: relative` does not capture it —
+ * and the column is centred too, which is what keeps the two agreeing.
+ *
+ * A row rather than two separately positioned buttons. Anchoring 옷 등록 to the
+ * centre and the wear button to the right edge is what the sketch asked for, and
+ * the two are wide enough to meet: a centred pill reaches past the halfway mark
+ * of a phone-width column, and a right-anchored one carrying 오늘 입은 옷 reaches
+ * back past it. Laying them out as a row makes that unrepresentable at any
+ * width, and costs the register pill a shift as the label folds away — half of
+ * whatever width the label gave up, which `WearFab` animates rather than jumps.
  */
-const fab = css({
+const fabRow = css({
   position: 'fixed',
   bottom: 'calc({spacing.6} + var(--safe-b))',
   left: '50%',
   translate: 'auto',
   translateX: '-1/2',
   zIndex: 'fab',
-  boxShadow: 'fab',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '3',
+  // Buttons do not shrink (`buttonStyle` sets `flex-shrink: 0`), so this is a
+  // guard rather than a layout rule: it keeps the row inside the page inset if a
+  // label ever grows past what fits.
+  maxWidth: 'calc(100vw - {spacing.10})',
 })
+
+/**
+ * The register button's own glow.
+ *
+ * Not shared with the wear button beside it. That one is drawn on a surface
+ * rather than in the accent, and an accent-tinted shadow under a neutral pill
+ * reads as a rendering mistake — the shadow would be the only orange thing about
+ * it.
+ */
+const fab = css({ boxShadow: 'fab' })

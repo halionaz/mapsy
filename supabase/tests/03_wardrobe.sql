@@ -340,7 +340,8 @@ select tests.eq(
 select tests.eq(
   (select bool_and(has_function_privilege('authenticated', p.oid, 'execute'))::text
    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and p.proname in ('reorder_item_images', 'delete_item_image')),
+   where n.nspname = 'public'
+     and p.proname in ('reorder_item_images', 'delete_item_image', 'set_item_wears')),
   'true', 'RPC는 authenticated가 실행할 수 있음');
 
 -- The assertion that actually matters: what an anonymous session gets back.
@@ -354,8 +355,116 @@ select tests.fails(
 select tests.fails(
   $f$select public.delete_item_image('bbbb0000-0000-0000-0000-000000000000')$f$,
   'permission denied for function', 'anon은 사진 삭제 RPC를 호출할 수 없음');
+select tests.fails(
+  $f$select public.set_item_wears(current_date, array[]::uuid[])$f$,
+  'permission denied for function', 'anon은 착용 기록 RPC를 호출할 수 없음');
 reset role;
 
+set role authenticated;
+set request.jwt.claim.sub = :'A';
+
+\echo '── 착용 기록 ──'
+insert into public.items (id, user_id, title, category_id)
+values ('aaaa0000-0000-0000-0000-000000000004', :'A', '기록용 니트', 'top.knit');
+
+insert into public.item_wears (item_id, user_id, worn_on)
+values ('aaaa0000-0000-0000-0000-000000000001', :'A', current_date);
+
+select tests.eq((select count(*)::text from public.item_wears), '1', '착용 기록이 저장됨');
+
+select tests.fails(
+  format($f$insert into public.item_wears (item_id, user_id, worn_on)
+            values ('aaaa0000-0000-0000-0000-000000000001', %L, current_date)$f$, :'A'),
+  'item_wears_item_date_key', '같은 옷을 같은 날 두 번 기록해도 한 행');
+
+-- 하루의 여유는 느슨함이 아니라 시차다. worn_on은 클라이언트의 달력 날짜이고
+-- 비교는 UTC 서버에서 도는데, 한국 오전 아홉 시까지는 그 둘이 실제로 하루 다르다.
+insert into public.item_wears (item_id, user_id, worn_on)
+values ('aaaa0000-0000-0000-0000-000000000004', :'A', current_date + 1);
+\echo '  ok  하루 앞선 날짜는 허용 — 클라이언트 로컬 날짜와 UTC 서버의 시차'
+delete from public.item_wears where worn_on = current_date + 1;
+
+select tests.fails(
+  format($f$insert into public.item_wears (item_id, user_id, worn_on)
+            values ('aaaa0000-0000-0000-0000-000000000004', %L, current_date + 2)$f$, :'A'),
+  '착용 날짜가 미래예요', '이틀 앞선 날짜 거부');
+
+-- 트리거가 UPDATE에도 걸리는지. INSERT만 막으면 나중에 날짜를 고치는 경로가
+-- 생기는 순간 같은 구멍이 다시 열린다.
+select tests.fails(
+  $f$update public.item_wears set worn_on = current_date + 2
+     where item_id = 'aaaa0000-0000-0000-0000-000000000001'$f$,
+  '착용 날짜가 미래예요', '미래로 옮기는 수정도 거부');
+
+\echo '── set_item_wears ──'
+select public.set_item_wears(current_date, array[
+  'aaaa0000-0000-0000-0000-000000000001',
+  'aaaa0000-0000-0000-0000-000000000004']::uuid[]);
+
+select tests.eq(
+  (select count(*)::text from public.item_wears where worn_on = current_date),
+  '2', '고른 두 벌이 오늘로 기록됨 — 이미 있던 한 벌은 중복되지 않음');
+
+-- 제출은 그날의 집합을 다시 말하는 것이다. 빠진 옷은 지우고 새 옷만 넣는다.
+select public.set_item_wears(current_date, array[
+  'aaaa0000-0000-0000-0000-000000000004']::uuid[]);
+
+select tests.eq(
+  (select string_agg(item_id::text, ',') from public.item_wears where worn_on = current_date),
+  'aaaa0000-0000-0000-0000-000000000004', '집합에서 빠진 옷은 지워짐');
+
+-- 같은 집합 재제출과 배열 안 중복은 둘 다 호출자가 실수로 보낼 수 있는 모양이고,
+-- 유니크 제약까지 가기 전에 접힌다.
+select public.set_item_wears(current_date, array[
+  'aaaa0000-0000-0000-0000-000000000004',
+  'aaaa0000-0000-0000-0000-000000000004']::uuid[]);
+
+select tests.eq(
+  (select count(*)::text from public.item_wears where worn_on = current_date),
+  '1', '중복 id를 보내도 한 행');
+
+select tests.fails(
+  $f$select public.set_item_wears(current_date,
+       array['aaaa0000-0000-0000-0000-0000000000ff']::uuid[])$f$,
+  'item_wears_item_fk', '존재하지 않는 옷 id는 외래키에서 막힘');
+
+-- 하루치를 다시 쓰는 함수가 옆 날짜까지 지우면, 오늘을 기록하는 순간 어제가
+-- 날아간다. 빈 배열은 그날만 비워야 한다.
+insert into public.item_wears (item_id, user_id, worn_on)
+values ('aaaa0000-0000-0000-0000-000000000001', :'A', current_date - 1);
+
+select public.set_item_wears(current_date, array[]::uuid[]);
+
+select tests.eq(
+  (select count(*)::text from public.item_wears where worn_on = current_date),
+  '0', '빈 배열은 그날 기록을 지움');
+
+select tests.eq(
+  (select count(*)::text from public.item_wears where worn_on = current_date - 1),
+  '1', '오늘 제출은 어제 기록을 건드리지 않음');
+
+\echo '── 착용 기록 격리 (사용자 B) ──'
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = :'B';
+
+select tests.eq(
+  (select count(*)::text from public.item_wears), '0', 'B는 A의 착용 기록을 못 봄');
+
+-- RLS가 아니라 복합 외래키가 막는다. user_id는 B 자신이라 with check는 통과하고,
+-- (item_id, user_id) 쌍이 items에 없다는 사실이 남는다 — 정책이 나중에 느슨해져도
+-- 유지되는 쪽.
+select tests.fails(
+  format($f$insert into public.item_wears (item_id, user_id, worn_on)
+            values ('aaaa0000-0000-0000-0000-000000000001', %L, current_date)$f$, :'B'),
+  'item_wears_item_fk', 'B는 A의 옷에 착용 기록을 붙일 수 없음');
+
+select tests.fails(
+  $f$select public.set_item_wears(current_date,
+       array['aaaa0000-0000-0000-0000-000000000001']::uuid[])$f$,
+  'item_wears_item_fk', 'RPC도 남의 옷을 기록해주지 않음 — user_id는 세션에서 옴');
+
+reset role;
 set role authenticated;
 set request.jwt.claim.sub = :'A';
 
@@ -365,10 +474,24 @@ select tests.eq(
    where tablename = 'item_images' and indexdef like '%(item_id, sort_order)%'),
   '1', '(item_id, sort_order) 인덱스는 하나뿐 — UNIQUE 제약과 중복 없음');
 
+select tests.eq(
+  (select count(*)::text from pg_indexes
+   where tablename = 'item_wears' and indexdef like '%(item_id, worn_on)%'),
+  '1', '(item_id, worn_on) 인덱스는 하나뿐 — UNIQUE 제약과 중복 없음');
+
 \echo '── 캐스케이드 ──'
+-- 지우기 전에 지울 것이 있는지부터. 0을 0과 비교하는 캐스케이드 검사는 캐스케이드가
+-- 없어도 통과한다.
+select tests.eq(
+  (select (count(*) > 0)::text from public.item_images), 'true', '삭제 전 사진이 남아 있음');
+select tests.eq(
+  (select (count(*) > 0)::text from public.item_wears), 'true', '삭제 전 착용 기록이 남아 있음');
+
 delete from public.items;
 select tests.eq(
   (select count(*)::text from public.item_images), '0', '아이템 삭제 시 사진 행도 사라짐');
+select tests.eq(
+  (select count(*)::text from public.item_wears), '0', '아이템 삭제 시 착용 기록도 사라짐');
 
 \echo ''
 \echo '모든 검사 통과'

@@ -101,6 +101,22 @@ export const buttonStyle = cva({
         borderColor: 'border.strong',
         '&:hover:not(:disabled)': { bg: 'bg.subtle', borderColor: 'fg.subtle' },
       },
+      /**
+       * `outline` with a floor under it, for a control that floats over content.
+       *
+       * The wear button sits beside the register FAB above a grid of
+       * photographs, where `outline`'s transparent fill leaves the label on top
+       * of whatever garment happens to be underneath. A variant rather than a
+       * `cx` with a background on top of `outline`: both would emit a
+       * `background-color` class of equal specificity, and which one won would
+       * come down to the order Panda wrote them in.
+       */
+      surface: {
+        bg: 'bg.elevated',
+        color: 'fg',
+        borderColor: 'border.strong',
+        '&:hover:not(:disabled)': { bg: 'bg.elevatedHover', borderColor: 'fg.subtle' },
+      },
       ghost: {
         bg: 'transparent',
         color: 'fg.muted',

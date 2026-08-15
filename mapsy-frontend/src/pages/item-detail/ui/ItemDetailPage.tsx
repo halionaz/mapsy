@@ -1,5 +1,13 @@
-import { useRef, useState } from 'react'
-import { ArchiveRestore, PackageOpen, Pencil, SearchX, Star, Trash2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import {
+  ArchiveRestore,
+  CalendarCheck,
+  PackageOpen,
+  Pencil,
+  SearchX,
+  Star,
+  Trash2,
+} from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { css, cx } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
@@ -12,6 +20,13 @@ import {
   type ItemImage,
   type WardrobeItem,
 } from '@/entities/item'
+import {
+  attachWears,
+  itemIdsWornOn,
+  useToggleWear,
+  useWears,
+  type Worn,
+} from '@/entities/wear'
 import { useCurrentUserId } from '@/features/auth'
 import { PhotoViewer, useItemPhotos, type PhotoSlot } from '@/features/item-photos'
 import { categoryLabel } from '@/shared/config/categories'
@@ -19,7 +34,8 @@ import { colorLabel } from '@/shared/config/colors'
 import { seasonLabel } from '@/shared/config/seasons'
 import { clamp } from '@/shared/lib/clamp'
 import { errorMessage } from '@/shared/lib/errorMessage'
-import { formatDate, formatPrice } from '@/shared/lib/format'
+import { formatDate, formatDayAgo, formatPrice } from '@/shared/lib/format'
+import { useLocalDays } from '@/shared/lib/useLocalDays'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { buttonStyle } from '@/shared/ui/buttonStyle'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
@@ -50,13 +66,33 @@ export function ItemDetailPage() {
   const location = useLocation()
   const userId = useCurrentUserId()
   const { data, isLoading } = useWardrobe()
+  const { data: wearData } = useWears()
+  const { today } = useLocalDays()
 
   const setFavorite = useSetFavorite()
   const setStatus = useSetStatus()
   const remove = useDeleteItem()
+  const toggleWear = useToggleWear()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  const item = data?.find((entry) => entry.id === id)
+  const found = data?.find((entry) => entry.id === id)
+
+  /**
+   * The garment with its wear history on it.
+   *
+   * Through `attachWears` on a list of one rather than a second single-item
+   * summariser beside it — the grid's numbers and this screen's have to be the
+   * same numbers, and two ways of adding them up is how they stop being.
+   */
+  const wears = useMemo(() => wearData ?? [], [wearData])
+  const item = useMemo(
+    () => (found ? attachWears([found], wears)[0] : undefined),
+    [found, wears],
+  )
+  const wornToday = useMemo(
+    () => (found ? itemIdsWornOn(wears, today).has(found.id) : false),
+    [found, wears, today],
+  )
   // Sorted, signed and paired in one place — the URLs are matched to the photos
   // by position, and deriving that order twice is how a tile ends up showing its
   // neighbour's photo.
@@ -219,6 +255,39 @@ export function ItemDetailPage() {
           </p>
         )}
 
+        {/* On its own line above 편집 and 처분, and the only one of the three
+            that is a toggle rather than a route.
+
+            This is the one-garment way in — the wardrobe's 오늘 입은 옷 is for
+            picking a whole outfit, and coming here to add the jacket you threw
+            on at lunch should not mean opening a grid to tick one square.
+
+            `aria-pressed` rather than a label that flips between an action and a
+            state: "오늘 입었어요" as a heading and as a button would be the same
+            words meaning two different things depending on the fill. */}
+        <Button
+          variant={wornToday ? 'solid' : 'surface'}
+          shape="block"
+          full
+          aria-pressed={wornToday}
+          icon={<CalendarCheck />}
+          // Preview mode has no session, and the row carries a user_id.
+          disabled={!userId}
+          loading={toggleWear.isPending}
+          onClick={() => {
+            if (!userId) return
+            toggleWear.mutate(
+              { itemId: item.id, userId, wornOn: today, worn: !wornToday },
+              {
+                onError: () =>
+                  toaster.create({ title: '착용 기록을 바꾸지 못했어요.', type: 'error' }),
+              },
+            )
+          }}
+        >
+          오늘 입었어요
+        </Button>
+
         <div className={hstack({ gap: '2' })}>
           {/* No `flex: '1'` on top: `full` already means "take the rest of the
               line", and stacking a `flex` shorthand on a recipe that sets
@@ -256,7 +325,7 @@ export function ItemDetailPage() {
             <div key={field.label} className={detailRow}>
               <dt className={detailLabel}>{field.label}</dt>
               <dd className={detailValue}>
-                {field.value(item) ?? (
+                {field.value(item, today) ?? (
                   <span className={css({ color: 'fg.subtle' })}>
                     <span aria-hidden="true">—</span>
                     <span className={css({ srOnly: true })}>미입력</span>
@@ -541,7 +610,12 @@ const inertButton = cx(
  */
 const DETAIL_FIELDS: {
   label: string
-  value: (item: WardrobeItem) => React.ReactNode | null
+  /**
+   * `today` is passed in rather than read from the clock here, so the row and
+   * the card that sent the user to this screen cannot disagree about what day it
+   * is — and so this table stays testable without freezing time.
+   */
+  value: (item: Worn<WardrobeItem>, today: string) => React.ReactNode | null
   /**
    * Width of this row's placeholder bar while the item loads.
    *
@@ -557,6 +631,28 @@ const DETAIL_FIELDS: {
   skeletonWidth: string
 }[] = [
   { label: '카테고리', skeletonWidth: '55%', value: (item) => categoryLabel(item.categoryId) },
+  {
+    label: '착용',
+    skeletonWidth: '42%',
+    /**
+     * The one row that says "아직" out loud instead of falling through to the
+     * `—` every other field uses when it is blank.
+     *
+     * That dash is read as 미입력, and a garment nobody has recorded yet is not a
+     * field somebody forgot to fill in — it is an answer. The grid card stays
+     * silent in the same situation for the opposite reason: there, on a wardrobe
+     * where nothing has been recorded yet, this sentence would be on every
+     * single card.
+     */
+    value: (item, today) => {
+      if (item.lastWornOn === null) return '아직 기록이 없어요'
+      // Unreachable from a row the database wrote, but chained rather than
+      // interpolated: `${null}` renders the word "null" beside a real count,
+      // which is the sort of thing that only shows up in a screenshot.
+      const ago = formatDayAgo(item.lastWornOn, today)
+      return ago ? `${ago} · 총 ${item.wearCount}번` : `총 ${item.wearCount}번`
+    },
+  },
   {
     label: '색상',
     skeletonWidth: '40%',

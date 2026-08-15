@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDate, formatPrice } from './format'
+import { formatDate, formatDayAgo, formatPrice } from './format'
 
 describe('formatPrice', () => {
   it('groups thousands and appends 원', () => {
@@ -50,5 +50,48 @@ describe('formatDate', () => {
     expect(formatDate('')).toBeNull()
     expect(formatDate('2025-11-02T00:00:00Z')).toBeNull()
     expect(formatDate('어제')).toBeNull()
+  })
+})
+
+describe('formatDayAgo', () => {
+  const today = '2026-08-15'
+
+  it('names the two days that have names', () => {
+    expect(formatDayAgo('2026-08-15', today)).toBe('오늘')
+    expect(formatDayAgo('2026-08-14', today)).toBe('어제')
+  })
+
+  it('widens the unit as the answer gets less precise', () => {
+    // 5일 전 is a thing to act on; 142일 전 is a number nobody converts, and the
+    // card has room for one of the two.
+    expect(formatDayAgo('2026-08-10', today)).toBe('5일 전')
+    expect(formatDayAgo('2026-08-01', today)).toBe('2주 전')
+    expect(formatDayAgo('2026-06-15', today)).toBe('2개월 전')
+    expect(formatDayAgo('2025-08-15', today)).toBe('1년 전')
+  })
+
+  it('never says 0개월 전', () => {
+    // Four weeks can span no calendar month at all, which is where the floor of
+    // 1 in the 개월 branch earns its place.
+    expect(formatDayAgo('2026-01-03', '2026-01-31')).toBe('1개월 전')
+  })
+
+  it('reads a year as 년 rather than as twelve months', () => {
+    // 360 days is twelve `days / 30` months, which is the arithmetic this
+    // deliberately does not use.
+    expect(formatDayAgo('2025-08-20', today)).toBe('11개월 전')
+    expect(formatDayAgo('2025-08-14', today)).toBe('1년 전')
+  })
+
+  it('calls a day in the future 오늘 rather than a negative', () => {
+    // The database accepts a wear dated one day ahead of the server — that
+    // tolerance is the timezone, not slack — so this is reachable from a phone
+    // carried east, and "-1일 전" is not a thing to put on a card.
+    expect(formatDayAgo('2026-08-16', today)).toBe('오늘')
+  })
+
+  it('is null when either day is malformed', () => {
+    expect(formatDayAgo('어제', today)).toBeNull()
+    expect(formatDayAgo(today, '')).toBeNull()
   })
 })

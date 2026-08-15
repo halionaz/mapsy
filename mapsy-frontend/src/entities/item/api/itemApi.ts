@@ -1,5 +1,6 @@
 import { removeObjects, settledError, signPaths } from '@/shared/api/storage'
 import { getSupabase, STORAGE_BUCKET } from '@/shared/api/supabase'
+import { warnIfTruncated } from '@/shared/api/warnIfTruncated'
 import { newId } from '@/shared/lib/id'
 import type { ProcessedPhoto } from '@/shared/lib/image'
 import type { Item, ItemDraft, ItemStatus, WardrobeItem } from '../model/types'
@@ -29,16 +30,8 @@ const ITEM_COLUMNS = '*'
 const IMAGE_COLUMNS = '*'
 
 /**
- * Ceilings on the full-collection fetch.
- *
- * PostgREST truncates to its configured `max-rows` silently — a short array, not
- * an error. Setting our own `.limit()` does not reveal that: if the server caps
- * at a smaller number, the response is under our limit and looks complete.
- *
- * `count: 'exact'` is what actually detects it. The response carries the total
- * row count independently of how many rows came back, so comparing the two
- * catches truncation from either source — and incidentally reports what the
- * server's ceiling really is.
+ * Ceilings on the full-collection fetch. `warnIfTruncated` explains what the
+ * `count: 'exact'` beside each one is for.
  *
  * PRD §8.4 puts the move to server-side filtering at ~1,000 garments, so these
  * sit just past that: reaching one means the client-side approach has been
@@ -94,14 +87,6 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
     const cover = coverOf(item.images)
     return { ...item, coverUrl: cover ? (signed.get(cover.thumbPath) ?? null) : null }
   })
-}
-
-function warnIfTruncated(received: number, total: number | null, what: string) {
-  if (total == null || received >= total) return
-  console.warn(
-    `${what} ${total}건 중 ${received}건만 받음. 전량 로드 + 클라이언트 필터링의 한계에 ` +
-      '도달했으므로 서버 사이드 필터링으로 전환해야 함 (PRD §8.4).',
-  )
 }
 
 /**

@@ -1,7 +1,18 @@
 import { groupIdOf } from '@/shared/config/categories'
 import { matchesQuery } from '@/shared/lib/hangul'
 import type { Item } from '@/entities/item'
+import type { WearSummary } from '@/entities/wear'
 import type { SortId, WardrobeFilters } from '../model/filters'
+
+/**
+ * What this needs beyond an item's own columns.
+ *
+ * Through `Pick` rather than spelling `{ lastWornOn: string | null }` out again:
+ * the field is the wear entity's, and a copy of its type here is a copy that can
+ * disagree with it. The nullability in particular is load-bearing — the `worn`
+ * comparator is built around null meaning "never", not "long ago".
+ */
+export type SortableItem = Item & Pick<WearSummary, 'lastWornOn'>
 
 /**
  * Client-side filtering and sorting — PRD §6.1, §8.4.
@@ -33,12 +44,37 @@ function matchesSearch(item: Item, query: string): boolean {
   return haystacks.some((text) => text != null && matchesQuery(text, query))
 }
 
-function compare(a: Item, b: Item, sort: SortId): number {
+function compare(a: SortableItem, b: SortableItem, sort: SortId): number {
   switch (sort) {
     case 'recent':
       return b.createdAt.localeCompare(a.createdAt)
     case 'title':
       return a.title.localeCompare(b.title, 'ko')
+    case 'worn': {
+      // Two tiers, and the second one is the point of the axis.
+      //
+      // Worn garments first, most recent at the top. Never-worn ones after all
+      // of them, newest registration first — so the very bottom of a section is
+      // "registered a long time ago and never once worn", which is the garment
+      // this sort exists to find.
+      //
+      // Not `lastWornOn ?? createdAt`, which was the first shape and is wrong at
+      // the other end: a garment registered this morning and never worn would
+      // outrank the shirt actually worn yesterday, at the top of a list labelled
+      // 최근 입은순.
+      if (a.lastWornOn == null && b.lastWornOn == null) {
+        return b.createdAt.localeCompare(a.createdAt)
+      }
+      if (a.lastWornOn == null) return 1
+      if (b.lastWornOn == null) return -1
+
+      // Same-day ties are the ordinary case, not a corner: a day's worth of
+      // garments all carry one date. Falling through to registration order makes
+      // the comparator total instead of leaving the answer to the incidental
+      // order of the cache array and the sort's stability.
+      const byDay = b.lastWornOn.localeCompare(a.lastWornOn)
+      return byDay !== 0 ? byDay : b.createdAt.localeCompare(a.createdAt)
+    }
     case 'price_desc':
     case 'price_asc': {
       // Items with no price sink to the bottom either way — a missing price is
@@ -51,7 +87,7 @@ function compare(a: Item, b: Item, sort: SortId): number {
   }
 }
 
-export function applyFilters<T extends Item>(
+export function applyFilters<T extends SortableItem>(
   items: readonly T[],
   filters: WardrobeFilters,
 ): T[] {

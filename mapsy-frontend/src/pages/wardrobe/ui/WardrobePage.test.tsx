@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PendingUpload, WardrobeItem } from '@/entities/item'
+import { closeWearDraft } from '@/features/wear-log'
+import { todayLocal, yesterdayLocal } from '@/shared/lib/calendarDay'
 import { WardrobePage } from './WardrobePage'
 
 /**
@@ -22,10 +24,14 @@ import { WardrobePage } from './WardrobePage'
  * it queues.
  */
 
-const { useWardrobeMock, usePendingUploadsMock } = vi.hoisted(() => ({
-  useWardrobeMock: vi.fn(),
-  usePendingUploadsMock: vi.fn(),
-}))
+const { useWardrobeMock, usePendingUploadsMock, useWearsMock, submitWearsMock } = vi.hoisted(
+  () => ({
+    useWardrobeMock: vi.fn(),
+    usePendingUploadsMock: vi.fn(),
+    useWearsMock: vi.fn(),
+    submitWearsMock: vi.fn(),
+  }),
+)
 
 /** The shape `useWardrobe` returns, with only what this screen reads. */
 function query(overrides: Record<string, unknown>) {
@@ -50,6 +56,20 @@ vi.mock('@/entities/item', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/entities/item')>()),
   useWardrobe: useWardrobeMock,
   usePendingUploads: usePendingUploadsMock,
+}))
+
+/**
+ * The wear log's two hooks, and nothing else from the entity.
+ *
+ * `attachWears` and `itemIdsWornOn` stay real: they are what turns the rows
+ * below into what the cards and the seeded selection actually show, and mocking
+ * them would leave these tests asserting against a fixture instead of against
+ * the merge.
+ */
+vi.mock('@/entities/wear', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/entities/wear')>()),
+  useWears: useWearsMock,
+  useSetWears: () => ({ mutate: submitWearsMock, isPending: false }),
 }))
 
 const uploading: PendingUpload = {
@@ -88,6 +108,14 @@ beforeEach(() => {
   useWardrobeMock.mockReset()
   usePendingUploadsMock.mockReset()
   usePendingUploadsMock.mockReturnValue([])
+  useWearsMock.mockReset()
+  // The default is "answered, nothing recorded". `undefined` — the state before
+  // the log has replied — is a case some tests below ask for on purpose.
+  useWearsMock.mockReturnValue({ data: [] })
+  submitWearsMock.mockReset()
+  // A module-level store that outlives a render, so it has to be put back
+  // between tests or a selection left open leaks into the next one.
+  closeWearDraft()
 })
 afterEach(cleanup)
 
@@ -387,6 +415,167 @@ describe('WardrobePage — uploads in flight', () => {
     // from it drew a childless <ul> — one more "list, 0 items" for a screen
     // reader to walk into.
     expect([...container.querySelectorAll('ul')].map((list) => list.children.length)).toEqual([1])
+  })
+})
+
+/**
+ * 오늘 입은 옷 — the button, the mode it opens, and what it submits.
+ *
+ * The load-bearing assertion is the first one. A submit replaces a whole day, so
+ * a selection seeded before the wear log has answered would send an empty set
+ * over records that are really there — the feature deleting its own data on a
+ * slow connection. Everything else here is behaviour; that one is a guard.
+ */
+describe('WardrobePage — 착용 기록', () => {
+  const today = todayLocal()
+  const yesterday = yesterdayLocal()
+
+  // Both resting labels — the invitation and the "already recorded" one. They
+  // are the same button, and a test that only knew one of them silently found
+  // nothing the moment a day had anything in it.
+  const wearButton = () =>
+    screen.queryByRole('button', { name: /입은 옷 기록하기|기록 고치기/ })
+  const cards = () => screen.queryAllByRole('button', { name: /마산 플리스|흰 티/ })
+
+  it('offers nothing to press until the wear log has answered', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    useWearsMock.mockReturnValue({ data: undefined })
+    renderWardrobe()
+
+    expect(wearButton()).toBeNull()
+    // And the cards are still links, so a tap goes to the garment rather than
+    // into a selection that has nothing to seed itself from.
+    expect(screen.getByRole('link', { name: /마산 플리스/ })).toBeDefined()
+  })
+
+  it('invites a recording when the day is empty', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    expect(wearButton()).not.toBeNull()
+  })
+
+  it('says what the day already holds instead of inviting again', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    useWearsMock.mockReturnValue({
+      data: [
+        { itemId: 'i1', wornOn: today },
+        { itemId: 'i2', wornOn: today },
+      ],
+    })
+    renderWardrobe()
+
+    // Not a disappearance: adding a jacket at lunch to a morning's record is the
+    // ordinary shape of a day, so the button stays and carries the count.
+    expect(screen.getByRole('button', { name: /오늘 2벌 기록 고치기/ })).toBeDefined()
+  })
+
+  it('turns the cards into checkboxes, ticked with what the day holds', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    useWearsMock.mockReturnValue({ data: [{ itemId: 'i1', wornOn: today }] })
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    expect(cards().map((card) => card.getAttribute('aria-pressed'))).toEqual(['true', 'false'])
+  })
+
+  it('submits the picked garments against the day being written', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+    fireEvent.click(screen.getByRole('button', { name: /흰 티/ }))
+    fireEvent.click(screen.getByRole('button', { name: '오늘 1벌 기록' }))
+
+    expect(submitWearsMock).toHaveBeenCalledTimes(1)
+    expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: today, itemIds: ['i2'] })
+  })
+
+  /**
+   * Switching the day re-seeds rather than carrying the picks across.
+   *
+   * The ids in hand describe what *that* day records; keeping them would submit
+   * today's clothes against yesterday, which is the one way this screen can
+   * quietly rewrite a day nobody was looking at.
+   */
+  it('re-seeds from the other day when the day is switched', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    useWearsMock.mockReturnValue({
+      data: [
+        { itemId: 'i1', wornOn: today },
+        { itemId: 'i2', wornOn: yesterday },
+      ],
+    })
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+    fireEvent.click(screen.getByRole('button', { name: '어제' }))
+
+    expect(cards().map((card) => card.getAttribute('aria-pressed'))).toEqual(['false', 'true'])
+    expect(screen.getByRole('button', { name: '어제 1벌 기록' })).toBeDefined()
+  })
+
+  /**
+   * With nothing picked the submit button is disabled, so 취소 is the only way
+   * out of the mode — which is why it is in the bar rather than on the button.
+   */
+  it('leaves the mode on 취소, with the cards back to links', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+    fireEvent.click(screen.getByRole('button', { name: /취소/ }))
+
+    expect(screen.getByRole('link', { name: /마산 플리스/ })).toBeDefined()
+    expect(submitWearsMock).not.toHaveBeenCalled()
+  })
+
+  it('will not submit an empty set over a day that was already empty', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    // Clearing a day that holds something is a real edit and stays pressable;
+    // this one would write nothing over nothing.
+    expect(screen.getByRole('button', { name: '옷을 골라주세요' }).hasAttribute('disabled')).toBe(
+      true,
+    )
+  })
+
+  it('offers to clear a day that does hold something', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    useWearsMock.mockReturnValue({ data: [{ itemId: 'i1', wornOn: today }] })
+    renderWardrobe()
+
+    fireEvent.click(screen.getByRole('button', { name: /오늘 1벌 기록 고치기/ }))
+    fireEvent.click(screen.getByRole('button', { name: /마산 플리스/ }))
+    fireEvent.click(screen.getByRole('button', { name: '오늘 기록 지우기' }))
+
+    expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: today, itemIds: [] })
+  })
+
+  it('takes the register button away while garments are being picked', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    // Registering a garment is not what the mode is for, and the submit button
+    // carries the longest label on the screen — it gets the row to itself.
+    expect(registerFab()).toBeNull()
+  })
+
+  it('draws when a garment was last worn, and nothing at all when it never was', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    useWearsMock.mockReturnValue({ data: [{ itemId: 'i1', wornOn: yesterday }] })
+    renderWardrobe()
+
+    // For the first weeks after this ships every card would otherwise carry the
+    // same 기록 없음, which is a caption rather than information.
+    expect(screen.getByText('어제')).toBeDefined()
+    expect(screen.queryByText('기록 없음')).toBeNull()
   })
 })
 
