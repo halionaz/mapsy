@@ -128,6 +128,23 @@ export function WardrobePage() {
    * Not `isFetching`, though. That is true for any refetch including the one
    * window focus starts, and locking the submit button on those would be a
    * control disabled by something the user did not do.
+   *
+   * **It outlives the selection it came from, and that is left alone.** Cancel
+   * during the refetch, reopen, pick again, and the new selection's submit is
+   * locked with a spinner on it until the old refetch lands — measured, along
+   * with the two things that keep it bounded: 취소 is never blocked, and nothing
+   * is submitted.
+   *
+   * The lock half is right either way, because the wardrobe really is being
+   * replaced underneath. The spinner is the part that lies, and every way of
+   * removing it is worse. Splitting the prop so recovery only disables would
+   * take the spinner off the *ordinary* path too, where it is true — the press
+   * is still being handled, the failure and the refetch are one operation to
+   * whoever pressed. Clearing the flag on cancel gives that press back and
+   * re-opens the wasted round trip this flag was added to stop. Tying it to the
+   * draft is correct in both and is state plumbing for a window that needs a
+   * cross-device delete, a submit, a cancel *during* the refetch, and a reopen
+   * to reach — after which it clears itself in under a second.
    */
   const [recovering, setRecovering] = useState(false)
   const stickSentinel = useRef<HTMLDivElement>(null)

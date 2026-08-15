@@ -743,6 +743,43 @@ describe('WardrobePage — 착용 기록', () => {
       toast.mockRestore()
     })
 
+    /**
+     * The lock is on the submit and on nothing else.
+     *
+     * `recovering` is screen state and survives the selection it came from, so
+     * reopening during the refetch shows a locked submit on the new one — a
+     * measured, bounded oddity the flag's docblock argues for leaving alone.
+     * What must never join it is 취소: locking that would trap the mode until
+     * the refetch lands, and the failing branch carries `retry: 2` and its
+     * backoff. Held down here because the two are one prop away from each other.
+     */
+    it('복구 중에도 취소는 눌리고, 모드가 갇히지 않는다', async () => {
+      let land!: (result: { isError: boolean }) => void
+      const inFlight = new Promise<{ isError: boolean }>((resolve) => {
+        land = resolve
+      })
+      const refetch = vi.fn(() => inFlight)
+
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOne()
+      await act(async () => {
+        submit()
+      })
+
+      const cancel = screen.getByRole('button', { name: '고르기 취소' })
+      expect(cancel.hasAttribute('disabled')).toBe(false)
+      fireEvent.click(cancel)
+      expect(screen.queryByRole('group', { name: /입은 옷 고르기/ })).toBeNull()
+
+      await act(async () => {
+        land({ isError: false })
+        await inFlight
+      })
+    })
+
     it('다시 불러오지 못하면 그렇게 말한다', async () => {
       // `void` threw this answer away, so an offline retry got the same
       // completed-sounding sentence and the half-hour deadlock came back with
