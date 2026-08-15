@@ -48,7 +48,7 @@ pnpm dev
 | `pnpm build` | 타입 체크 후 프로덕션 빌드 |
 | `pnpm typecheck` | 전체 패키지 `tsc -b` |
 | `pnpm lint` | oxlint |
-| `pnpm format` | oxfmt — 코드 포맷 (CI는 `format:check`로 막는다) |
+| `pnpm format` | oxfmt — 레포 전체 코드 포맷 (아래 참고) |
 | `pnpm test` | vitest — 순수 로직 단위 테스트 |
 | `pnpm test:db` | Docker에 Postgres를 띄워 마이그레이션·RLS 검사 |
 | `pnpm codegen` | Panda CSS 재생성 |
@@ -56,15 +56,34 @@ pnpm dev
 | `pnpm cf:dev` | Cloudflare Workers 런타임으로 빌드 결과 확인 |
 | `pnpm cf:deploy` | Cloudflare Workers 배포 |
 
+## 포맷
+
+`oxfmt`이 강제한다 — 세미콜론 없음, 싱글쿼트, 100자([`.oxfmtrc.json`](.oxfmtrc.json)).
+`pnpm format`이 고치고 CI는 `format:check`로 막는다.
+
+**패키지가 아니라 레포 루트에 건다.** `pnpm -r`은 루트 프로젝트를 돌지 않고, `format:check`
+스크립트가 없는 패키지는 조용히 건너뛴다 — 워크스페이스 글롭에 새 패키지가 붙는 방식이라
+언젠가는 검사 없는 패키지가 초록으로 지나간다. 실제로 `scripts/only-pnpm.mjs`가 그렇게 규칙
+바깥에 있었다.
+
+버전을 `^` 없이 박은 건 `pnpm update`가 패치를 집어올 때 리포맷이 딸려오는 걸 막기 위해서다.
+락파일이 커밋돼 있고 CI가 `--frozen-lockfile`이라, 의존성을 안 건드린 PR은 어차피 같은 oxfmt를
+받는다.
+
+**포맷하지 않는 것이 있다.** `dbConstraints.generated.ts`와 `database.types.ts`는 도구가 다시
+쓰는 파일이라, 포맷을 걸면 `pnpm test:db` 한 번에 되돌려지고 둘이 서로를 덮는 싸움이 된다.
+마크다운·JSON·JSONC·HTML을 뺀 건 코드 스타일 얘기가 아니어서인데, 실제로 확인한 손해도
+있다 — 표를 CJK 폭 계산 없이 정렬해 소스가 어긋나고, `package.json`의 키 순서를 바꾸고,
+`wrangler.jsonc`에 후행 쉼표를 넣는다. 마지막 것은 배포 설정이다.
+
+`.gitignore`에 있는 것(`styled-system/`, `dist/`)은 따로 안 적었다 — oxfmt가 이미 따르고,
+"무엇이 생성물인가"의 출처는 `.gitignore` 하나여야 한다.
+
 ## CI
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)이 PR과 main 푸시에서 위 명령을 그대로
 돌린다. 잡은 둘이다 — `db`는 `pnpm test:db`(Docker만 필요해서 install을 건너뛴다), `web`은
-설치 후 format·lint·typecheck·test·build.
-
-`paths` 필터는 일부러 두지 않았다. `db` 잡이 지키는 것은 스키마와 프론트엔드 제약 맵 사이의
-어긋남이라, "supabase/가 안 바뀌었으니 건너뛴다"는 곧 `errorMessage.ts`만 고친 PR에서 검사가
-안 도는 것이다.
+설치 후 format·lint·typecheck·test·build. `paths` 필터를 두지 않은 이유는 워크플로 주석에 있다.
 
 > **워크플로 파일만으로는 머지를 막지 못한다.** GitHub 저장소 설정에서 `db`·`web`을 required
 > status check으로 등록해야 빨간 CI가 머지를 막는다. 안 하면 "돌리는 걸 기억하기"가 "빨간 걸

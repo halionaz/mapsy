@@ -6,7 +6,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      oxfmt:
+        specifier: 0.63.0
+        version: 0.63.0
 
   mapsy-frontend:
     dependencies:
@@ -56,9 +60,6 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1
-      oxfmt:
-        specifier: 0.63.0
-        version: 0.63.0
       oxlint:
         specifier: ^1.75.0
         version: 1.76.0

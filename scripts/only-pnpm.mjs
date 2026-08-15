@@ -99,7 +99,12 @@ function check(label, actualVersion, range, howToFix) {
   }
 }
 
-check('Node', process.versions.node, engines.node, 'asdf/nvm 등으로 Node를 올린 뒤 다시 시도하세요.')
+check(
+  'Node',
+  process.versions.node,
+  engines.node,
+  'asdf/nvm 등으로 Node를 올린 뒤 다시 시도하세요.',
+)
 
 if (manager === 'pnpm') {
   check('pnpm', managerVersion, engines.pnpm, 'corepack enable 로 packageManager 버전을 맞추세요.')

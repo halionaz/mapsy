@@ -16,13 +16,16 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "format": "pnpm -r format",
-    "format:check": "pnpm -r format:check",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "test": "pnpm -r test",
     "test:db": "bash supabase/tests/run.sh",
     "cf:deploy": "pnpm --filter mapsy-frontend cf:deploy",
     "cf:upload": "pnpm --filter mapsy-frontend cf:upload",
     "cf:dev": "pnpm --filter mapsy-frontend cf:dev",
     "types:gen": "supabase gen types typescript --linked > mapsy-frontend/src/shared/api/database.types.ts.tmp && mv mapsy-frontend/src/shared/api/database.types.ts.tmp mapsy-frontend/src/shared/api/database.types.ts"
+  },
+  "devDependencies": {
+    "oxfmt": "0.63.0"
   }
 }

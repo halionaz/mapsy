@@ -3,8 +3,8 @@
   "singleQuote": true,
   "printWidth": 100,
   "ignorePatterns": [
-    "src/shared/api/database.types.ts",
-    "src/shared/config/dbConstraints.generated.ts",
+    "mapsy-frontend/src/shared/api/database.types.ts",
+    "mapsy-frontend/src/shared/config/dbConstraints.generated.ts",
     "**/*.md",
     "**/*.json",
     "**/*.jsonc",

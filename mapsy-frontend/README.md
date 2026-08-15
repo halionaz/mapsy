@@ -36,7 +36,6 @@ UI를 그대로 만들 수 있다.
 | `pnpm typecheck` | `tsc -b` |
 | `pnpm codegen` | Panda CSS 재생성 |
 | `pnpm lint` | oxlint |
-| `pnpm format` | oxfmt (`format:check`는 고치지 않고 검사만) |
 | `pnpm test` | vitest (순수 로직) |
 | `pnpm types:gen` | Supabase 스키마에서 DB 타입 재생성 |
 | `pnpm cf:dev` | Cloudflare Workers 런타임(`wrangler dev`)으로 확인 |
@@ -183,17 +182,9 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
 누락되므로**, 레시피·패턴·조건·토큰을 건드릴 땐 기억에 의존하지 말고 스킬의 라우팅 테이블을
 따라 최신 문서를 확인할 것.
 
-## 포맷
-
-`oxfmt`이 강제한다 — 세미콜론 없음, 싱글쿼트, 100자([`.oxfmtrc.json`](.oxfmtrc.json)).
-`pnpm format`으로 고치고, CI는 `format:check`로 막는다. 버전을 `^` 없이 정확히 박아둔 건
-0.x라 출력이 버전 사이에 바뀔 수 있어서다 — 그러면 코드를 안 건드린 PR이 빨개진다.
-
-**포맷하지 않는 것이 있다.** `dbConstraints.generated.ts`와 `database.types.ts`는 도구가 다시
-쓰는 파일이라, 포맷을 걸면 `pnpm test:db` 한 번에 되돌려지고 둘이 서로를 덮는 싸움이 된다.
-마크다운·JSON·JSONC·HTML을 뺀 건 코드 스타일 얘기가 아니어서인데, 실제로 확인한 손해도
-있다 — 표를 CJK 폭 계산 없이 정렬해 소스가 어긋나고, `package.json`의 키 순서를 바꾸고,
-`wrangler.jsonc`에 후행 쉼표를 넣는다. 마지막 것은 배포 설정이다.
+코드 포맷은 이 패키지가 아니라 레포 전체에 걸린다 — 설정도 명령도 루트에 있다
+([`../README.md`](../README.md)의 포맷 절). 이 패키지에서 포맷 대상이 아닌 파일은
+`database.types.ts`와 `dbConstraints.generated.ts` 둘, 이유는 같은 절에 적혀 있다.
 
 ## 아직 없는 것
 
