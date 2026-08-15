@@ -255,8 +255,8 @@ describe('WardrobePage — categories', () => {
    * carries no 대분류 pill — so without it the screen empties with nothing
    * saying why.
    *
-   * Not "with no way to turn it off": that state is `noMatches`, and its
-   * 필터 모두 해제 clears `groupIds`. Measured — the button is on screen here.
+   * Not because there is no way to turn it off: that state is `noMatches`, and
+   * its 필터 모두 해제 clears `groupIds`. Measured — the button is on screen here.
    */
   it('keeps the selected chip after its last garment leaves the wardrobe', () => {
     const shoes = item({ id: 'i2', categoryId: 'shoes.boots' })
@@ -385,9 +385,7 @@ describe('WardrobePage — uploads in flight', () => {
 
     // `visible` is empty here while the wardrobe is not, and a second grid fed
     // from it drew a childless <ul> — one more "list, 0 items" for a screen
-    // reader to walk into. Only that: the column cost was claimed and then
-    // measured away, since the element was the last child and `main`'s bottom
-    // padding already exceeded the row gap.
+    // reader to walk into.
     expect([...container.querySelectorAll('ul')].map((list) => list.children.length)).toEqual([1])
   })
 })

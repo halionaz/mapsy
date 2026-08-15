@@ -138,23 +138,23 @@ export function WardrobePage() {
    *
    * The active group is kept in the list even once it holds nothing. Disposing
    * of the last pair of shoes while 신발 is selected otherwise takes the lit chip
-   * off screen while its filter stays applied, and the lit chip was the only
-   * thing on the page saying which category is being looked at — the summary row
-   * deliberately does not carry 대분류 (`filterSummary.ts`). The screen becomes
-   * empty with nothing left explaining why.
+   * off screen while its filter stays applied, and the lit chip is the only
+   * thing on the page naming the category being looked at — the summary row
+   * deliberately does not carry 대분류 (`filterSummary.ts`). The screen empties
+   * with nothing left explaining why.
    *
-   * Not "with no way out", which is what this said first and is measured false:
-   * that state is `noMatches`, whose 필터 모두 해제 clears `groupIds` directly.
-   * The one path with no way out is owned-0 plus an upload in flight — `pending`
-   * makes the view `grid`, so that button is not drawn — and it ends when the
-   * upload lands.
+   * Not because there would be no way out: that state is `noMatches`, whose
+   * 필터 모두 해제 clears `groupIds` directly. The one path with no way out is
+   * owned-0 plus an upload in flight, where `pending` makes the view `grid` and
+   * that button is never drawn — and it ends when the upload lands.
    */
   const railGroups = useMemo(() => {
-    // The element type is named rather than inferred. `new Set(…)` takes its
-    // type from what it is handed, so it absorbs an `undefined` element without
-    // a word — and the day `groupIdOf` starts returning one, this is the only
-    // one of its three call sites that would not stop compiling. Naming the
-    // type puts the tooth back for the cost of a type argument.
+    // The element type is named rather than inferred, and that is the whole
+    // reason the argument is there. `new Set(…)` takes its type from what it is
+    // handed, so it absorbs an `undefined` element without a word — measured on
+    // a deliberately broken category table, dropping the argument is what turns
+    // three failing call sites into two, with this one silently among the
+    // survivors. See `ResolvableSubcategoryId`.
     const present = new Set<CategoryGroupId>(
       inWardrobe.map((entry) => groupIdOf(entry.categoryId)),
     )
@@ -182,6 +182,13 @@ export function WardrobePage() {
    */
   const sectioned = sections.length > 1
 
+  // `data !== undefined`, not "there are rows". An empty wardrobe is an answer:
+  // `data: []` means the fetch succeeded and this person owns nothing yet, and a
+  // later refetch failing does not take that answer back. Asking "are there rows
+  // to draw" instead put a new user's first screen — 아직 등록한 옷이 없어요 —
+  // behind a load failure the moment a focus refetch missed.
+  const answered = data !== undefined
+
   /**
    * Which of the five things this screen can be, decided once.
    *
@@ -196,16 +203,9 @@ export function WardrobePage() {
    * enough to trigger it.
    *
    * `failed` is now only the cold case: the fetch failed and there is nothing
-   * cached to fall back on. A failure with rows in hand is `staleWarning`, drawn
-   * over the grid rather than in place of it.
+   * cached to fall back on. A failure with rows in hand keeps this at `grid` and
+   * takes `stale` below, which draws over the grid rather than in place of it.
    */
-  // `data !== undefined`, not "there are rows". An empty wardrobe is an answer:
-  // `data: []` means the fetch succeeded and this person owns nothing yet, and a
-  // later refetch failing does not take that answer back. Asking "are there rows
-  // to draw" instead put a new user's first screen — 아직 등록한 옷이 없어요 —
-  // behind a load failure the moment a focus refetch missed.
-  const answered = data !== undefined
-
   const view: View = isLoading
     ? 'loading'
     : error != null && !answered
@@ -528,13 +528,9 @@ export function WardrobePage() {
               </ul>
             )}
 
-            {/* Guarded rather than left to render zero children: the only
-                screen where that happens is a first registration still
-                uploading, and an empty flex column there is a wrapper with
-                nothing in it standing between the pending card and the bottom
-                of the page. Not a measured gap — it is the last child, and
-                `main`'s bottom padding is already larger than the row spacing
-                — so this is tidiness, not a fix. */}
+            {/* Tidiness, not a fix: with only an upload in flight this would be
+                a flex column holding nothing. No test — the DOM says plainly
+                whether it is there, but nothing on screen depends on it. */}
             {sections.length > 0 && (
               <div className={vstack({ gap: '7', alignItems: 'stretch' })}>
                 {sections.map((section) => (

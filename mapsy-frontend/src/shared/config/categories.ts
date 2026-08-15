@@ -158,8 +158,13 @@ export type SubcategoryId = Subcategory['id']
  * `Array.includes`, `Map.get`, `Map.set`. A fresh container infers its element
  * type *from* the value and swallows the `undefined` in silence, which is why
  * the wardrobe's rail writes `new Set<CategoryGroupId>(…)` rather than
- * `new Set(…)`; measured, that one type argument is the difference between the
- * broken table failing at three call sites and at two.
+ * `new Set(…)`; measured on the broken table, that one type argument is the
+ * difference between three call sites failing and two.
+ *
+ * Counted: four callers. `applyFilters`, `groupSections` and the rail stop
+ * compiling; `ItemForm` does not, and should not — it reaches the call through
+ * `categoryId ? … : undefined`, so it has declared the `undefined` itself and
+ * the presets it feeds already take one.
  */
 type ResolvableSubcategoryId = Extract<
   SubcategoryId,
