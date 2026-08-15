@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDate, formatDayAgo, formatPrice } from './format'
+import { formatDate, formatDayAgo, formatMonthDay, formatPrice } from './format'
 
 describe('formatPrice', () => {
   it('groups thousands and appends 원', () => {
@@ -50,6 +50,20 @@ describe('formatDate', () => {
     expect(formatDate('')).toBeNull()
     expect(formatDate('2025-11-02T00:00:00Z')).toBeNull()
     expect(formatDate('어제')).toBeNull()
+  })
+})
+
+describe('formatMonthDay', () => {
+  it('drops the year and the zero padding', () => {
+    // It sits inside `8.14 (어제)`, where the word beside it says which 14th —
+    // so the parts `formatDate` keeps would only be noise on a control.
+    expect(formatMonthDay('2026-08-14')).toBe('8.14')
+    expect(formatMonthDay('2026-01-05')).toBe('1.5')
+  })
+
+  it('is null for anything that is not a calendar day', () => {
+    expect(formatMonthDay('2026-02-30')).toBeNull()
+    expect(formatMonthDay('어제')).toBeNull()
   })
 })
 

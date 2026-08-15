@@ -16,4 +16,4 @@ export {
 } from './model/wearDraft'
 
 export { WearFab } from './ui/WearFab'
-export { WearModeBar } from './ui/WearModeBar'
+export { WearSelectionBar } from './ui/WearSelectionBar'

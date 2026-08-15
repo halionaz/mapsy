@@ -1,4 +1,4 @@
-import { daysBetween, monthsBetween } from './calendarDay'
+import { daysBetween, monthsBetween, parseDay } from './calendarDay'
 
 /**
  * Prices are stored as whole won (PRD §4.1), so they are formatted with the
@@ -24,6 +24,19 @@ export function formatDate(iso: string | null): string | null {
   if (!match) return null
   const [, year, month, day] = match
   return `${year}. ${Number(month)}. ${Number(day)}.`
+}
+
+/**
+ * `8.14` — a day for a control that already names it in words beside them.
+ *
+ * No year and no padding, unlike `formatDate`. That one is a field value and has
+ * to stand alone; this one sits inside `8.14 (어제)`, where the parenthesis is
+ * doing the work of saying which 14th and the digits are only there so the day
+ * being written is an actual date rather than a relative word.
+ */
+export function formatMonthDay(iso: string): string | null {
+  const day = parseDay(iso)
+  return day ? `${day.month}.${day.day}` : null
 }
 
 /**

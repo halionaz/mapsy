@@ -33,7 +33,7 @@ import {
   toggleWearDraftItem,
   useWearDraft,
   WearFab,
-  WearModeBar,
+  WearSelectionBar,
 } from '@/features/wear-log'
 import { CATEGORY_GROUPS, groupIdOf, type CategoryGroupId } from '@/shared/config/categories'
 import { assertNever } from '@/shared/lib/assertNever'
@@ -284,11 +284,21 @@ export function WardrobePage() {
    * `selecting`, never `draft`, and the mode simply appears a moment later.
    */
   const selecting = wearsAnswered ? draft : null
-  const activeDay = selecting?.wornOn ?? today
-  // `=== yesterday` rather than `!== today`, so a draft for some third day —
-  // which `wearDraft` refuses to restore, and nothing else can produce — would
-  // read as 오늘 rather than silently borrowing 어제's label.
-  const dayLabel = activeDay === yesterday ? '어제' : '오늘'
+
+  /**
+   * Which day the wear button is about when nothing is being picked: yesterday.
+   *
+   * Not the default this started with. Recording runs a day behind the way it is
+   * actually used — the outfit is settled when the day is over, and the moment
+   * somebody opens a wardrobe app and thinks about it is the next morning. 오늘
+   * is one press away on the date button, which is the right way round: the
+   * common case is the default and the other one is reachable.
+   */
+  const activeDay = selecting?.wornOn ?? yesterday
+  // `=== today` rather than `!== yesterday`, so a draft for some third day —
+  // which `wearDraft` refuses to restore, and nothing else can produce — reads
+  // as 어제 rather than silently borrowing 오늘's label.
+  const dayLabel = activeDay === today ? '오늘' : '어제'
   const recordedIds = useMemo(() => itemIdsWornOn(wears, activeDay), [wears, activeDay])
   const selectedIds = useMemo(() => (selecting ? new Set(selecting.itemIds) : null), [selecting])
 
@@ -306,7 +316,7 @@ export function WardrobePage() {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
   }
 
-  /** Opens a day, seeded with what it already holds — also how 오늘/어제 switch. */
+  /** Opens a day, seeded with what it already holds — also how the date switches. */
   function startSelecting(day: string) {
     openWearDraft(day, itemIdsWornOn(wears, day))
   }
@@ -407,19 +417,10 @@ export function WardrobePage() {
           a long wardrobe tiring to browse. The title above is not a control and
           is allowed to leave. */}
       <div className={controls} data-stuck={stuck || undefined}>
-        {/* Above the search box and inside the same pinned bar, so the way out
-            of the mode and the day being written stay reachable from the bottom
-            of a long wardrobe. */}
-        {selecting && (
-          <WearModeBar
-            wornOn={selecting.wornOn}
-            today={today}
-            yesterday={yesterday}
-            onPickDay={startSelecting}
-            onCancel={closeWearDraft}
-          />
-        )}
-
+        {/* Nothing is added here while garments are being picked. The day and
+            the way out both live in `WearSelectionBar` at the bottom of the
+            screen, next to the thumb that is scrolling — a strip up here is the
+            one part of a long wardrobe that has to be scrolled back to. */}
         <div className={hstack({ gap: '2', px: '5' })}>
           <div className={css({ position: 'relative', flex: '1' })}>
             <Search size={16} aria-hidden="true" className={searchIcon} />
@@ -659,38 +660,53 @@ export function WardrobePage() {
         )}
       </main>
 
-      <div className={fabRow}>
-        {/* Hidden while the empty-wardrobe screen is on show: it already offers
-            첫 옷 등록하기 in the middle of it, and two identical pills pointing
-            at the same route is the app asking twice.
+      {/* Two separately pinned buttons rather than a row, which is what puts 옷
+          등록 back at the exact centre of the screen — a row would have centred
+          the *pair* and left the register button sitting off to one side.
 
-            Hidden again while garments are being picked. Registering a new one
-            is not what that mode is for, and taking it away is what leaves the
-            submit button the row to itself — 어제 8벌 기록 is the longest label
-            the corner ever carries. */}
-        {view !== 'empty' && selecting === null && (
-          <Link to="/items/new" aria-label="옷 등록" className={cx(buttonStyle(), fab)}>
-            <Plus />옷 등록
-          </Link>
-        )}
+          The wear button is held to the right edge of the app column instead of
+          the window, so it does not drift out into the page margin on a tablet.
+          Its slot spans the column, so `pointer-events` is off on the slot and
+          back on for the button — otherwise an invisible full-width strip would
+          be swallowing taps on the bottom row of the grid. */}
+      {selecting === null ? (
+        <>
+          {/* Hidden while the empty-wardrobe screen is on show: it already
+              offers 첫 옷 등록하기 in the middle of it, and two identical pills
+              pointing at the same route is the app asking twice. */}
+          {view !== 'empty' && (
+            <Link to="/items/new" aria-label="옷 등록" className={cx(buttonStyle(), fab)}>
+              <Plus />옷 등록
+            </Link>
+          )}
 
-        {canRecord && (
-          <WearFab
-            dayLabel={dayLabel}
-            recordedCount={recordedIds.size}
-            selectedCount={selecting ? selecting.itemIds.length : null}
-            // The same signal the control bar sticks on, rather than a second
-            // scroll listener that could disagree with it about where the top of
-            // the page ended.
-            collapsed={stuck}
-            submitting={submitWears.isPending}
-            // Always 오늘 from out here. 어제 is reachable, but only from inside
-            // the mode, where the day is on screen and can be seen to change.
-            onOpen={() => startSelecting(today)}
-            onSubmit={submitSelection}
-          />
-        )}
-      </div>
+          {canRecord && (
+            <div className={wearFabSlot}>
+              <WearFab
+                dayLabel={dayLabel}
+                recordedCount={recordedIds.size}
+                // The same signal the control bar sticks on, rather than a
+                // second scroll listener that could disagree with it about
+                // where the top of the page ended.
+                collapsed={stuck}
+                onOpen={() => startSelecting(activeDay)}
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <WearSelectionBar
+          wornOn={selecting.wornOn}
+          dayLabel={dayLabel}
+          otherDayLabel={dayLabel === '오늘' ? '어제' : '오늘'}
+          selectedCount={selecting.itemIds.length}
+          recordedCount={recordedIds.size}
+          submitting={submitWears.isPending}
+          onToggleDay={() => startSelecting(activeDay === today ? yesterday : today)}
+          onSubmit={submitSelection}
+          onCancel={closeWearDraft}
+        />
+      )}
 
       <WardrobeFilterSheet
         open={sheetOpen}
@@ -938,23 +954,41 @@ const listMeta = css({
 })
 
 /**
- * The floating actions, pinned above the home indicator.
+ * The register button, pinned above the home indicator.
  *
- * Centred rather than tucked into a corner: this is a one-handed screen and the
- * middle of the bottom edge is the part of a phone both thumbs reach. `fixed`
- * positions it against the viewport — nothing between here and the root has a
- * transform, so the app column's own `position: relative` does not capture it —
- * and the column is centred too, which is what keeps the two agreeing.
+ * Centred rather than in a corner: this is a one-handed screen and the middle of
+ * the bottom edge is the part of a phone both thumbs reach. `fixed` positions it
+ * against the viewport — nothing between here and the root has a transform, so
+ * the app column's own `position: relative` does not capture it — and the column
+ * is centred too, which is what keeps the two agreeing.
  *
- * A row rather than two separately positioned buttons. Anchoring 옷 등록 to the
- * centre and the wear button to the right edge is what the sketch asked for, and
- * the two are wide enough to meet: a centred pill reaches past the halfway mark
- * of a phone-width column, and a right-anchored one carrying 오늘 입은 옷 reaches
- * back past it. Laying them out as a row makes that unrepresentable at any
- * width, and costs the register pill a shift as the label folds away — half of
- * whatever width the label gave up, which `WearFab` animates rather than jumps.
+ * The glow is its alone. The wear button beside it is drawn on a surface rather
+ * than in the accent, and an accent-tinted shadow under a neutral pill reads as
+ * a rendering mistake — the shadow would be the only orange thing about it.
  */
-const fabRow = css({
+const fab = css({
+  position: 'fixed',
+  bottom: 'calc({spacing.6} + var(--safe-b))',
+  left: '50%',
+  translate: 'auto',
+  translateX: '-1/2',
+  zIndex: 'fab',
+  boxShadow: 'fab',
+})
+
+/**
+ * Where the wear button sits: the right-hand end of the app column, on the same
+ * line as the register button.
+ *
+ * A full-width slot rather than `right: 20px`, because "right" here means the
+ * column's edge and not the window's — the shell centres 480px, and on anything
+ * wider the button would otherwise float off in the page margin.
+ *
+ * `pointerEvents: none` on the slot and back on for its child. The slot spans
+ * the whole column at the height of the bottom row of cards, and an invisible
+ * strip that eats taps is the kind of bug that reads as the grid being broken.
+ */
+const wearFabSlot = css({
   position: 'fixed',
   bottom: 'calc({spacing.6} + var(--safe-b))',
   left: '50%',
@@ -962,20 +996,9 @@ const fabRow = css({
   translateX: '-1/2',
   zIndex: 'fab',
   display: 'flex',
-  alignItems: 'center',
-  gap: '3',
-  // Buttons do not shrink (`buttonStyle` sets `flex-shrink: 0`), so this is a
-  // guard rather than a layout rule: it keeps the row inside the page inset if a
-  // label ever grows past what fits.
-  maxWidth: 'calc(100vw - {spacing.10})',
+  justifyContent: 'flex-end',
+  width: 'calc(100vw - {spacing.10})',
+  maxWidth: 'calc({sizes.app} - {spacing.10})',
+  pointerEvents: 'none',
+  '& > *': { pointerEvents: 'auto' },
 })
-
-/**
- * The register button's own glow.
- *
- * Not shared with the wear button beside it. That one is drawn on a surface
- * rather than in the accent, and an accent-tinted shadow under a neutral pill
- * reads as a rendering mistake — the shadow would be the only orange thing about
- * it.
- */
-const fab = css({ boxShadow: 'fab' })
