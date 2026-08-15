@@ -710,12 +710,36 @@ describe('WardrobePage — 착용 기록', () => {
       expect(refetch).toHaveBeenCalledTimes(1)
       expect(toast).not.toHaveBeenCalled()
 
+      /**
+       * And it is not silent while it waits.
+       *
+       * The mutation is already settled by the time `onError` runs — see
+       * `entities/wear/model/queries.premise.test.tsx` — so the button lost its
+       * spinner the instant the request failed and sat live through the whole
+       * refetch. Measured then: a second press sent the identical set and
+       * started a second refetch, which is one signed URL per garment again.
+       *
+       * `isPending` is mocked `false` throughout this file, so what passes here
+       * can only be the screen's own recovery flag.
+       */
+      const button = screen.getByRole('button', { name: '1벌 기록' })
+      expect(button.hasAttribute('disabled')).toBe(true)
+      expect(button.getAttribute('aria-busy')).toBe('true')
+
+      fireEvent.click(button)
+      expect(submitWearsMock).toHaveBeenCalledTimes(1)
+      expect(refetch).toHaveBeenCalledTimes(1)
+
       await act(async () => {
         land({ isError: false })
         await inFlight
       })
 
       expect(toast).toHaveBeenCalledTimes(1)
+      // And the lock comes off, or the mode is stuck for as long as it is open.
+      expect(
+        screen.getByRole('button', { name: '1벌 기록' }).hasAttribute('disabled'),
+      ).toBe(false)
       toast.mockRestore()
     })
 

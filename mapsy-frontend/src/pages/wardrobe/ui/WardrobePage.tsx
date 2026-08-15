@@ -108,6 +108,28 @@ export function WardrobePage() {
 
   const [filters, setFilters] = useState<WardrobeFilters>(EMPTY_FILTERS)
   const [sheetOpen, setSheetOpen] = useState(false)
+  /**
+   * The wardrobe refetch a failed submit starts, as something the screen can
+   * show.
+   *
+   * A flag of its own because the mutation's `isPending` cannot serve: it is
+   * already false when `onError` is entered, and nothing waits for that callback
+   * either — `entities/wear/model/queries.premise.test.tsx` pins both against
+   * the real library. Without this the submit button lost its spinner the moment
+   * the request failed and sat there live and silent for the length of the
+   * refetch, which is one signed URL per garment on the success path and, with
+   * `retry: 2` in the providers, several seconds of backoff on the failing one.
+   *
+   * Measured before it existed: pressing again in that window sent the identical
+   * set and started a second refetch. The same screen already learned this at
+   * the stale banner's 다시 시도, which is `loading={isFetching}` for exactly
+   * this reason — silence is what makes someone press twice.
+   *
+   * Not `isFetching`, though. That is true for any refetch including the one
+   * window focus starts, and locking the submit button on those would be a
+   * control disabled by something the user did not do.
+   */
+  const [recovering, setRecovering] = useState(false)
   const stickSentinel = useRef<HTMLDivElement>(null)
   const statusStrip = useRef<HTMLDivElement>(null)
   const stuck = useScrolledPast(stickSentinel, statusStrip)
@@ -456,19 +478,29 @@ export function WardrobePage() {
             return
           }
 
-          // `refetch` resolves with the failure rather than rejecting, but the
-          // catch is there because that is a react-query option away from being
-          // untrue, and an unhandled rejection inside `onError` is invisible.
-          const result = await refetch().catch(() => null)
+          setRecovering(true)
+          try {
+            // `refetch` resolves with the failure rather than rejecting, but the
+            // catch is there because that is a react-query option away from
+            // being untrue, and an unhandled rejection inside `onError` is
+            // invisible.
+            const result = await refetch().catch(() => null)
 
-          toaster.create({
-            title: '기록하지 못했어요',
-            description:
-              result != null && !result.isError
-                ? '옷장에 없는 옷이 섞여 있었어요. 목록을 새로 불러왔으니 확인해주세요.'
-                : '옷장을 새로 불러오지 못했어요. 연결을 확인한 뒤 다시 시도해주세요.',
-            type: 'error',
-          })
+            toaster.create({
+              title: '기록하지 못했어요',
+              description:
+                result != null && !result.isError
+                  ? // What happened, not what to do next. The garment is out of
+                    // the selection now, and whether anything is left to send is
+                    // a question the button below answers better than a sentence
+                    // written before the answer arrived.
+                    '옷장에 없는 옷이 섞여 있었어요. 그 옷을 빼고 목록을 새로 불러왔어요.'
+                  : '옷장을 새로 불러오지 못했어요. 연결을 확인한 뒤 다시 시도해주세요.',
+              type: 'error',
+            })
+          } finally {
+            setRecovering(false)
+          }
         },
       },
     )
@@ -820,7 +852,7 @@ export function WardrobePage() {
           wornOn={selecting.wornOn}
           selectedCount={selectedIds?.size ?? 0}
           recordedCount={recordedIds.size}
-          submitting={submitWears.isPending}
+          submitting={submitWears.isPending || recovering}
           onSubmit={submitSelection}
           onCancel={closeWearDraft}
         />
