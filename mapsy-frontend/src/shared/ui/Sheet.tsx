@@ -49,9 +49,19 @@ export function Sheet({ open, onOpenChange, title, footer, children }: SheetProp
         <Drawer.Backdrop className={backdrop} />
         <Drawer.Positioner className={positioner}>
           {/*
-            `draggable={false}` confines dragging to the handle. The body of this
-            sheet scrolls, and a drag that starts on a chip rail would otherwise
-            be competing with it for the same gesture.
+            `draggable={false}` puts the drag back on the handle alone, and the
+            sheet is short enough (`content` below) that the handle is somewhere
+            a thumb can reach.
+
+            Dragging the body as well was tried, and taken back off a phone. Ark
+            starts a drag once the element under the finger has no scroll left in
+            that direction, and that question is symmetric: a list at its
+            *bottom* has none either, so swiping up there began one. Once begun
+            it is not asked again — the machine takes its `isDragging` branch
+            first — so reversing the finger then walked the sheet towards
+            dismissal from the middle of a scrolled list. Telling the two
+            gestures apart would mean writing that here, over a library that has
+            already answered it.
 
             No `aria-label`: rendering `Drawer.Title` is what makes Ark set
             `aria-labelledby`, and adding a label as well would replace the
@@ -116,7 +126,21 @@ const content = css({
   // Matches the app column, so on a wide window the sheet comes up inside the
   // phone rather than across the whole desktop.
   maxWidth: 'app',
-  maxHeight: '86dvh',
+  /**
+   * Also where the two ways out of the sheet end up, which is what decided the
+   * number.
+   *
+   * Both of them are at its top edge — the handle on it, the backdrop above it —
+   * so a sheet that comes up 86dvh, as this did, puts both in the end of the
+   * screen a thumb reaches last, with the top inset eating into the backdrop
+   * besides (the viewport is `viewport-fit=cover`). At 60dvh they are around the
+   * middle of the phone, where the hand already is.
+   *
+   * The cost is paid inside: the filter sheet's list is longer than this and
+   * scrolls, which is the trade that was chosen over dragging the body — see
+   * `Drawer.Content`.
+   */
+  maxHeight: '60dvh',
   bg: 'bg.elevated',
   color: 'fg',
   roundedTop: 'sheet',
@@ -142,11 +166,14 @@ const content = css({
  * The drag target, sized well past the bar it contains.
  *
  * The visible handle is 36×4; a 4px-tall grab area would be a gesture only a
- * stylus could start. The padding is the affordance.
+ * stylus could start. The padding is the affordance, and it is held to the same
+ * 44px floor as every other control now that this is the only place the sheet
+ * can be dragged from.
  */
 const grabber = css({
   display: 'grid',
   placeItems: 'center',
+  minHeight: 'tap',
   py: '3',
   cursor: 'grab',
   '&[data-dragging]': { cursor: 'grabbing' },
