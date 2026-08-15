@@ -51,6 +51,7 @@ pnpm dev
 | `pnpm format` | oxfmt — 레포 전체 코드 포맷 (아래 참고) |
 | `pnpm test` | vitest — 순수 로직 단위 테스트 |
 | `pnpm test:db` | Docker에 Postgres를 띄워 마이그레이션·RLS 검사 |
+| `pnpm check:workspace` | 패키지가 `pnpm -r`이 부르는 스크립트를 다 선언했는지 (아래 참고) |
 | `pnpm codegen` | Panda CSS 재생성 |
 | `pnpm setup:worktree` | 워크트리에 gitignore된 로컬 파일 채우기 — 아래 참고 |
 | `pnpm cf:dev` | Cloudflare Workers 런타임으로 빌드 결과 확인 |
@@ -61,10 +62,10 @@ pnpm dev
 `oxfmt`이 강제한다 — 세미콜론 없음, 싱글쿼트, 100자([`.oxfmtrc.json`](.oxfmtrc.json)).
 `pnpm format`이 고치고 CI는 `format:check`로 막는다.
 
-**패키지가 아니라 레포 루트에 건다.** `pnpm -r`은 루트 프로젝트를 돌지 않고, `format:check`
-스크립트가 없는 패키지는 조용히 건너뛴다 — 워크스페이스 글롭에 새 패키지가 붙는 방식이라
-언젠가는 검사 없는 패키지가 초록으로 지나간다. 실제로 `scripts/only-pnpm.mjs`가 그렇게 규칙
-바깥에 있었다.
+**패키지가 아니라 레포 루트에 건다.** 포맷 규칙은 패키지마다 다를 이유가 없고, `pnpm -r`은
+루트 프로젝트를 돌지 않아 `scripts/only-pnpm.mjs`가 규칙 바깥에 있었다. lint·typecheck·
+test·build는 반대다 — 설정이 패키지마다 달라야 해서 패키지에 남고, `pnpm -r`의 건너뛰기는
+아래 `check:workspace`가 막는다.
 
 버전을 `^` 없이 박은 건 `pnpm update`가 패치를 집어올 때 리포맷이 딸려오는 걸 막기 위해서다.
 락파일이 커밋돼 있고 CI가 `--frozen-lockfile`이라, 의존성을 안 건드린 PR은 어차피 같은 oxfmt를
@@ -83,7 +84,14 @@ pnpm dev
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)이 PR과 main 푸시에서 위 명령을 그대로
 돌린다. 잡은 둘이다 — `db`는 `pnpm test:db`(Docker만 필요해서 install을 건너뛴다), `web`은
-설치 후 format·lint·typecheck·test·build. `paths` 필터를 두지 않은 이유는 워크플로 주석에 있다.
+설치 후 check:workspace·format·lint·typecheck·test·build. `paths` 필터를 두지 않은 이유는
+워크플로 주석에 있다.
+
+`pnpm lint`·`typecheck`·`test`·`build`는 `pnpm -r`이라 **스크립트를 선언하지 않은 패키지를
+exit 0으로 건너뛴다.** 워크스페이스 글롭이 `mapsy-*`라 패키지는 생기기만 하면 붙지만 검사는
+같이 붙지 않는다 — 타입 오류·금지된 import·미포맷 코드를 넣은 프로브 패키지가 그 넷을 전부
+통과하는 걸 확인했다. [`scripts/check-package-scripts.mjs`](scripts/check-package-scripts.mjs)가
+그 상태를 막고, 워크플로에서 넷보다 먼저 돈다.
 
 > **워크플로 파일만으로는 머지를 막지 못한다.** GitHub 저장소 설정에서 `db`·`web`을 required
 > status check으로 등록해야 빨간 CI가 머지를 막는다. 안 하면 "돌리는 걸 기억하기"가 "빨간 걸

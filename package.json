@@ -19,6 +19,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "test": "pnpm -r test",
+    "check:workspace": "node scripts/check-package-scripts.mjs",
     "test:db": "bash supabase/tests/run.sh",
     "cf:deploy": "pnpm --filter mapsy-frontend cf:deploy",
     "cf:upload": "pnpm --filter mapsy-frontend cf:upload",

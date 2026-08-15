@@ -52,6 +52,10 @@ jobs:
       # gitignore된 styled-system/을 만들므로 codegen 스텝은 따로 두지 않는다.
       - run: pnpm install --frozen-lockfile
       # 싼 것부터. 실패한 스텝 이름이 곧 무엇이 깨졌는지다.
+      #
+      # check:workspace가 먼저다. 아래 넷은 pnpm -r이라 스크립트가 없는 패키지를
+      # 조용히 건너뛰므로, 그 넷이 무엇을 돌았는지는 이 검사가 통과한 뒤에만 의미가 있다.
+      - run: pnpm check:workspace
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
