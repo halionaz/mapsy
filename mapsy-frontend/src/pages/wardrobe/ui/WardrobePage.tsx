@@ -132,9 +132,13 @@ export function WardrobePage() {
    *
    * All eight groups were drawn unconditionally, so someone who owns no
    * 원피스/셋업, no 가방 and no 액세서리 scrolled past three chips that could only
-   * ever empty the screen. Offering only what exists is the rule the filter
-   * sheet already follows for brands and sizes; the rail was the one axis left
-   * out of it.
+   * ever empty the screen.
+   *
+   * Not because an axis ought to offer only what exists — the sheet's 색상 and
+   * 계절 list their whole preset on purpose, and `filterOptions.ts` sets out
+   * why. Because of where this axis lives. The sheet has to be opened, so an
+   * unowned colour chip is only ever met by someone who went looking for it; an
+   * unowned category chip lies across the home screen for everyone, every time.
    *
    * The active group is kept in the list even once it holds nothing. Disposing
    * of the last pair of shoes while 신발 is selected otherwise takes the lit chip
@@ -177,7 +181,8 @@ export function WardrobePage() {
   const sections = useMemo(() => groupSections(visible), [visible])
 
   /**
-   * Whether the headings go on, which is the only thing the count decides.
+   * More than one section — the condition behind two things: the headings, and
+   * whether the sort control names the grouping (`orderLabel` below).
    *
    * Deliberately not "is 전체 selected". A lone heading names everything on the
    * screen, which the title above already does, and the three ways that happens
