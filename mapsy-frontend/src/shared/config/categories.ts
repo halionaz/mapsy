@@ -154,10 +154,21 @@ export function isSubcategoryId(value: string): value is SubcategoryId {
 /**
  * Derives the group from a subcategory id.
  *
- * Takes a plain `string` rather than `SubcategoryId` on purpose: the input comes
- * from the database, where an id written by an older build may no longer be in
- * the table. Unknown ids return undefined instead of throwing.
+ * Two signatures, and which one applies says where the id came from. A plain
+ * `string` is a database value, where an id written by an older build may no
+ * longer be in the table — that arm returns undefined instead of throwing. A
+ * `SubcategoryId` came out of the table above, so its group exists and there is
+ * nothing for the caller to handle.
+ *
+ * The narrow arm is not an optimism: `mapRow.toCategoryId` folds unrecognised
+ * ids to `etc.etc` at the boundary, so every `Item` reaching the UI carries one
+ * of the ids listed here. It is what lets the wardrobe be split into sections
+ * without a branch for garments that belong to no section — a branch that could
+ * only ever be written as "drop it", which on the home screen reads as the item
+ * having been deleted.
  */
+export function groupIdOf(categoryId: SubcategoryId): CategoryGroupId
+export function groupIdOf(categoryId: string): CategoryGroupId | undefined
 export function groupIdOf(categoryId: string): CategoryGroupId | undefined {
   return GROUP_BY_ID.get(categoryId.split('.')[0])?.id
 }

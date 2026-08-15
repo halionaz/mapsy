@@ -41,14 +41,26 @@ vi.mock('@/entities/item', async (importOriginal) => ({
   useWardrobe: useWardrobeMock,
 }))
 
+/**
+ * `rerender` takes no argument and redraws the same screen.
+ *
+ * It is how a test moves the wardrobe underneath a screen that already has
+ * state in it — the mock returns new rows, this puts them on the existing
+ * component rather than mounting a second one whose filters start empty.
+ * A fresh element each time, because React is allowed to skip a subtree whose
+ * element is referentially the one it already drew.
+ */
 function renderWardrobe() {
-  return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const tree = () => (
+    <QueryClientProvider client={client}>
       <MemoryRouter>
         <WardrobePage />
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   )
+  const result = render(tree())
+  return { ...result, rerender: () => result.rerender(tree()) }
 }
 
 const registerFab = () => screen.queryByLabelText('옷 등록')
@@ -188,8 +200,100 @@ describe('WardrobePage — the route to registration', () => {
   })
 })
 
+/**
+ * The category rail offers what the wardrobe holds, and the grid is split by it.
+ *
+ * Both halves of one rule — a category with nothing in it is not a place the
+ * user can go — so a chip that matches nothing and a heading over no cards are
+ * the same defect seen from two sides.
+ */
+describe('WardrobePage — categories', () => {
+  const chip = (label: string) => screen.queryByRole('button', { name: label })
+
+  it('offers no chip for a category this wardrobe has nothing in', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', categoryId: 'shoes.boots' })] }))
+    renderWardrobe()
+
+    expect(chip('상의')).not.toBeNull()
+    expect(chip('신발')).not.toBeNull()
+    // The wardrobe has no 원피스/셋업, no 가방, no 액세서리. All eight groups were
+    // drawn regardless, so the rail was mostly chips that could only empty the
+    // screen.
+    expect(chip('원피스/셋업')).toBeNull()
+    expect(chip('가방')).toBeNull()
+  })
+
+  /**
+   * A lit chip must not be able to leave while it is still filtering.
+   *
+   * Disposing of the last pair of shoes with 신발 selected takes the group out of
+   * the wardrobe, but `filters.groupIds` still holds it — and the summary row
+   * deliberately carries no 대분류 pill, so if the chip goes too there is nothing
+   * left on screen that can turn the filter off.
+   */
+  it('keeps the selected chip after its last garment leaves the wardrobe', () => {
+    const shoes = item({ id: 'i2', categoryId: 'shoes.boots' })
+    useWardrobeMock.mockReturnValue(query({ data: [item(), shoes] }))
+    const { rerender } = renderWardrobe()
+
+    fireEvent.click(screen.getByRole('button', { name: '신발' }))
+    useWardrobeMock.mockReturnValue(query({ data: [item(), { ...shoes, status: 'disposed' }] }))
+    rerender()
+
+    expect(chip('신발')).not.toBeNull()
+  })
+
+  it('draws no rail at all when everything is in one category', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    renderWardrobe()
+
+    // 전체 and 상의 select the same garments here, so the row is two controls
+    // that cannot disagree.
+    expect(chip('전체')).toBeNull()
+    expect(chip('상의')).toBeNull()
+    expect(screen.getByText('흰 티')).toBeDefined()
+  })
+
+  it('splits the grid into a section per category, in table order', () => {
+    useWardrobeMock.mockReturnValue(
+      query({
+        data: [
+          item({ id: 'i1', categoryId: 'shoes.boots' }),
+          item({ id: 'i2', categoryId: 'top.knit' }),
+        ],
+      }),
+    )
+    renderWardrobe()
+
+    expect(
+      screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent),
+    ).toEqual(['상의1', '신발1'])
+  })
+
+  /**
+   * With a chip lit there is exactly one section, and heading it with the name
+   * of the chip that produced it says the same thing twice.
+   */
+  it('drops the headings once a category is chosen', () => {
+    useWardrobeMock.mockReturnValue(
+      query({
+        data: [
+          item({ id: 'i1', categoryId: 'shoes.boots' }),
+          item({ id: 'i2', categoryId: 'top.knit' }),
+        ],
+      }),
+    )
+    renderWardrobe()
+
+    fireEvent.click(screen.getByRole('button', { name: '상의' }))
+
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0)
+    expect(screen.getByText('마산 플리스')).toBeDefined()
+  })
+})
+
 /** The few fields this screen actually reads. */
-function item(): WardrobeItem {
+function item(overrides: Partial<WardrobeItem> = {}): WardrobeItem {
   return {
     id: 'i1',
     userId: 'u1',
@@ -211,5 +315,6 @@ function item(): WardrobeItem {
     updatedAt: '2026-08-01T00:00:00Z',
     images: [],
     coverUrl: null,
+    ...overrides,
   }
 }

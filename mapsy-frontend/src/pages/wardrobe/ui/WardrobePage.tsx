@@ -22,6 +22,7 @@ import {
   usePendingUploads,
   useRetryUpload,
   useWardrobe,
+  type WardrobeItem,
 } from '@/entities/item'
 import {
   applyFilters,
@@ -44,6 +45,7 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { inputStyle } from '@/shared/ui/fieldStyle'
 import { skeletonSurface } from '@/shared/ui/skeletonStyle'
 import { useScrolledPast } from '@/shared/ui/useScrolledPast'
+import { groupSections } from '../lib/sections'
 
 /**
  * The five things this screen can be.
@@ -100,20 +102,63 @@ export function WardrobePage() {
 
   const entries = useMemo(() => data ?? [], [data])
   const visible = useMemo(() => applyFilters(entries, filters), [entries, filters])
-  // From the same population the grid draws from, not from every row. The grid
-  // only ever shows `filters.status`, so a brand that exists solely on a
-  // disposed garment would be offered as a chip that cannot match anything —
-  // and a filter that returns nothing reads as the user's mistake.
-  const options = useMemo(
-    () => deriveFilterOptions(entries.filter((entry) => entry.status === filters.status)),
+  /**
+   * What is in the wardrobe, before search and before any chip.
+   *
+   * Both the rail and the filter sheet offer only values this collection
+   * actually holds, and both have to read it from *here* rather than from
+   * `visible`: options derived from the filtered result would rewrite themselves
+   * on every keystroke, and the control the user is holding would disappear from
+   * under their finger mid-search.
+   *
+   * Filtered by `status` because the grid only ever draws one status. A brand —
+   * or a whole category — that exists solely on a disposed garment would
+   * otherwise be offered as a chip that can match nothing, and a filter that
+   * returns nothing reads as the user's mistake.
+   */
+  const inWardrobe = useMemo(
+    () => entries.filter((entry) => entry.status === filters.status),
     [entries, filters.status],
   )
+  const options = useMemo(() => deriveFilterOptions(inWardrobe), [inWardrobe])
   const applied = appliedFilters(filters)
   // The same list, not a second walk of the same axes.
   const filterCount = applied.length
   const ownedCount = entries.filter((entry) => entry.status === 'owned').length
   const activeGroup = filters.groupIds[0] ?? null
   const hasWardrobe = entries.length > 0 || pending.length > 0
+
+  /**
+   * The category chips this wardrobe has any use for.
+   *
+   * All eight groups were drawn unconditionally, so someone who owns no
+   * 원피스/셋업, no 가방 and no 액세서리 scrolled past three chips that could only
+   * ever empty the screen. Offering only what exists is the rule the filter
+   * sheet already follows for brands and sizes; the rail was the one axis left
+   * out of it.
+   *
+   * The active group is kept in the list even once it holds nothing, and that is
+   * the whole reason this is not simply `groupSections(inWardrobe)`. Disposing
+   * of the last pair of shoes while 신발 is selected would otherwise take the lit
+   * chip off screen and leave its filter applied, with no way to reach it — the
+   * summary row below deliberately does not carry 대분류 (`filterSummary.ts`),
+   * so there would be nothing left to press.
+   */
+  const railGroups = useMemo(() => {
+    const present = new Set(groupSections(inWardrobe).map((section) => section.group.id))
+    return CATEGORY_GROUPS.filter((group) => present.has(group.id) || group.id === activeGroup)
+  }, [inWardrobe, activeGroup])
+
+  /**
+   * The grid split by category, drawn only when there is more than one.
+   *
+   * The count is the whole condition, and it is deliberately not "is 전체
+   * selected". A lone heading names everything on the screen, which the title
+   * above already does — and the cases where that happens all reduce to the same
+   * sentence rather than needing a rule each: a chip is lit, or the search
+   * narrowed to one category, or the wardrobe is nothing but 상의 so far.
+   */
+  const sections = useMemo(() => groupSections(visible), [visible])
 
   /**
    * Which of the five things this screen can be, decided once.
@@ -240,27 +285,33 @@ export function WardrobePage() {
           </button>
         </div>
 
-        <div className={rail}>
-          <button
-            type="button"
-            aria-pressed={activeGroup === null}
-            className={chipStyle({ active: activeGroup === null })}
-            onClick={() => setGroup(null)}
-          >
-            전체
-          </button>
-          {CATEGORY_GROUPS.map((group) => (
+        {/* Hidden at one group, not just at none: 전체 and 상의 select the same
+            garments in a wardrobe that is all 상의, so the row would be two
+            chips that cannot disagree. It reappears the moment a second
+            category is registered. */}
+        {railGroups.length > 1 && (
+          <div className={rail}>
             <button
-              key={group.id}
               type="button"
-              aria-pressed={activeGroup === group.id}
-              className={chipStyle({ active: activeGroup === group.id })}
-              onClick={() => setGroup(group.id)}
+              aria-pressed={activeGroup === null}
+              className={chipStyle({ active: activeGroup === null })}
+              onClick={() => setGroup(null)}
             >
-              {group.label}
+              전체
             </button>
-          ))}
-        </div>
+            {railGroups.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                aria-pressed={activeGroup === group.id}
+                className={chipStyle({ active: activeGroup === group.id })}
+                onClick={() => setGroup(group.id)}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Only the axes the sheet owns. The category is already a lit chip in
             the rail above, and giving it a second removable pill here would be
@@ -423,21 +474,41 @@ export function WardrobePage() {
               </button>
             </div>
 
-            <ul className={grid}>
-              {/* Pending registrations are pinned to the top and sit outside
-                  the filters — hiding one behind a category chip would read as
-                  data loss while its photos are still uploading. */}
-              {pending.map((entry) => (
-                <li key={entry.tempId}>
-                  <PendingCard pending={entry} onRetry={retry} onDiscard={discard} />
-                </li>
-              ))}
-              {visible.map((item) => (
-                <li key={item.id}>
-                  <ItemCard item={item} />
-                </li>
-              ))}
-            </ul>
+            {/* Pinned to the top, in a grid of their own, and outside both the
+                filters and the sections. Filing an upload under its category
+                would bury it — a failed one has to stay where the retry can be
+                found, and hiding it behind a heading reads as data loss while
+                its photos are still going up. */}
+            {pending.length > 0 && (
+              <ul className={grid}>
+                {pending.map((entry) => (
+                  <li key={entry.tempId}>
+                    <PendingCard pending={entry} onRetry={retry} onDiscard={discard} />
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {sections.length > 1 ? (
+              <div className={vstack({ gap: '7', alignItems: 'stretch' })}>
+                {sections.map((section) => (
+                  <section
+                    key={section.group.id}
+                    className={vstack({ gap: '3', alignItems: 'stretch' })}
+                  >
+                    <h2 className={sectionHeading}>
+                      {section.group.label}
+                      <span className={css({ ml: '2', color: 'fg.subtle' })}>
+                        {section.items.length}
+                      </span>
+                    </h2>
+                    <ItemGrid items={section.items} />
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <ItemGrid items={visible} />
+            )}
           </div>
         ) : (
           // Unreachable: every member of `View` is named above, which is the
@@ -467,6 +538,33 @@ export function WardrobePage() {
     </div>
   )
 }
+
+/**
+ * One block of cards.
+ *
+ * Extracted because the screen now draws two of them for different reasons — a
+ * section under its heading, and the whole result when a category chip is lit —
+ * and a card's markup that exists twice is a card that gets fixed once.
+ */
+function ItemGrid({ items }: { items: readonly WardrobeItem[] }) {
+  return (
+    <ul className={grid}>
+      {items.map((item) => (
+        <li key={item.id}>
+          <ItemCard item={item} />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * A category's name over its cards.
+ *
+ * `heading` rather than `subheading`: it is the only thing standing between two
+ * grids of photographs, and it has to survive being read past at a scroll.
+ */
+const sectionHeading = css({ textStyle: 'heading' })
 
 /**
  * The screen column, and a stacking context.
