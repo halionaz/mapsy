@@ -103,6 +103,24 @@ function friendly(message: string, code: unknown): string | null {
   return null
 }
 
+/**
+ * Whether a data-layer failure carries this SQLSTATE.
+ *
+ * For the callers that need to *do* something about a specific failure rather
+ * than describe it — the wear submit refetches the wardrobe on `23503`, because
+ * a foreign key violation there means the collection it built the request from
+ * is behind the database.
+ *
+ * By code and not by matching the message, which is the same reason the lookup
+ * above extracts the constraint name instead of scanning for a substring: the
+ * text is Postgres's and can be reworded, the code cannot.
+ */
+export function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    error != null && typeof error === 'object' && (error as { code?: unknown }).code === code
+  )
+}
+
 export function errorMessage(error: unknown, fallback = '알 수 없는 오류'): string {
   if (typeof error === 'string') return error
 

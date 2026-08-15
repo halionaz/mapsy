@@ -58,13 +58,18 @@ export function WearSelectionBar({
    */
   const clearing = selectedCount === 0 && recordedCount > 0
 
+  /** Written once so the printed date and the spoken one cannot drift apart. */
+  const day = `${formatMonthDay(wornOn) ?? wornOn} (오늘)`
+
   return (
-    /* The group is what names the date for a screen reader. Labelling the
-       paragraph itself would not carry — `aria-label` on an element with no role
-       is ignored by most of them — and a bare `8.15 (오늘)` read out between two
-       buttons says nothing about what the date is for. */
-    <div className={bar} role="group" aria-label="오늘 입은 옷 고르기">
-      <p className={dateLabel}>{formatMonthDay(wornOn) ?? wornOn} (오늘)</p>
+    /* The date rides in the group's name, and it has to: the paragraph below is
+       not focusable and carries no role, so nothing in tab order says which day
+       is being written. Labelling the paragraph itself would not carry either —
+       `aria-label` on an element with no role is ignored by most screen readers.
+       Putting it on the group is what keeps the reason the date is printed at
+       all — a screen open since before midnight — true for everyone. */
+    <div className={bar} role="group" aria-label={`${day} 입은 옷 고르기`}>
+      <p className={dateLabel}>{day}</p>
 
       {/* `full` so this takes whatever the other two leave, and shrinks first
           when a two-digit count arrives. */}

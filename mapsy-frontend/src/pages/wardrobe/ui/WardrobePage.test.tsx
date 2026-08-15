@@ -506,6 +506,21 @@ describe('WardrobePage — 착용 기록', () => {
     expect(cards().map((card) => card.getAttribute('aria-pressed'))).toEqual(['true', 'false'])
   })
 
+  it('고르는 중인 날짜가 접근 가능한 이름에 들어간다', () => {
+    // The date is a `<p>` with no role and no tab stop, so the group's name is
+    // the only place it can be heard. Printing it and then not saying it takes
+    // away the very thing it was printed for — checking which day a screen left
+    // open since before midnight is about to write.
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    expect(
+      screen.getByRole('group', { name: `${monthDay(today)} (오늘) 입은 옷 고르기` }),
+    ).toBeDefined()
+  })
+
   it('the date is not pressable', () => {
     // A pill that looks like a control and answers nothing is worse than a
     // plain one; there is nothing to switch to until the picker exists.
@@ -610,6 +625,61 @@ describe('WardrobePage — 착용 기록', () => {
     // same 기록 없음, which is a caption rather than information.
     expect(screen.getAllByText('오늘').length).toBeGreaterThan(0)
     expect(screen.queryByText('기록 없음')).toBeNull()
+  })
+
+  /**
+   * The delete this tab cannot see.
+   *
+   * `dropItemWears` and `knownIds` between them cover every garment removed
+   * here; neither can reach one removed on another device, which stays in this
+   * tab's `data` and rides along on the submit. The database rejects it, and
+   * because `set_item_wears` is one transaction the whole day fails.
+   *
+   * What makes that worth a branch is that nothing else recovers from it:
+   * `staleTime` is 30 minutes, focus refetch respects it, and this mutation
+   * invalidates nothing — so the same press fails identically for half an hour.
+   */
+  describe('다른 기기에서 지워진 옷', () => {
+    const fkError = {
+      message: 'violates foreign key constraint "item_wears_item_fk"',
+      code: '23503',
+    }
+
+    function pickOneAndSubmit() {
+      fireEvent.click(wearButton()!)
+      fireEvent.click(screen.getByRole('button', { name: /마산 플리스/ }))
+      fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
+    }
+
+    it('옷장을 다시 불러오고, 고르던 것은 그대로 둔다', () => {
+      const refetch = vi.fn()
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOneAndSubmit()
+
+      expect(refetch).toHaveBeenCalledTimes(1)
+      // The mode closes on success and only on success — a failure has to leave
+      // the picks where they are.
+      expect(dateLabel()).not.toBeNull()
+    })
+
+    it('그 밖의 실패로는 옷장을 다시 부르지 않는다', () => {
+      // A refetch re-signs every cover URL and reloads every thumbnail, so it is
+      // for the one failure that says the collection is wrong — not for a
+      // dropped connection, where there is nothing new to learn.
+      const refetch = vi.fn()
+      submitWearsMock.mockImplementation((_vars, options) =>
+        options?.onError?.(new Error('offline')),
+      )
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOneAndSubmit()
+
+      expect(refetch).not.toHaveBeenCalled()
+    })
   })
 
   /**

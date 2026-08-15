@@ -37,7 +37,14 @@ export function useToday(): string {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
 
-    const sync = () => setToday((current) => (todayLocal() === current ? current : todayLocal()))
+    // One clock read per sync. Two would be two chances to straddle a midnight
+    // between them — the invariant the two-day version stated explicitly and
+    // this one dropped on the way over.
+    const sync = () =>
+      setToday((current) => {
+        const next = todayLocal()
+        return next === current ? current : next
+      })
 
     /** Sleeps until just after the next local midnight, then re-reads and re-arms. */
     function arm() {

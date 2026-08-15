@@ -38,7 +38,7 @@ import {
 import { useCurrentUserId } from '@/features/auth'
 import { CATEGORY_GROUPS, groupIdOf, type CategoryGroupId } from '@/shared/config/categories'
 import { assertNever } from '@/shared/lib/assertNever'
-import { errorMessage } from '@/shared/lib/errorMessage'
+import { errorMessage, hasErrorCode } from '@/shared/lib/errorMessage'
 import { useToday } from '@/shared/lib/useToday'
 import { Button } from '@/shared/ui/Button'
 import { buttonStyle, iconButtonStyle } from '@/shared/ui/buttonStyle'
@@ -116,18 +116,21 @@ export function WardrobePage() {
    * Which garments this client still has. Everything below filters through it.
    *
    * Two stores hold item ids that the wardrobe can outlive — the wear log, and
-   * the draft — and neither is reachable from every way an item can disappear.
-   * `dropItemWears` covers a delete made in this tab; it cannot cover one made
-   * in another tab or on another phone, and it never touches the draft. Measured
-   * on both of those: the button counts a garment that has no card, the
-   * selection opens with it ticked and no way to untick it, and the submit dies
-   * on `item_wears_item_fk` — which rolls the whole function back, so the day
-   * cannot be recorded at all.
+   * the draft — and `dropItemWears` reaches only the first. Measured with a
+   * selection open while the garment is deleted from 설정 → 처분한 옷: the
+   * button counts a garment that has no card, the selection has it ticked with
+   * no way to untick it, and the submit dies on `item_wears_item_fk` — which
+   * rolls the whole function back, so the day cannot be recorded at all.
    *
-   * Filtering here is the one gate all of those pass through. It is also why
-   * nothing has to be said to the user about it: the count, the grid and the
-   * payload are all derived from this, so a garment that is gone was never on
-   * screen to be explained.
+   * This is a gate on **what this tab knows**, and that is the whole of its
+   * reach. A garment deleted on another device is still in `data` here, so it
+   * passes straight through and the submit fails exactly as above; the `23503`
+   * arm in `submitSelection` is what handles that one, by pulling the wardrobe
+   * again so the next press has a shorter set.
+   *
+   * Within that reach it is also why nothing has to be said to the user: the
+   * count, the grid and the payload all derive from this, so a garment that is
+   * gone was never on screen to be explained.
    *
    * Every status, not just `owned`. A disposed garment still exists and its wear
    * rows are still real — it is *deleted* ones that have nothing to point at.
@@ -341,29 +344,17 @@ export function WardrobePage() {
   const selecting = canRecord ? draft : null
 
   /**
-   * The day being written — today, and only today.
-   *
-   * 어제 was the default for a while, on the reasoning that a day's outfit is
-   * settled once the day is over. That is still the intended shape, but it needs
-   * a date picker behind the label rather than a two-value toggle, and that is a
-   * separate piece of work. Until then the app records the day it is on, and
-   * `wearDraft.isUsable` refuses any draft that says otherwise — so this is an
-   * invariant rather than a default.
-   */
-  const activeDay = today
-
-  /**
    * What the day holds — every wear recorded against it, disposed garments
    * included.
    *
    * That is a different population from the grid, which draws `owned` only, so
-   * the two can disagree: dispose of something worn yesterday and the button
-   * says 어제 2벌 over a single card. The count is right — it describes the
+   * the two can disagree: dispose of something worn today and the button
+   * says 오늘 2벌 over a single card. The count is right — it describes the
    * record — and narrowing it to what is on screen would be worse, because the
    * hidden garment stays in the submitted set either way and would then be
    * neither visible nor counted.
    */
-  const recordedIds = useMemo(() => itemIdsWornOn(wears, activeDay), [wears, activeDay])
+  const recordedIds = useMemo(() => itemIdsWornOn(wears, today), [wears, today])
 
   /**
    * What is actually picked — the draft, minus anything that is no longer a
@@ -384,13 +375,19 @@ export function WardrobePage() {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
   }
 
-  /** Opens a day, seeded with what it already holds — also how the date switches. */
-  function startSelecting(day: string) {
-    // Narrowing `string | null`, and nothing more than that. `canRecord` is what
-    // keeps it unreachable; if it ever were reached the date button would simply
+  /**
+   * Opens today, seeded with what it already holds.
+   *
+   * No day argument, because there is no other day to pass — the date is a
+   * label now and `wearDraft.isUsable` refuses anything else. It comes back
+   * when the date picker does.
+   */
+  function startSelecting() {
+    // Narrowing `string | null`, and nothing more than that. `canRecord` is
+    // what keeps it unreachable; if it ever were reached the wear button would
     // do nothing, which is worth knowing rather than claiming cannot happen.
     if (!userId) return
-    openWearDraft(userId, day, itemIdsWornOn(wears, day))
+    openWearDraft(userId, today, itemIdsWornOn(wears, today))
   }
 
   function submitSelection() {
@@ -418,12 +415,32 @@ export function WardrobePage() {
             type: 'success',
           })
         },
-        onError: (e) =>
+        /**
+         * `23503` — a garment in the selection is gone from the database.
+         *
+         * Reachable only from a delete this tab did not see: another device, or
+         * another window. `dropItemWears` and `knownIds` between them cover
+         * every delete made *here*, and neither can see one made elsewhere.
+         *
+         * The refetch is not cosmetic. `staleTime` is 30 minutes and focus
+         * refetch respects it, and this mutation invalidates nothing — so
+         * without it the collection stays wrong and the button fails
+         * identically, every press, for half an hour. Pulling the wardrobe
+         * again shrinks `knownIds`, which drops the garment out of the
+         * selection, and the next press goes through.
+         */
+        onError: (e) => {
+          const outOfDate = hasErrorCode(e, '23503')
+          if (outOfDate) void refetch()
+
           toaster.create({
             title: '기록하지 못했어요',
-            description: errorMessage(e, '잠시 후 다시 시도해주세요.'),
+            description: outOfDate
+              ? '옷장이 최신이 아니었어요. 다시 불러왔으니 한 번 더 눌러주세요.'
+              : errorMessage(e, '잠시 후 다시 시도해주세요.'),
             type: 'error',
-          }),
+          })
+        },
       },
     )
   }
@@ -764,7 +781,7 @@ export function WardrobePage() {
                 // second scroll listener that could disagree with it about
                 // where the top of the page ended.
                 collapsed={stuck}
-                onOpen={() => startSelecting(activeDay)}
+                onOpen={startSelecting}
               />
             </div>
           )}
