@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import { css } from 'styled-system/css'
+import { css, cx } from 'styled-system/css'
 
 import { clamp } from '@/shared/lib/clamp'
+import { appBarBox } from '@/shared/ui/appBarStyle'
 import { indexAfterChange } from '../lib/followSlots'
 import type { PhotoSlot } from '../lib/photoSlots'
 import {
@@ -643,28 +644,32 @@ export function PhotoViewer({
         {slots.length === 0 && <p className={pageNotice}>사진이 없어요</p>}
       </div>
 
+      {/* `appBarBox` for the vertical metrics, the same ones every screen's bar
+          wears — so the close button sits at the height the back chevron was at
+          on the screen this opened from. */}
       <div
-        className={css({
-          position: 'absolute',
-          insetInline: '0',
-          top: '0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '2',
-          px: '2',
-          pt: 'calc({spacing.2} + var(--safe-t))',
-          pb: '2',
-          // Sits over the photo, so it carries its own darkening rather than
-          // hoping the top of the picture is dark enough to read against.
-          bgGradient: 'to-b',
-          gradientFrom: '{colors.overlay.scrim}',
-          gradientTo: 'transparent',
-          // The bar spans the full width over the top of the photo. Left
-          // clickable it would swallow every swipe and pinch that started in
-          // that band, so only the button in it takes pointers.
-          pointerEvents: 'none',
-        })}
+        className={cx(
+          appBarBox,
+          css({
+            position: 'absolute',
+            insetInline: '0',
+            top: '0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '2',
+            px: '2',
+            // Sits over the photo, so it carries its own darkening rather than
+            // hoping the top of the picture is dark enough to read against.
+            bgGradient: 'to-b',
+            gradientFrom: '{colors.overlay.scrim}',
+            gradientTo: 'transparent',
+            // The bar spans the full width over the top of the photo. Left
+            // clickable it would swallow every swipe and pinch that started in
+            // that band, so only the button in it takes pointers.
+            pointerEvents: 'none',
+          }),
+        )}
       >
         <button
           type="button"

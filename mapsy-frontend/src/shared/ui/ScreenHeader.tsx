@@ -1,9 +1,10 @@
 import { useRef } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { useNavigate } from 'react-router'
-import { css, cva } from 'styled-system/css'
+import { css, cva, cx } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
+import { appBarBox } from './appBarStyle'
 import { IconButton } from './Button'
 import { useScrolledPast } from './useScrolledPast'
 
@@ -108,27 +109,30 @@ export function ScreenHeader({
   )
 }
 
-const bar = hstack({
-  position: 'sticky',
-  top: '0',
-  zIndex: 'header',
-  justify: 'space-between',
-  gap: '2',
-  px: '2',
-  pt: 'calc({spacing.2} + var(--safe-t))',
-  pb: '2',
-  // Opaque from the start rather than only once scrolled: the bar is pinned over
-  // content, and a transparent one lets a photograph slide underneath it.
-  bg: 'bg',
-  borderBottomWidth: '1px',
-  borderBottomStyle: 'solid',
-  // The rule appears with the collapsed title, so an unscrolled screen reads as
-  // one surface instead of a page with a toolbar bolted to it.
-  borderColor: 'transparent',
-  transitionProperty: 'border-color',
-  transitionDuration: 'normal',
-  '&[data-collapsed]': { borderColor: 'border.subtle' },
-})
+// The vertical metrics are `appBarBox`, which the wardrobe's bar wears too — the
+// two used to state their own and disagreed.
+const bar = cx(
+  appBarBox,
+  hstack({
+    position: 'sticky',
+    top: '0',
+    zIndex: 'header',
+    justify: 'space-between',
+    gap: '2',
+    px: '2',
+    // Opaque from the start rather than only once scrolled: the bar is pinned
+    // over content, and a transparent one lets a photograph slide underneath it.
+    bg: 'bg',
+    borderBottomWidth: '1px',
+    borderBottomStyle: 'solid',
+    // The rule appears with the collapsed title, so an unscrolled screen reads
+    // as one surface instead of a page with a toolbar bolted to it.
+    borderColor: 'transparent',
+    transitionProperty: 'border-color',
+    transitionDuration: 'normal',
+    '&[data-collapsed]': { borderColor: 'border.subtle' },
+  }),
+)
 
 const barTitle = css({
   flex: '1',

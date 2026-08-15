@@ -40,6 +40,7 @@ import { CATEGORY_GROUPS, groupIdOf, type CategoryGroupId } from '@/shared/confi
 import { assertNever } from '@/shared/lib/assertNever'
 import { errorMessage, hasErrorCode } from '@/shared/lib/errorMessage'
 import { useToday } from '@/shared/lib/useToday'
+import { appBarBox } from '@/shared/ui/appBarStyle'
 import { Button } from '@/shared/ui/Button'
 import { buttonStyle, iconButtonStyle } from '@/shared/ui/buttonStyle'
 import { chipStyle } from '@/shared/ui/chipStyle'
@@ -544,8 +545,6 @@ export function WardrobePage() {
 
   return (
     <div className={page}>
-      <div className={wash} aria-hidden="true" />
-
       <div className={titleBlock}>
         {/* `hstack` centres by default, and that default is the right one here:
             the title's line box is 29px tall and the settings button is a 44px
@@ -578,9 +577,9 @@ export function WardrobePage() {
       {/* Zero height, and the whole trigger for the bar below.
           It sits exactly where the bar's top edge rests, so the moment it
           crosses the top of the viewport is the moment the bar becomes stuck —
-          which is the moment its background has to appear. Measuring the bar
-          itself instead would tie the trigger to its height, and the bar grows a
-          row whenever a filter is applied. */}
+          which is the moment the strip above it has to be covered and the
+          hairline drawn. Measuring the bar itself instead would tie the trigger
+          to its height, and the bar grows a row whenever a filter is applied. */}
       <div ref={stickSentinel} />
 
       {/* Pinned while the grid scrolls: these are the controls that change what
@@ -887,70 +886,18 @@ export function WardrobePage() {
   )
 }
 
-/**
- * The screen column, and a stacking context.
- *
- * `isolation: isolate` is what lets the wash sit at `z-index: -1` and stay
- * visible: without a stacking context of its own here, a negative index would
- * put the wash behind the shell's background instead of behind this screen's
- * content, and it would simply disappear. The pair replaces the previous
- * arrangement, where the wash stayed behind only for as long as every sibling
- * above it remembered to be `position: relative` — a contract kept by comments
- * in two files, and already only half kept: `main` never was.
- */
-const page = cx(
-  vstack({ gap: '0', alignItems: 'stretch', flex: '1' }),
-  css({
-    // Both, and they do different jobs. `position: relative` is what makes this
-    // the containing block for the absolutely positioned wash — `isolation` only
-    // opens a stacking context, and is not on the short list of properties that
-    // establish a containing block. Swapping one for the other left the wash
-    // resolving `inset-inline: 0` against the viewport: on any window wider than
-    // the 480px column it painted an orange band across the whole page with the
-    // phone column floating in the middle of it, and in preview mode it started
-    // above the banner instead of behind the title.
-    position: 'relative',
-    // Lets the wash sit at `z-index: -1` and land behind this screen's content
-    // rather than behind the page background, where an unisolated negative index
-    // would put it — invisibly.
-    isolation: 'isolate',
-  }),
-)
-
-const titleBlock = css({
-  px: '5',
-  pt: 'calc({spacing.4} + var(--safe-t))',
-  pb: '4',
-})
+const page = vstack({ gap: '0', alignItems: 'stretch', flex: '1' })
 
 /**
- * The colour wash behind the top of the screen.
+ * The bar at the top of the home screen: the wardrobe's name and the way to
+ * 설정.
  *
- * Replaces a radial glow that came in from the top-right corner. A corner blob
- * reads as a decoration someone put on the page; a full-width band that starts
- * saturated at the very top edge and falls away into the page colour reads as
- * the page having a top — which is the thing being borrowed here.
- *
- * Absolutely positioned inside the screen column rather than fixed, so it
- * scrolls away with the title instead of sitting under the grid forever. It is
- * behind the pinned bar (no z-index against the bar's `zIndex: header`), which
- * is what lets the bar be transparent until it sticks.
- *
- * `pointer-events: none` because it covers the title row and the settings link.
+ * Its vertical metrics are `appBarBox`, the same ones every sub-screen's bar
+ * wears, so the bar does not move when you go into a garment and back out. Only
+ * the horizontal inset is this screen's own — 20px, the page margin everything
+ * below it lines up on.
  */
-const wash = css({
-  position: 'absolute',
-  zIndex: -1,
-  top: '0',
-  insetInline: '0',
-  height: '320px',
-  pointerEvents: 'none',
-  background: 'linear-gradient(180deg, {colors.accent} 0%, transparent 78%)',
-  // The gradient's own alpha does the shape; this sets how loud it starts.
-  // Louder in dark, where the wash has a near-black to sit on and the same
-  // strength would barely register.
-  opacity: { base: 0.1, _dark: 0.18 },
-})
+const titleBlock = cx(appBarBox, css({ px: '5' }))
 
 /**
  * The settings button, pulled out to the screen's optical margin.
@@ -968,18 +915,17 @@ const wash = css({
 const settingsLink = cx(iconButtonStyle(), css({ mr: '-3' }))
 
 /**
- * The pinned control bar, and the two states it has.
+ * The pinned control bar.
  *
- * At rest it sits inside the wash and is transparent, so the colour runs
- * unbroken from the top edge past the chips and out — the bar is part of the
- * band rather than a panel laid on top of it. Once it sticks there is content
- * scrolling underneath, so it takes an opaque background; the hairline arrives
- * with it, because a rule over the wash would be drawing a border around
+ * Opaque from the start, like `ScreenHeader`'s bar: it is pinned over a grid of
+ * photographs, and a transparent one lets them slide underneath it. At rest
+ * nothing passes under it and the shell behind is this same colour, so sticking
+ * changes only the hairline — drawn any earlier it would be a border around
  * nothing.
  *
  * The switch is exact rather than gradual: `position: sticky` has no in-between,
  * so the frame the bar starts covering content is the frame the sentinel above
- * crosses the viewport top. The transition only softens the colour change.
+ * crosses the viewport top. The transition only softens the border.
  */
 const controls = css({
   position: 'sticky',
@@ -997,14 +943,14 @@ const controls = css({
   gap: '3',
   pt: '1',
   pb: '3',
-  bg: 'transparent',
+  bg: 'bg',
   borderBottomWidth: '1px',
   borderBottomStyle: 'solid',
   borderColor: 'transparent',
-  transitionProperty: 'background-color, border-color',
+  transitionProperty: 'border-color',
   transitionDuration: 'normal',
   transitionTimingFunction: 'out',
-  '&[data-stuck]': { bg: 'bg', borderColor: 'border.subtle' },
+  '&[data-stuck]': { borderColor: 'border.subtle' },
   _motionReduce: { transitionDuration: '1ms' },
 })
 
