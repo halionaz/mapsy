@@ -1,0 +1,58 @@
+name: CI
+
+# 검사 명령은 package.json의 것을 그대로 부른다. 워크플로에 명령을 다시 적으면 스크립트가
+# 바뀔 때 CI만 옛것을 돌고, 그것이 조용히 통과한다.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# 같은 브랜치에 새 커밋이 오면 돌던 실행을 버린다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  db:
+    # 마이그레이션 적용 · 회귀 검사 · 제약 목록 드리프트 게이트.
+    #
+    # paths 필터를 두지 않는다. errorMessage.ts만 고친 PR에서 드리프트 게이트가 안 도는 것이
+    # 이 게이트가 막으려는 상태 그 자체다 — 6초를 아끼자고 검사를 무동작으로 만들지 않는다.
+    name: db
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      # install을 하지 않는다. run.sh가 쓰는 것은 docker와 git뿐이라 node_modules가 필요 없다.
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - run: pnpm test:db
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          # engines의 하한. 하한이 도는지가 CI에서 알 수 있는 값이다 —
+          # Workers Builds는 이미지 기본값 24로 빌드한다(docs/DEPLOY.md §4).
+          node-version: 22
+          cache: pnpm
+      # 락파일이 package.json과 어긋나면 여기서 멈춘다. prepare 훅이 panda codegen을 돌려
+      # gitignore된 styled-system/을 만들므로 codegen 스텝은 따로 두지 않는다.
+      - run: pnpm install --frozen-lockfile
+      # 싼 것부터. 실패한 스텝 이름이 곧 무엇이 깨졌는지다.
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build

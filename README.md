@@ -56,6 +56,20 @@ pnpm dev
 | `pnpm cf:dev` | Cloudflare Workers 런타임으로 빌드 결과 확인 |
 | `pnpm cf:deploy` | Cloudflare Workers 배포 |
 
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)이 PR과 main 푸시에서 위 명령을 그대로
+돌린다. 잡은 둘이다 — `db`는 `pnpm test:db`(Docker만 필요해서 install을 건너뛴다), `web`은
+설치 후 format·lint·typecheck·test·build.
+
+`paths` 필터는 일부러 두지 않았다. `db` 잡이 지키는 것은 스키마와 프론트엔드 제약 맵 사이의
+어긋남이라, "supabase/가 안 바뀌었으니 건너뛴다"는 곧 `errorMessage.ts`만 고친 PR에서 검사가
+안 도는 것이다.
+
+> **워크플로 파일만으로는 머지를 막지 못한다.** GitHub 저장소 설정에서 `db`·`web`을 required
+> status check으로 등록해야 빨간 CI가 머지를 막는다. 안 하면 "돌리는 걸 기억하기"가 "빨간 걸
+> 보면 안 머지하기를 기억하기"로 이름만 바뀐다.
+
 ## 워크트리
 
 `git worktree add`는 **추적되는 파일만** 새 디렉토리에 푼다. gitignore된 것 —
