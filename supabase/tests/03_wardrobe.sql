@@ -428,6 +428,22 @@ select tests.fails(
        array['aaaa0000-0000-0000-0000-0000000000ff']::uuid[])$f$,
   'item_wears_item_fk', '존재하지 않는 옷 id는 외래키에서 막힘');
 
+-- 아래 둘은 메시지가 아니라 SQLSTATE를 잰다. 프론트엔드가 이 값 하나로 분기하기
+-- 때문이다 — 제출이 23503으로 돌아오면 옷장 캐시가 서버보다 뒤처졌다는 뜻이라
+-- 컬렉션을 다시 불러온다(WardrobePage의 submitSelection). 단위 테스트는 자기가 쓴
+-- 픽스처만 볼 수 있으므로, 그 값이 실물과 맞는지는 여기서만 확인된다.
+select tests.fails_with_sqlstate(
+  $f$select public.set_item_wears(current_date,
+       array['aaaa0000-0000-0000-0000-0000000000ff']::uuid[])$f$,
+  '23503', '없는 옷 id는 23503 — 프론트의 재조회 분기가 이 값에 선다');
+
+-- 그리고 겹치지 않아야 한다. 미래 날짜는 트리거가 raise exception … data_exception
+-- 으로 막으므로 22000이고, 23503 분기가 이걸 "옷장이 낡았다"로 오해할 수 없다.
+select tests.fails_with_sqlstate(
+  format($f$insert into public.item_wears (item_id, user_id, worn_on)
+            values ('aaaa0000-0000-0000-0000-000000000004', %L, current_date + 2)$f$, :'A'),
+  '22000', '미래 날짜는 23503이 아님 — 두 분기가 겹치지 않음');
+
 -- 하루치를 다시 쓰는 함수가 옆 날짜까지 지우면, 오늘을 기록하는 순간 어제가
 -- 날아간다. 빈 배열은 그날만 비워야 한다.
 insert into public.item_wears (item_id, user_id, worn_on)

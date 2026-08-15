@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PendingUpload, WardrobeItem } from '@/entities/item'
 import { closeWearDraft, openWearDraft } from '@/features/wear-log'
+import { toaster } from '@/shared/ui/toast'
 import { todayLocal } from '@/shared/lib/calendarDay'
 import { WardrobePage } from './WardrobePage'
 
@@ -645,14 +646,25 @@ describe('WardrobePage — 착용 기록', () => {
       code: '23503',
     }
 
-    function pickOneAndSubmit() {
+    // Split, because the two halves cannot share an `act`: entering the mode
+    // is what turns the card into a button, and a batched block would still be
+    // looking at a link when it goes to tick one.
+    function pickOne() {
       fireEvent.click(wearButton()!)
       fireEvent.click(screen.getByRole('button', { name: /마산 플리스/ }))
+    }
+
+    function submit() {
       fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
     }
 
+    function pickOneAndSubmit() {
+      pickOne()
+      submit()
+    }
+
     it('옷장을 다시 불러오고, 고르던 것은 그대로 둔다', () => {
-      const refetch = vi.fn()
+      const refetch = vi.fn().mockResolvedValue({ isError: false })
       submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
       useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
       renderWardrobe()
@@ -665,11 +677,110 @@ describe('WardrobePage — 착용 기록', () => {
       expect(dateLabel()).not.toBeNull()
     })
 
+    /**
+     * The message waits for the refetch, and that is the whole of the fix.
+     *
+     * The first version fired `void refetch()` and announced 다시 불러왔으니 한
+     * 번 더 눌러주세요 in the same tick — a completed-sounding instruction that,
+     * followed immediately, re-sent the identical set, because `knownIds` comes
+     * from `data` and `data` had not moved yet.
+     *
+     * Asserted on `toaster.create` rather than on the payload of a second press:
+     * the payload version passes against the broken code too, since a test can
+     * hand the refetch a synchronous mock and then redraw by hand. What actually
+     * changed is *when* the sentence appears, so that is what is measured.
+     */
+    it('옷장을 다시 불러오기 전에는 아무 말도 하지 않는다', async () => {
+      let land!: (result: { isError: boolean }) => void
+      const inFlight = new Promise<{ isError: boolean }>((resolve) => {
+        land = resolve
+      })
+      const refetch = vi.fn(() => inFlight)
+      const toast = vi.spyOn(toaster, 'create')
+
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOne()
+      await act(async () => {
+        submit()
+      })
+
+      expect(refetch).toHaveBeenCalledTimes(1)
+      expect(toast).not.toHaveBeenCalled()
+
+      await act(async () => {
+        land({ isError: false })
+        await inFlight
+      })
+
+      expect(toast).toHaveBeenCalledTimes(1)
+      toast.mockRestore()
+    })
+
+    it('다시 불러오지 못하면 그렇게 말한다', async () => {
+      // `void` threw this answer away, so an offline retry got the same
+      // completed-sounding sentence and the half-hour deadlock came back with
+      // nothing on screen saying so.
+      const refetch = vi.fn().mockResolvedValue({ isError: true })
+      const toast = vi.spyOn(toaster, 'create')
+
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOne()
+      await act(async () => {
+        submit()
+      })
+
+      expect(toast.mock.calls[0][0].description).toContain('연결을 확인')
+      toast.mockRestore()
+    })
+
+    /**
+     * The recovery, end to end.
+     *
+     * This one guards the filter rather than the timing — it passes against the
+     * `void` version, because the mock refetch lands synchronously and the
+     * redraw is by hand. Kept for what it does cover: that `selectedIds` is
+     * derived from `knownIds` at all, so a shorter wardrobe produces a shorter
+     * payload without anyone touching the draft.
+     */
+    it('다시 불러온 뒤의 누름은 사라진 옷을 빼고 나간다', async () => {
+      const refetch = vi.fn(() => {
+        // What the server actually holds: i2 was deleted on another device.
+        useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+        return Promise.resolve({ isError: false })
+      })
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(
+        query({ data: [item(), item({ id: 'i2', title: '흰 티' })], refetch }),
+      )
+      const { rerender } = renderWardrobe()
+
+      fireEvent.click(wearButton()!)
+      fireEvent.click(screen.getByRole('button', { name: /마산 플리스/ }))
+      fireEvent.click(screen.getByRole('button', { name: /흰 티/ }))
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '2벌 기록' }))
+      })
+      expect(submitWearsMock.mock.calls[0][0].itemIds).toEqual(['i1', 'i2'])
+
+      // The refetch has landed; the screen redraws against the shorter wardrobe.
+      rerender()
+      submitWearsMock.mockImplementation(() => undefined)
+      fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
+
+      expect(submitWearsMock.mock.calls[1][0]).toEqual({ wornOn: today, itemIds: ['i1'] })
+    })
+
     it('그 밖의 실패로는 옷장을 다시 부르지 않는다', () => {
       // A refetch re-signs every cover URL and reloads every thumbnail, so it is
       // for the one failure that says the collection is wrong — not for a
       // dropped connection, where there is nothing new to learn.
-      const refetch = vi.fn()
+      const refetch = vi.fn().mockResolvedValue({ isError: false })
       submitWearsMock.mockImplementation((_vars, options) =>
         options?.onError?.(new Error('offline')),
       )

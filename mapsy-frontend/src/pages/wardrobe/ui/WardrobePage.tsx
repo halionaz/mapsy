@@ -427,17 +427,46 @@ export function WardrobePage() {
          * without it the collection stays wrong and the button fails
          * identically, every press, for half an hour. Pulling the wardrobe
          * again shrinks `knownIds`, which drops the garment out of the
-         * selection, and the next press goes through.
+         * selection.
+         *
+         * **Awaited**, and the message waits with it. `knownIds` is derived from
+         * `data`, so nothing about the selection changes until the refetch
+         * lands — and `fetchWardrobe` signs every cover URL on the way, which is
+         * not a short trip. Announcing "다시 불러왔으니 한 번 더 눌러주세요"
+         * before that was an instruction that re-sent the identical set;
+         * measured, the second press carried the same two ids.
+         *
+         * Waiting also makes the failed refetch sayable. `void` discarded that
+         * answer, so an offline retry got the same completed-sounding sentence
+         * and the half-hour deadlock came straight back.
+         *
+         * Neither branch tells the user to press again. Once the garment is out
+         * of the selection there may be nothing left to send — the submit button
+         * goes to 옷을 골라주세요, or the wardrobe empties and the mode closes
+         * altogether — and the screen says which of those it is better than a
+         * toast written before the answer arrived.
          */
-        onError: (e) => {
-          const outOfDate = hasErrorCode(e, '23503')
-          if (outOfDate) void refetch()
+        onError: async (e) => {
+          if (!hasErrorCode(e, '23503')) {
+            toaster.create({
+              title: '기록하지 못했어요',
+              description: errorMessage(e, '잠시 후 다시 시도해주세요.'),
+              type: 'error',
+            })
+            return
+          }
+
+          // `refetch` resolves with the failure rather than rejecting, but the
+          // catch is there because that is a react-query option away from being
+          // untrue, and an unhandled rejection inside `onError` is invisible.
+          const result = await refetch().catch(() => null)
 
           toaster.create({
             title: '기록하지 못했어요',
-            description: outOfDate
-              ? '옷장이 최신이 아니었어요. 다시 불러왔으니 한 번 더 눌러주세요.'
-              : errorMessage(e, '잠시 후 다시 시도해주세요.'),
+            description:
+              result != null && !result.isError
+                ? '옷장에 없는 옷이 섞여 있었어요. 목록을 새로 불러왔으니 확인해주세요.'
+                : '옷장을 새로 불러오지 못했어요. 연결을 확인한 뒤 다시 시도해주세요.',
             type: 'error',
           })
         },
