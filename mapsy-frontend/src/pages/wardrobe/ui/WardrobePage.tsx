@@ -150,7 +150,14 @@ export function WardrobePage() {
    * upload lands.
    */
   const railGroups = useMemo(() => {
-    const present = new Set(inWardrobe.map((entry) => groupIdOf(entry.categoryId)))
+    // The element type is named rather than inferred. `new Set(…)` takes its
+    // type from what it is handed, so it absorbs an `undefined` element without
+    // a word — and the day `groupIdOf` starts returning one, this is the only
+    // one of its three call sites that would not stop compiling. Naming the
+    // type puts the tooth back for the cost of a type argument.
+    const present = new Set<CategoryGroupId>(
+      inWardrobe.map((entry) => groupIdOf(entry.categoryId)),
+    )
     return CATEGORY_GROUPS.filter((group) => present.has(group.id) || group.id === activeGroup)
   }, [inWardrobe, activeGroup])
 
@@ -221,6 +228,8 @@ export function WardrobePage() {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
   }
 
+  const sortLabel = SORT_OPTIONS.find((option) => option.id === filters.sort)?.label ?? ''
+
   /**
    * What the screen is actually ordered by, which stops being the sort alone
    * the moment there are headings.
@@ -236,7 +245,6 @@ export function WardrobePage() {
    * Grouping is what the user asked for, and no ordering makes both true at
    * once, so the label says both instead: 갈래별 · 최근 등록순.
    */
-  const sortLabel = SORT_OPTIONS.find((option) => option.id === filters.sort)?.label ?? ''
   const orderLabel = sectioned ? `갈래별 · ${sortLabel}` : sortLabel
 
   return (
@@ -520,30 +528,39 @@ export function WardrobePage() {
               </ul>
             )}
 
-            <div className={vstack({ gap: '7', alignItems: 'stretch' })}>
-              {sections.map((section) => (
-                <section
-                  key={section.group.id}
-                  className={vstack({ gap: '3', alignItems: 'stretch' })}
-                >
-                  {sectioned && (
-                    <h2 className={sectionHeading}>
-                      {section.group.label}
-                      <span className={css({ ml: '2', color: 'fg.subtle' })}>
-                        {section.items.length}
-                      </span>
-                    </h2>
-                  )}
-                  <ul className={grid}>
-                    {section.items.map((item) => (
-                      <li key={item.id}>
-                        <ItemCard item={item} />
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
+            {/* Guarded rather than left to render zero children: the only
+                screen where that happens is a first registration still
+                uploading, and an empty flex column there is a wrapper with
+                nothing in it standing between the pending card and the bottom
+                of the page. Not a measured gap — it is the last child, and
+                `main`'s bottom padding is already larger than the row spacing
+                — so this is tidiness, not a fix. */}
+            {sections.length > 0 && (
+              <div className={vstack({ gap: '7', alignItems: 'stretch' })}>
+                {sections.map((section) => (
+                  <section
+                    key={section.group.id}
+                    className={vstack({ gap: '3', alignItems: 'stretch' })}
+                  >
+                    {sectioned && (
+                      <h2 className={sectionHeading}>
+                        {section.group.label}
+                        <span className={css({ ml: '2', color: 'fg.subtle' })}>
+                          {section.items.length}
+                        </span>
+                      </h2>
+                    )}
+                    <ul className={grid}>
+                      {section.items.map((item) => (
+                        <li key={item.id}>
+                          <ItemCard item={item} />
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           // Unreachable: every member of `View` is named above, which is the

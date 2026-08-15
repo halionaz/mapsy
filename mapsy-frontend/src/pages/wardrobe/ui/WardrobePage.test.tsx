@@ -384,8 +384,10 @@ describe('WardrobePage — uploads in flight', () => {
     const { container } = renderWardrobe()
 
     // `visible` is empty here while the wardrobe is not, and a second grid fed
-    // from it drew a childless <ul> — dead space in the column, and one more
-    // "list, 0 items" for a screen reader to walk into.
+    // from it drew a childless <ul> — one more "list, 0 items" for a screen
+    // reader to walk into. Only that: the column cost was claimed and then
+    // measured away, since the element was the last child and `main`'s bottom
+    // padding already exceeded the row gap.
     expect([...container.querySelectorAll('ul')].map((list) => list.children.length)).toEqual([1])
   })
 })

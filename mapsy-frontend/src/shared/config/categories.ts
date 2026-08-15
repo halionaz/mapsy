@@ -150,10 +150,16 @@ export type SubcategoryId = Subcategory['id']
  * `undefined`, a bucket nothing ever draws from.
  *
  * Narrowing `groupIdOf`'s total overload to this type moves that failure to
- * compile time and to the place that depends on it: `Item.categoryId` is a
- * `SubcategoryId`, so the day the two stop being the same type, every caller
- * passing one falls through to the `string` overload and has to deal with an
- * `undefined` the compiler now hands them.
+ * compile time and to the places that depend on it: `Item.categoryId` is a
+ * `SubcategoryId`, so the day the two stop being the same type, a caller passing
+ * one falls through to the `string` overload and is handed an `undefined`.
+ *
+ * It only bites where the result lands somewhere with a type of its own —
+ * `Array.includes`, `Map.get`, `Map.set`. A fresh container infers its element
+ * type *from* the value and swallows the `undefined` in silence, which is why
+ * the wardrobe's rail writes `new Set<CategoryGroupId>(…)` rather than
+ * `new Set(…)`; measured, that one type argument is the difference between the
+ * broken table failing at three call sites and at two.
  */
 type ResolvableSubcategoryId = Extract<
   SubcategoryId,
