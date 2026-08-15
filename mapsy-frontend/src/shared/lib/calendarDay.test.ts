@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { daysBetween, monthsBetween, parseDay, todayLocal, yesterdayLocal } from './calendarDay'
+import { daysBetween, monthsBetween, parseDay, todayLocal } from './calendarDay'
 
 /**
  * Every assertion here pins a `Date` rather than reading the clock, so a failure
@@ -33,20 +33,6 @@ describe('todayLocal', () => {
     // Fixed width is what lets `lastWornOn` be compared with `>` instead of
     // being parsed — see `summarizeWears`.
     expect(todayLocal(new Date(2026, 0, 5, 12))).toBe('2026-01-05')
-  })
-})
-
-describe('yesterdayLocal', () => {
-  it('steps back a calendar day across a month boundary', () => {
-    expect(yesterdayLocal(new Date(2026, 2, 1, 9))).toBe('2026-02-28')
-  })
-
-  it('steps back across a year boundary', () => {
-    expect(yesterdayLocal(new Date(2026, 0, 1, 9))).toBe('2025-12-31')
-  })
-
-  it('handles a leap day', () => {
-    expect(yesterdayLocal(new Date(2028, 2, 1, 9))).toBe('2028-02-29')
   })
 })
 

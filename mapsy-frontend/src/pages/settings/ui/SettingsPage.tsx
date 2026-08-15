@@ -6,7 +6,7 @@ import { hstack, vstack } from 'styled-system/patterns'
 import { ItemCard, useWardrobe } from '@/entities/item'
 import { attachWears, useWears } from '@/entities/wear'
 import { signOut, useSession } from '@/features/auth'
-import { useLocalDays } from '@/shared/lib/useLocalDays'
+import { useToday } from '@/shared/lib/useToday'
 import { Button } from '@/shared/ui/Button'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { ScreenHeader } from '@/shared/ui/ScreenHeader'
@@ -24,7 +24,7 @@ export function SettingsPage() {
   const session = useSession()
   const { data } = useWardrobe()
   const { data: wearData } = useWears()
-  const { today } = useLocalDays()
+  const today = useToday()
   const [confirmingSignOut, setConfirmingSignOut] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 

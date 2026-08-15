@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PendingUpload, WardrobeItem } from '@/entities/item'
 import { closeWearDraft, openWearDraft } from '@/features/wear-log'
-import { todayLocal, yesterdayLocal } from '@/shared/lib/calendarDay'
+import { todayLocal } from '@/shared/lib/calendarDay'
 import { WardrobePage } from './WardrobePage'
 
 /** The signed-in user these tests run as. Matches the item fixture's `userId`. */
@@ -450,9 +450,8 @@ describe('WardrobePage — uploads in flight', () => {
  */
 describe('WardrobePage — 착용 기록', () => {
   const today = todayLocal()
-  const yesterday = yesterdayLocal()
 
-  /** `8.14` from `2026-08-14`, computed without the formatter under test. */
+  /** `8.15` from `2026-08-15`, computed without the formatter under test. */
   const monthDay = (day: string) => {
     const [, month, date] = day.split('-')
     return `${Number(month)}.${Number(date)}`
@@ -463,7 +462,8 @@ describe('WardrobePage — 착용 기록', () => {
   // nothing the moment a day had anything in it.
   const wearButton = () => screen.queryByRole('button', { name: /입은 옷 기록하기|기록 고치기/ })
   const cards = () => screen.queryAllByRole('button', { name: /마산 플리스|흰 티/ })
-  const dateButton = () => screen.getByRole('button', { name: /기록할 날짜/ })
+  // The date is a label rather than a control now, so it is found by its text.
+  const dateLabel = () => screen.queryByText(/^\d+\.\d+ \(오늘\)$/)
 
   it('offers nothing to press until the wear log has answered', () => {
     useWardrobeMock.mockReturnValue(query({ data: [item()] }))
@@ -484,41 +484,54 @@ describe('WardrobePage — 착용 기록', () => {
   })
 
   /**
-   * The resting button is about yesterday, and so is the day it opens.
+   * Today is the only day this writes.
    *
-   * Recording runs a day behind the way it is used: the outfit is settled once
-   * the day is over. A default of 오늘 put the count of a day still in progress
-   * on the home screen and made the common case the one that needed a press.
+   * 어제 was the default for a while and is where this is going again, but that
+   * needs a date picker rather than a two-value toggle — the control is gone
+   * until then, and the day is an invariant instead of a choice.
    */
-  it('opens on yesterday, with yesterday’s garments already ticked', () => {
+  it('opens on today, with today’s garments already ticked', () => {
     useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
     useWearsMock.mockReturnValue({
       data: [
-        { itemId: 'i1', wornOn: yesterday },
-        { itemId: 'i2', wornOn: today },
+        { itemId: 'i1', wornOn: today },
+        { itemId: 'i2', wornOn: '2020-01-01' },
       ],
     })
     renderWardrobe()
 
     fireEvent.click(wearButton()!)
 
-    expect(dateButton().textContent).toBe(`${monthDay(yesterday)} (어제)`)
+    expect(dateLabel()?.textContent).toBe(`${monthDay(today)} (오늘)`)
     expect(cards().map((card) => card.getAttribute('aria-pressed'))).toEqual(['true', 'false'])
+  })
+
+  it('the date is not pressable', () => {
+    // A pill that looks like a control and answers nothing is worse than a
+    // plain one; there is nothing to switch to until the picker exists.
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    expect(dateLabel()).not.toBeNull()
+    expect(screen.queryByRole('button', { name: /오늘\)/ })).toBeNull()
+    expect(dateLabel()?.closest('button')).toBeNull()
   })
 
   it('says what the day already holds instead of inviting again', () => {
     useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
     useWearsMock.mockReturnValue({
       data: [
-        { itemId: 'i1', wornOn: yesterday },
-        { itemId: 'i2', wornOn: yesterday },
+        { itemId: 'i1', wornOn: today },
+        { itemId: 'i2', wornOn: today },
       ],
     })
     renderWardrobe()
 
     // Not a disappearance: adding a jacket to a day's record after the fact is
     // the ordinary shape of this, so the button stays and carries the count.
-    expect(screen.getByRole('button', { name: /어제 2벌 기록 고치기/ })).toBeDefined()
+    expect(screen.getByRole('button', { name: /오늘 2벌 기록 고치기/ })).toBeDefined()
   })
 
   it('replaces the register button with the date, submit and cancel', () => {
@@ -530,11 +543,11 @@ describe('WardrobePage — 착용 기록', () => {
     // Registering a garment is not what the mode is for, and three pills plus a
     // fourth do not fit across a phone.
     expect(registerFab()).toBeNull()
-    expect(dateButton()).toBeDefined()
+    expect(dateLabel()).not.toBeNull()
     expect(screen.getByRole('button', { name: '고르기 취소' })).toBeDefined()
   })
 
-  it('submits the picked garments against the day being written', () => {
+  it('submits the picked garments against today', () => {
     useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
     renderWardrobe()
 
@@ -543,32 +556,7 @@ describe('WardrobePage — 착용 기록', () => {
     fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
 
     expect(submitWearsMock).toHaveBeenCalledTimes(1)
-    expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: yesterday, itemIds: ['i2'] })
-  })
-
-  /**
-   * Switching the day re-seeds rather than carrying the picks across.
-   *
-   * The ids in hand describe what *that* day records; keeping them would submit
-   * yesterday's clothes against today, which is the one way this screen can
-   * quietly rewrite a day nobody was looking at.
-   */
-  it('re-seeds from the other day when the date is pressed', () => {
-    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
-    useWearsMock.mockReturnValue({
-      data: [
-        { itemId: 'i1', wornOn: yesterday },
-        { itemId: 'i2', wornOn: today },
-      ],
-    })
-    renderWardrobe()
-
-    fireEvent.click(wearButton()!)
-    fireEvent.click(dateButton())
-
-    expect(dateButton().textContent).toBe(`${monthDay(today)} (오늘)`)
-    expect(cards().map((card) => card.getAttribute('aria-pressed'))).toEqual(['false', 'true'])
-    expect(screen.getByRole('button', { name: '1벌 기록' })).toBeDefined()
+    expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: today, itemIds: ['i2'] })
   })
 
   /**
@@ -603,75 +591,66 @@ describe('WardrobePage — 착용 기록', () => {
 
   it('offers to clear a day that does hold something', () => {
     useWardrobeMock.mockReturnValue(query({ data: [item()] }))
-    useWearsMock.mockReturnValue({ data: [{ itemId: 'i1', wornOn: yesterday }] })
+    useWearsMock.mockReturnValue({ data: [{ itemId: 'i1', wornOn: today }] })
     renderWardrobe()
 
-    fireEvent.click(screen.getByRole('button', { name: /어제 1벌 기록 고치기/ }))
+    fireEvent.click(screen.getByRole('button', { name: /오늘 1벌 기록 고치기/ }))
     fireEvent.click(screen.getByRole('button', { name: /마산 플리스/ }))
     fireEvent.click(screen.getByRole('button', { name: '기록 지우기' }))
 
-    expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: yesterday, itemIds: [] })
+    expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: today, itemIds: [] })
   })
 
   it('draws when a garment was last worn, and nothing at all when it never was', () => {
     useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
-    useWearsMock.mockReturnValue({ data: [{ itemId: 'i1', wornOn: yesterday }] })
+    useWearsMock.mockReturnValue({ data: [{ itemId: 'i1', wornOn: today }] })
     renderWardrobe()
 
     // For the first weeks after this ships every card would otherwise carry the
     // same 기록 없음, which is a caption rather than information.
-    expect(screen.getByText('어제')).toBeDefined()
+    expect(screen.getAllByText('오늘').length).toBeGreaterThan(0)
     expect(screen.queryByText('기록 없음')).toBeNull()
   })
 
   /**
    * A draft outlives a reload, so it can be here before there is a screen for it
-   * to be on. Three ways that goes wrong, and all three were reachable.
+   * to be on. Four ways that goes wrong, and all four were reachable.
    */
   describe('열려 있던 초안', () => {
     it('옷장이 아직 오는 중이면 고르는 모드를 열지 않는다', () => {
       // Measured: the wear log usually lands first — the wardrobe fetch signs
       // every cover URL on the way — so the submit bar drew over the loading
       // skeletons, a mode for picking garments on a screen with none to pick.
-      openWearDraft(OWNER, yesterday, ['i1'])
+      openWearDraft(OWNER, today, ['i1'])
       useWardrobeMock.mockReturnValue(query({ isLoading: true, isFetching: true }))
       renderWardrobe()
 
-      expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
+      expect(dateLabel()).toBeNull()
       expect(screen.queryByRole('button', { name: /벌 기록|옷을 골라주세요/ })).toBeNull()
       // The register button is untouched — it works with the network down.
       expect(registerFab()).not.toBeNull()
     })
 
     it('옷장을 불러오지 못한 화면에서도 열지 않는다', () => {
-      openWearDraft(OWNER, yesterday, ['i1'])
+      openWearDraft(OWNER, today, ['i1'])
       useWardrobeMock.mockReturnValue(query({ error: new Error('offline') }))
       renderWardrobe()
 
-      expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
+      expect(dateLabel()).toBeNull()
     })
 
-    /**
-     * The one that would have written the wrong day.
-     *
-     * `wearDraft` used to check the day only when restoring, so a tab left open
-     * across midnight kept a draft whose date had aged out. `dayLabel` compares
-     * against today and calls anything else 어제 — the bar would have read
-     * `8.14 (어제)` on the 16th, and submitting would have put the 15th's
-     * clothes on the 14th.
-     */
-    it('자정을 넘겨 날짜가 밀린 초안은 열지 않는다', () => {
-      // Noon on `yesterday` in local time, stepped back once more — the day
-      // before yesterday, without any UTC arithmetic.
-      const dayBefore = yesterdayLocal(new Date(`${yesterday}T12:00:00`))
-      openWearDraft(OWNER, dayBefore, ['i1'])
+    it('오늘이 아닌 날짜의 초안은 열지 않는다', () => {
+      // `wearDraft` used to check the day only when restoring. A draft for any
+      // other day cannot be produced by the UI any more, but one written before
+      // the date control was removed still can be — and it would have submitted
+      // against a day nothing on screen names.
+      openWearDraft(OWNER, '2020-01-01', ['i1'])
       useWardrobeMock.mockReturnValue(query({ data: [item()] }))
       renderWardrobe()
 
-      expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
-      // And the way back in opens on a day that is actually editable.
+      expect(dateLabel()).toBeNull()
       fireEvent.click(wearButton()!)
-      expect(dateButton().textContent).toBe(`${monthDay(yesterday)} (어제)`)
+      expect(dateLabel()?.textContent).toBe(`${monthDay(today)} (오늘)`)
     })
 
     /**
@@ -680,10 +659,10 @@ describe('WardrobePage — 착용 기록', () => {
      * Seeding a stale draft before mount exercises the restore path; this moves
      * the clock *after* mount, which is what "a tab left open across midnight"
      * actually means and the case the guard was written for. It only passes
-     * because `useLocalDays` now has a timer — with the event listeners alone
-     * the bar kept saying 8.14 (어제) on the 16th and submitted against it.
+     * because `useToday` has a timer — with the event listeners alone the bar
+     * kept saying 8.15 (오늘) on the 16th and submitted against it.
      */
-    it('마운트 뒤에 자정을 넘겨도 닫히고, 다시 열면 진짜 어제가 된다', () => {
+    it('마운트 뒤에 자정을 넘기면 닫히고, 다시 열면 새 오늘이 된다', () => {
       vi.useFakeTimers()
       try {
         vi.setSystemTime(new Date(2026, 7, 15, 23, 59, 0))
@@ -691,17 +670,17 @@ describe('WardrobePage — 착용 기록', () => {
         renderWardrobe()
 
         fireEvent.click(wearButton()!)
-        expect(dateButton().textContent).toBe('8.14 (어제)')
+        expect(dateLabel()?.textContent).toBe('8.15 (오늘)')
 
         // No visibilitychange and no focus — the window was simply looked at.
         act(() => {
           vi.advanceTimersByTime(2 * 60 * 1000)
         })
 
-        expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
+        expect(dateLabel()).toBeNull()
 
         fireEvent.click(wearButton()!)
-        expect(dateButton().textContent).toBe('8.15 (어제)')
+        expect(dateLabel()?.textContent).toBe('8.16 (오늘)')
       } finally {
         vi.useRealTimers()
       }
@@ -711,11 +690,11 @@ describe('WardrobePage — 착용 기록', () => {
       // localStorage survives a sign-out. Without the owner check the next
       // person's screen opens holding a stranger's picks, with none of the
       // ticked cards visible, and the submit fails on the foreign key.
-      openWearDraft('another-user', yesterday, ['i1'])
+      openWearDraft('another-user', today, ['i1'])
       useWardrobeMock.mockReturnValue(query({ data: [item()] }))
       renderWardrobe()
 
-      expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
+      expect(dateLabel()).toBeNull()
       expect(wearButton()).not.toBeNull()
     })
   })
@@ -733,7 +712,7 @@ describe('WardrobePage — 착용 기록', () => {
   describe('사라진 옷', () => {
     it('열려 있는 초안에서 빠지고, 개수와 그리드와 제출이 같이 줄어든다', () => {
       useWardrobeMock.mockReturnValue(query({ data: [item({ id: 'i2', title: '흰 티' })] }))
-      openWearDraft(OWNER, yesterday, ['gone', 'i2'])
+      openWearDraft(OWNER, today, ['gone', 'i2'])
       renderWardrobe()
 
       // One card, one in the count, one in the payload — the three readings of
@@ -741,18 +720,18 @@ describe('WardrobePage — 착용 기록', () => {
       expect(screen.queryAllByRole('button', { name: /흰 티/ })).toHaveLength(1)
       fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
 
-      expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: yesterday, itemIds: ['i2'] })
+      expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: today, itemIds: ['i2'] })
     })
 
     it('착용 기록만 남은 유령은 버튼 개수에 잡히지 않는다', () => {
       useWardrobeMock.mockReturnValue(query({ data: [item()] }))
-      useWearsMock.mockReturnValue({ data: [{ itemId: 'gone', wornOn: yesterday }] })
+      useWearsMock.mockReturnValue({ data: [{ itemId: 'gone', wornOn: today }] })
       renderWardrobe()
 
-      // 어제 1벌 would be counting a row the database cascaded away with its
+      // 오늘 1벌 would be counting a row the database cascaded away with its
       // garment, on a screen where nothing can be pressed to remove it.
       expect(screen.queryByRole('button', { name: /기록 고치기/ })).toBeNull()
-      expect(screen.getByRole('button', { name: /어제 입은 옷 기록하기/ })).toBeDefined()
+      expect(screen.getByRole('button', { name: /오늘 입은 옷 기록하기/ })).toBeDefined()
     })
   })
 })

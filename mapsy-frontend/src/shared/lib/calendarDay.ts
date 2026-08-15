@@ -23,21 +23,6 @@ export function todayLocal(now: Date = new Date()): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
-/**
- * Yesterday, by the same local clock.
- *
- * Through `setDate` rather than by subtracting 86,400,000ms: a day is not always
- * 24 hours long. On the two DST changeovers a millisecond subtraction lands at
- * 23:00 or 01:00 of the wrong day, and `setDate(-1)` is the operation that means
- * "the previous calendar day" whatever the clocks did. Korea has no DST today,
- * which is exactly why this would have gone unnoticed.
- */
-export function yesterdayLocal(now: Date = new Date()): string {
-  const previous = new Date(now)
-  previous.setDate(previous.getDate() - 1)
-  return todayLocal(previous)
-}
-
 export interface CalendarDay {
   year: number
   month: number

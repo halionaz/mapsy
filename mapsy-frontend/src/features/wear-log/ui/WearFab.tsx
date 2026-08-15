@@ -8,7 +8,7 @@ import { Button } from '@/shared/ui/Button'
  *
  * ```
  * 기록 없음   [ ✓ 기록하기 ]   ← 스크롤하면 아이콘만 남음
- * 기록 있음   [ ✓ 어제 3벌 ]
+ * 기록 있음   [ ✓ 오늘 3벌 ]
  * ```
  *
  * Two states, not three: once it is pressed the whole bottom row is replaced by
@@ -27,18 +27,19 @@ import { Button } from '@/shared/ui/Button'
  * collapse below is what gives it back.
  */
 interface WearFabProps {
-  /** 오늘 or 어제 — the day the button opens on. */
-  dayLabel: string
-  /** How many garments that day already holds. */
+  /** How many garments today already holds. */
   recordedCount: number
   /** True once the grid has been scrolled. */
   collapsed: boolean
   onOpen: () => void
 }
 
-export function WearFab({ dayLabel, recordedCount, collapsed, onOpen }: WearFabProps) {
+export function WearFab({ recordedCount, collapsed, onOpen }: WearFabProps) {
+  // 오늘 is written in rather than passed, because today is the only day this
+  // opens on. A `dayLabel` prop with one possible value is a parameter that
+  // reads as a choice; the choice comes back with the date picker.
   const recorded = recordedCount > 0
-  const label = recorded ? `${dayLabel} ${recordedCount}벌` : '기록하기'
+  const label = recorded ? `오늘 ${recordedCount}벌` : '기록하기'
 
   return (
     <Button
@@ -46,12 +47,12 @@ export function WearFab({ dayLabel, recordedCount, collapsed, onOpen }: WearFabP
       icon={<CalendarCheck />}
       // Named even while the label is folded away, so the collapsed button is
       // not an unlabelled glyph to anything reading the page aloud.
-      aria-label={recorded ? `${label} 기록 고치기` : `${dayLabel} 입은 옷 기록하기`}
+      aria-label={recorded ? `${label} 기록 고치기` : '오늘 입은 옷 기록하기'}
       onClick={onOpen}
       className={floating}
     >
       {/*
-       * Only the invitation folds. `어제 3벌` is the half of the pair carrying
+       * Only the invitation folds. `오늘 3벌` is the half of the pair carrying
        * the thing the user came back to check, and it is short enough to keep;
        * `기록하기` has said everything it has to say by the time the grid starts
        * moving.

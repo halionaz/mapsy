@@ -29,7 +29,7 @@ import { seasonLabel } from '@/shared/config/seasons'
 import { clamp } from '@/shared/lib/clamp'
 import { errorMessage } from '@/shared/lib/errorMessage'
 import { formatDate, formatDayAgo, formatPrice } from '@/shared/lib/format'
-import { useLocalDays } from '@/shared/lib/useLocalDays'
+import { useToday } from '@/shared/lib/useToday'
 import { Button, IconButton } from '@/shared/ui/Button'
 import { buttonStyle } from '@/shared/ui/buttonStyle'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
@@ -61,7 +61,7 @@ export function ItemDetailPage() {
   const userId = useCurrentUserId()
   const { data, isLoading } = useWardrobe()
   const { data: wearData } = useWears()
-  const { today } = useLocalDays()
+  const today = useToday()
 
   const setFavorite = useSetFavorite()
   const setStatus = useSetStatus()

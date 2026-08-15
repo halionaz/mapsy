@@ -9,7 +9,7 @@ import { Button, IconButton } from '@/shared/ui/Button'
  * wear button rather than sitting above them.
  *
  * ```
- * [ 8.14 (어제) ] [    3벌 기록    ] [ ✕ ]
+ * [ 8.15 (오늘) ] [    3벌 기록    ] [ ✕ ]
  * ```
  *
  * Down here rather than in a strip above the grid, which is where the day and
@@ -17,35 +17,33 @@ import { Button, IconButton } from '@/shared/ui/Button'
  * scrolling a wardrobe, and the top of the screen is the one place a thumb is
  * not — the same reason the button that opens this mode is at the bottom.
  *
- * The date is a button, not a pair of tabs: there are exactly two days, so a
- * control that shows one and swaps to the other says the same thing in half the
- * width. It carries the actual date as well as the word — `어제` alone is a
- * relative label on a screen that may have been left open since yesterday, and
- * `8.14` is what makes it checkable.
+ * The date is a **label, not a control**. Only today is writable, so there is
+ * nothing to switch to; a pill that looks pressable and answers nothing is worse
+ * than a plain one. It still carries the actual date as well as the word,
+ * because `오늘` alone is a relative claim on a screen that may have been open
+ * since before midnight, and `8.15` is what makes it checkable.
+ *
+ * Picking any other day is a date picker, and that is its own issue. Until then
+ * `wearDraft.isUsable` is what keeps the word true — a draft whose day is no
+ * longer today is not returned at all, so this never renders `(오늘)` over a
+ * date that is not.
  */
 interface WearSelectionBarProps {
-  /** The day being written. */
+  /** The day being written. Always today; see above. */
   wornOn: string
-  /** What that day is called, and what pressing the date would switch to. */
-  dayLabel: string
-  otherDayLabel: string
   selectedCount: number
   /** What the day held before this selection started. */
   recordedCount: number
   submitting: boolean
-  onToggleDay: () => void
   onSubmit: () => void
   onCancel: () => void
 }
 
 export function WearSelectionBar({
   wornOn,
-  dayLabel,
-  otherDayLabel,
   selectedCount,
   recordedCount,
   submitting,
-  onToggleDay,
   onSubmit,
   onCancel,
 }: WearSelectionBarProps) {
@@ -61,18 +59,15 @@ export function WearSelectionBar({
   const clearing = selectedCount === 0 && recordedCount > 0
 
   return (
-    <div className={bar}>
-      <Button
-        variant="surface"
-        onClick={onToggleDay}
-        aria-label={`기록할 날짜 ${dayLabel}. 눌러서 ${otherDayLabel}로 바꾸기`}
-        className={floating}
-      >
-        {formatMonthDay(wornOn) ?? wornOn} ({dayLabel})
-      </Button>
+    /* The group is what names the date for a screen reader. Labelling the
+       paragraph itself would not carry — `aria-label` on an element with no role
+       is ignored by most of them — and a bare `8.15 (오늘)` read out between two
+       buttons says nothing about what the date is for. */
+    <div className={bar} role="group" aria-label="오늘 입은 옷 고르기">
+      <p className={dateLabel}>{formatMonthDay(wornOn) ?? wornOn} (오늘)</p>
 
       {/* `full` so this takes whatever the other two leave, and shrinks first
-          when a long day label and a two-digit count arrive together. */}
+          when a two-digit count arrives. */}
       <Button
         full
         icon={<Check />}
@@ -101,6 +96,28 @@ export function WearSelectionBar({
 }
 
 const floating = css({ boxShadow: 'raised' })
+
+/**
+ * The day, drawn as what it is.
+ *
+ * Same height and radius as the two buttons beside it so the row sits on one
+ * line, and deliberately none of the things that say "press me" — no border, no
+ * hover, no pointer, and `fg.muted` rather than `fg`. It reads as the caption on
+ * the row, which is what it is until there is a picker behind it.
+ */
+const dateLabel = css({
+  display: 'inline-flex',
+  alignItems: 'center',
+  flexShrink: 0,
+  minHeight: 'tap',
+  px: '4',
+  rounded: 'full',
+  bg: 'bg.elevated',
+  color: 'fg.muted',
+  textStyle: 'label',
+  whiteSpace: 'nowrap',
+  boxShadow: 'raised',
+})
 
 /**
  * Pinned above the home indicator and held to the app column, not the window —

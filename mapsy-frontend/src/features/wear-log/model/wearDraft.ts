@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
 import { parseDay } from '@/shared/lib/calendarDay'
-import type { LocalDays } from '@/shared/lib/useLocalDays'
 
 /**
  * The garments picked for a day, before they are submitted.
@@ -47,20 +46,23 @@ const STORAGE_KEY = 'mapsy.wear-draft'
  *
  * Both conditions are checked *here*, on every read, rather than once when the
  * value is restored. That placement is the fix for a real defect: a tab left
- * open across midnight kept a draft whose day was still called 어제 while the
- * clock had moved on, so pressing submit would have written yesterday's clothes
- * against the day before. Restoring is not the only moment a draft can go stale
- * — living is.
+ * open across midnight kept a draft whose day the clock had moved past, so
+ * pressing submit would have written one day's clothes against another.
+ * Restoring is not the only moment a draft can go stale — living is.
  *
- * The days come from the caller for the same reason `useLocalDays` exists: a
- * second clock read here could disagree with the one the screen is drawing.
+ * `today` comes from the caller for the same reason `useToday` exists: a second
+ * clock read here could disagree with the one the screen is drawing.
+ *
+ * One day, because one day is all the app writes. 어제 was reachable for a
+ * while and the date control that reached it is gone until there is a real date
+ * picker; widening this before then would leave a state nothing on screen can
+ * produce.
  */
-function isUsable(draft: WearDraft, owner: string | null, days: LocalDays): boolean {
+function isUsable(draft: WearDraft, owner: string | null, today: string): boolean {
   // No separate arm for `owner === null`. A draft always carries a non-empty
   // `userId` — `load` and `openWearDraft` are the only writers and both enforce
   // it — so a signed-out screen fails this comparison like any other mismatch.
-  if (draft.userId !== owner) return false
-  return draft.wornOn === days.today || draft.wornOn === days.yesterday
+  return draft.userId === owner && draft.wornOn === today
 }
 
 /**
@@ -122,17 +124,18 @@ function subscribe(listener: () => void) {
  * it is inert: nothing else reads the store, and the next `openWearDraft`
  * overwrites it.
  */
-export function useWearDraft(owner: string | null, days: LocalDays): WearDraft | null {
+export function useWearDraft(owner: string | null, today: string): WearDraft | null {
   const draft = useSyncExternalStore(subscribe, () => snapshot, () => snapshot)
-  return draft && isUsable(draft, owner, days) ? draft : null
+  return draft && isUsable(draft, owner, today) ? draft : null
 }
 
 /**
- * Starts — or re-points — a selection, seeded with what that day already holds.
+ * Starts a selection, seeded with what that day already holds.
  *
- * Also how the date button switches days, which is why it replaces rather than
- * merges: the ids are what *that* day records, so carrying the other day's
- * unsaved picks across would submit today's clothes against yesterday.
+ * Replaces rather than merges. Only today is writable right now so there is
+ * nothing to carry across, but the moment a date picker exists the ids in hand
+ * describe the *previous* day — merging them would submit one day's clothes
+ * against another.
  */
 export function openWearDraft(
   userId: string,

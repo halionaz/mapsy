@@ -39,7 +39,7 @@ import { useCurrentUserId } from '@/features/auth'
 import { CATEGORY_GROUPS, groupIdOf, type CategoryGroupId } from '@/shared/config/categories'
 import { assertNever } from '@/shared/lib/assertNever'
 import { errorMessage } from '@/shared/lib/errorMessage'
-import { useLocalDays } from '@/shared/lib/useLocalDays'
+import { useToday } from '@/shared/lib/useToday'
 import { Button } from '@/shared/ui/Button'
 import { buttonStyle, iconButtonStyle } from '@/shared/ui/buttonStyle'
 import { chipStyle } from '@/shared/ui/chipStyle'
@@ -101,11 +101,10 @@ export function WardrobePage() {
   const discard = useDiscardUpload()
 
   const userId = useCurrentUserId()
-  const days = useLocalDays()
-  const { today, yesterday } = days
+  const today = useToday()
   // Both guards live in the store: whose draft it is, and whether its day is
-  // still one of the two the app writes. See `wearDraft.isUsable`.
-  const draft = useWearDraft(userId, days)
+  // still the one the app writes. See `wearDraft.isUsable`.
+  const draft = useWearDraft(userId, today)
 
   const [filters, setFilters] = useState<WardrobeFilters>(EMPTY_FILTERS)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -342,30 +341,16 @@ export function WardrobePage() {
   const selecting = canRecord ? draft : null
 
   /**
-   * Which day the wear button is about when nothing is being picked: yesterday.
+   * The day being written — today, and only today.
    *
-   * Not the default this started with. Recording runs a day behind the way it is
-   * actually used — the outfit is settled when the day is over, and the moment
-   * somebody opens a wardrobe app and thinks about it is the next morning. 오늘
-   * is one press away on the date button, which is the right way round: the
-   * common case is the default and the other one is reachable.
+   * 어제 was the default for a while, on the reasoning that a day's outfit is
+   * settled once the day is over. That is still the intended shape, but it needs
+   * a date picker behind the label rather than a two-value toggle, and that is a
+   * separate piece of work. Until then the app records the day it is on, and
+   * `wearDraft.isUsable` refuses any draft that says otherwise — so this is an
+   * invariant rather than a default.
    */
-  const activeDay = selecting?.wornOn ?? yesterday
-
-  /**
-   * Which of the two days is being written, decided once.
-   *
-   * Everything that needs the answer reads this rather than comparing the label
-   * strings back to each other. The previous version derived the *other* day's
-   * name from `dayLabel === '오늘'`, which is a fact already established here
-   * being re-inferred from how it was rendered.
-   *
-   * `useWearDraft` is what guarantees `activeDay` is one of the two — a tab left
-   * open across midnight otherwise holds a day that is neither, and this
-   * comparison would have called the day before yesterday 어제.
-   */
-  const isToday = activeDay === today
-  const dayLabel = isToday ? '오늘' : '어제'
+  const activeDay = today
 
   /**
    * What the day holds — every wear recorded against it, disposed garments
@@ -428,8 +413,8 @@ export function WardrobePage() {
           toaster.create({
             title:
               itemIds.length > 0
-                ? `${dayLabel} 입은 옷 ${itemIds.length}벌을 기록했어요.`
-                : `${dayLabel} 기록을 지웠어요.`,
+                ? `오늘 입은 옷 ${itemIds.length}벌을 기록했어요.`
+                : '오늘 기록을 지웠어요.',
             type: 'success',
           })
         },
@@ -607,7 +592,7 @@ export function WardrobePage() {
               and `aria-pressed` only speaks when a card is activated. Constant
               while the mode is on, so this is announced on the way in and on the
               way out rather than at every tap. */}
-          {selecting ? `${dayLabel} 입은 옷을 고르는 중이에요. ` : ''}
+          {selecting ? '오늘 입은 옷을 고르는 중이에요. ' : ''}
           {view === 'loading'
             ? '옷장을 불러오는 중이에요.'
             : view === 'failed'
@@ -774,7 +759,6 @@ export function WardrobePage() {
           {canRecord && (
             <div className={wearFabSlot}>
               <WearFab
-                dayLabel={dayLabel}
                 recordedCount={recordedIds.size}
                 // The same signal the control bar sticks on, rather than a
                 // second scroll listener that could disagree with it about
@@ -788,12 +772,9 @@ export function WardrobePage() {
       ) : (
         <WearSelectionBar
           wornOn={selecting.wornOn}
-          dayLabel={dayLabel}
-          otherDayLabel={isToday ? '어제' : '오늘'}
           selectedCount={selectedIds?.size ?? 0}
           recordedCount={recordedIds.size}
           submitting={submitWears.isPending}
-          onToggleDay={() => startSelecting(isToday ? yesterday : today)}
           onSubmit={submitSelection}
           onCancel={closeWearDraft}
         />
