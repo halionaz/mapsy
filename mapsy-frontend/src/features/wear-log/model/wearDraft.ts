@@ -56,7 +56,10 @@ const STORAGE_KEY = 'mapsy.wear-draft'
  * second clock read here could disagree with the one the screen is drawing.
  */
 function isUsable(draft: WearDraft, owner: string | null, days: LocalDays): boolean {
-  if (owner === null || draft.userId !== owner) return false
+  // No separate arm for `owner === null`. A draft always carries a non-empty
+  // `userId` — `load` and `openWearDraft` are the only writers and both enforce
+  // it — so a signed-out screen fails this comparison like any other mismatch.
+  if (draft.userId !== owner) return false
   return draft.wornOn === days.today || draft.wornOn === days.yesterday
 }
 

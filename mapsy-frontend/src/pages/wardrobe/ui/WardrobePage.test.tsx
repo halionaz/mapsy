@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -674,6 +674,39 @@ describe('WardrobePage — 착용 기록', () => {
       expect(dateButton().textContent).toBe(`${monthDay(yesterday)} (어제)`)
     })
 
+    /**
+     * The one the earlier test did not construct.
+     *
+     * Seeding a stale draft before mount exercises the restore path; this moves
+     * the clock *after* mount, which is what "a tab left open across midnight"
+     * actually means and the case the guard was written for. It only passes
+     * because `useLocalDays` now has a timer — with the event listeners alone
+     * the bar kept saying 8.14 (어제) on the 16th and submitted against it.
+     */
+    it('마운트 뒤에 자정을 넘겨도 닫히고, 다시 열면 진짜 어제가 된다', () => {
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(new Date(2026, 7, 15, 23, 59, 0))
+        useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+        renderWardrobe()
+
+        fireEvent.click(wearButton()!)
+        expect(dateButton().textContent).toBe('8.14 (어제)')
+
+        // No visibilitychange and no focus — the window was simply looked at.
+        act(() => {
+          vi.advanceTimersByTime(2 * 60 * 1000)
+        })
+
+        expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
+
+        fireEvent.click(wearButton()!)
+        expect(dateButton().textContent).toBe('8.15 (어제)')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it('다른 사용자의 초안은 열지 않는다', () => {
       // localStorage survives a sign-out. Without the owner check the next
       // person's screen opens holding a stranger's picks, with none of the
@@ -684,6 +717,42 @@ describe('WardrobePage — 착용 기록', () => {
 
       expect(screen.queryByRole('button', { name: /기록할 날짜/ })).toBeNull()
       expect(wearButton()).not.toBeNull()
+    })
+  })
+
+  /**
+   * Two stores hold item ids the wardrobe can outlive, and `dropItemWears`
+   * reaches only one of them, only in this tab. Deleting on a second device or
+   * walking to 설정 → 처분한 옷 with a selection already open both get past it.
+   *
+   * What made that worth guarding is the size of the failure: the id rides along
+   * on the submit, `set_item_wears` trips `item_wears_item_fk`, and because the
+   * function is one transaction the whole day fails rather than just that
+   * garment.
+   */
+  describe('사라진 옷', () => {
+    it('열려 있는 초안에서 빠지고, 개수와 그리드와 제출이 같이 줄어든다', () => {
+      useWardrobeMock.mockReturnValue(query({ data: [item({ id: 'i2', title: '흰 티' })] }))
+      openWearDraft(OWNER, yesterday, ['gone', 'i2'])
+      renderWardrobe()
+
+      // One card, one in the count, one in the payload — the three readings of
+      // the draft cannot disagree, which is why nothing has to be announced.
+      expect(screen.queryAllByRole('button', { name: /흰 티/ })).toHaveLength(1)
+      fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
+
+      expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: yesterday, itemIds: ['i2'] })
+    })
+
+    it('착용 기록만 남은 유령은 버튼 개수에 잡히지 않는다', () => {
+      useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+      useWearsMock.mockReturnValue({ data: [{ itemId: 'gone', wornOn: yesterday }] })
+      renderWardrobe()
+
+      // 어제 1벌 would be counting a row the database cascaded away with its
+      // garment, on a screen where nothing can be pressed to remove it.
+      expect(screen.queryByRole('button', { name: /기록 고치기/ })).toBeNull()
+      expect(screen.getByRole('button', { name: /어제 입은 옷 기록하기/ })).toBeDefined()
     })
   })
 })

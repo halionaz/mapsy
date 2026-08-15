@@ -114,13 +114,38 @@ export function WardrobePage() {
   const stuck = useScrolledPast(stickSentinel, statusStrip)
 
   /**
+   * Which garments this client still has. Everything below filters through it.
+   *
+   * Two stores hold item ids that the wardrobe can outlive — the wear log, and
+   * the draft — and neither is reachable from every way an item can disappear.
+   * `dropItemWears` covers a delete made in this tab; it cannot cover one made
+   * in another tab or on another phone, and it never touches the draft. Measured
+   * on both of those: the button counts a garment that has no card, the
+   * selection opens with it ticked and no way to untick it, and the submit dies
+   * on `item_wears_item_fk` — which rolls the whole function back, so the day
+   * cannot be recorded at all.
+   *
+   * Filtering here is the one gate all of those pass through. It is also why
+   * nothing has to be said to the user about it: the count, the grid and the
+   * payload are all derived from this, so a garment that is gone was never on
+   * screen to be explained.
+   *
+   * Every status, not just `owned`. A disposed garment still exists and its wear
+   * rows are still real — it is *deleted* ones that have nothing to point at.
+   */
+  const knownIds = useMemo(() => new Set((data ?? []).map((item) => item.id)), [data])
+
+  /**
    * The wear log, and whether it has answered yet.
    *
    * `data !== undefined`, not "there are rows": somebody who has never recorded
    * anything gets `[]`, and that is an answer. What the distinction is for is in
    * `canRecord` below.
    */
-  const wears = useMemo(() => wearData ?? [], [wearData])
+  const wears = useMemo(
+    () => (wearData ?? []).filter((entry) => knownIds.has(entry.itemId)),
+    [wearData, knownIds],
+  )
   const wearsAnswered = wearData !== undefined
 
   /**
@@ -354,7 +379,21 @@ export function WardrobePage() {
    * neither visible nor counted.
    */
   const recordedIds = useMemo(() => itemIdsWornOn(wears, activeDay), [wears, activeDay])
-  const selectedIds = useMemo(() => (selecting ? new Set(selecting.itemIds) : null), [selecting])
+
+  /**
+   * What is actually picked — the draft, minus anything that is no longer a
+   * garment.
+   *
+   * The draft is written once and then outlives whatever happens to the
+   * wardrobe: open a selection, walk to 설정 → 처분한 옷, delete one of the
+   * garments it is holding, come back, and the id is still in it. Filtering here
+   * rather than at submit is what keeps the three readings of it — the ticks on
+   * the grid, the count on the button, and the payload — from disagreeing.
+   */
+  const selectedIds = useMemo(
+    () => (selecting ? new Set(selecting.itemIds.filter((id) => knownIds.has(id))) : null),
+    [selecting, knownIds],
+  )
 
   function setGroup(groupId: CategoryGroupId | null) {
     setFilters((current) => ({ ...current, groupIds: groupId ? [groupId] : [] }))
@@ -362,15 +401,20 @@ export function WardrobePage() {
 
   /** Opens a day, seeded with what it already holds — also how the date switches. */
   function startSelecting(day: string) {
-    // Unreachable while `canRecord` gates every caller, and kept because it is
-    // what makes that gate a type-level fact rather than a convention.
+    // Narrowing `string | null`, and nothing more than that. `canRecord` is what
+    // keeps it unreachable; if it ever were reached the date button would simply
+    // do nothing, which is worth knowing rather than claiming cannot happen.
     if (!userId) return
     openWearDraft(userId, day, itemIdsWornOn(wears, day))
   }
 
   function submitSelection() {
-    if (!selecting) return
-    const { wornOn, itemIds } = selecting
+    if (!selecting || !selectedIds) return
+    const { wornOn } = selecting
+    // `selectedIds`, not `selecting.itemIds` — the draft may still be carrying a
+    // garment that has since been deleted, and sending it makes the database
+    // reject the whole day.
+    const itemIds = [...selectedIds]
 
     submitWears.mutate(
       { wornOn, itemIds },
@@ -746,7 +790,7 @@ export function WardrobePage() {
           wornOn={selecting.wornOn}
           dayLabel={dayLabel}
           otherDayLabel={isToday ? '어제' : '오늘'}
-          selectedCount={selecting.itemIds.length}
+          selectedCount={selectedIds?.size ?? 0}
           recordedCount={recordedIds.size}
           submitting={submitWears.isPending}
           onToggleDay={() => startSelecting(isToday ? yesterday : today)}
