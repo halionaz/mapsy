@@ -136,6 +136,30 @@ export type CategoryGroup = (typeof CATEGORY_GROUPS)[number]
 export type Subcategory = CategoryGroup['subcategories'][number]
 export type SubcategoryId = Subcategory['id']
 
+/**
+ * The subcategory ids this table can actually resolve to a group.
+ *
+ * Identical to `SubcategoryId` today, and the point is that the compiler is what
+ * says so. `CATEGORY_GROUP_IDS` and `CATEGORY_GROUPS` are two hand-written lists
+ * and nothing pairs them, while `SubcategoryDef.id` only demands
+ * `${CategoryGroupId}.${string}` — so a subcategory can keep the prefix of a
+ * group that has been deleted from the table and still be a perfectly good
+ * `SubcategoryId`. Measured before this existed: with `onepiece` removed from
+ * the table and `onepiece.dress` left sitting in 상의, `tsc -b` passed and the
+ * garment stopped appearing on 내 옷장 — filed by `groupSections` under
+ * `undefined`, a bucket nothing ever draws from.
+ *
+ * Narrowing `groupIdOf`'s total overload to this type moves that failure to
+ * compile time and to the place that depends on it: `Item.categoryId` is a
+ * `SubcategoryId`, so the day the two stop being the same type, every caller
+ * passing one falls through to the `string` overload and has to deal with an
+ * `undefined` the compiler now hands them.
+ */
+type ResolvableSubcategoryId = Extract<
+  SubcategoryId,
+  `${(typeof CATEGORY_GROUPS)[number]['id']}.${string}`
+>
+
 const SUBCATEGORY_BY_ID = new Map<string, Subcategory>(
   CATEGORY_GROUPS.flatMap((group) =>
     group.subcategories.map((sub) => [sub.id, sub] as [string, Subcategory]),
@@ -160,14 +184,16 @@ export function isSubcategoryId(value: string): value is SubcategoryId {
  * `SubcategoryId` came out of the table above, so its group exists and there is
  * nothing for the caller to handle.
  *
- * The narrow arm is not an optimism: `mapRow.toCategoryId` folds unrecognised
- * ids to `etc.etc` at the boundary, so every `Item` reaching the UI carries one
- * of the ids listed here. It is what lets the wardrobe be split into sections
- * without a branch for garments that belong to no section — a branch that could
- * only ever be written as "drop it", which on the home screen reads as the item
- * having been deleted.
+ * The narrow arm is not an optimism, and it is held down at both ends.
+ * `mapRow.toCategoryId` folds unrecognised ids to `etc.etc` at the boundary, so
+ * every `Item` reaching the UI carries one of the ids listed here; and
+ * `ResolvableSubcategoryId` is what makes "listed here" mean "has a group in
+ * this table" rather than merely "looks like one". Together they are what lets
+ * the wardrobe be split into sections without a branch for garments that belong
+ * to no section — a branch that could only ever be written as "drop it", which
+ * on the home screen reads as the item having been deleted.
  */
-export function groupIdOf(categoryId: SubcategoryId): CategoryGroupId
+export function groupIdOf(categoryId: ResolvableSubcategoryId): CategoryGroupId
 export function groupIdOf(categoryId: string): CategoryGroupId | undefined
 export function groupIdOf(categoryId: string): CategoryGroupId | undefined {
   return GROUP_BY_ID.get(categoryId.split('.')[0])?.id
