@@ -68,9 +68,7 @@ export function ChipGroup<T extends string>({
     <fieldset className={css({ border: 'none', p: '0', m: '0' })}>
       <legend className={chipLegend}>
         {label}
-        {max != null && (
-          <span className={css({ color: 'fg.subtle' })}>{` · 최대 ${max}개`}</span>
-        )}
+        {max != null && <span className={css({ color: 'fg.subtle' })}>{` · 최대 ${max}개`}</span>}
       </legend>
       <div
         className={hstack({

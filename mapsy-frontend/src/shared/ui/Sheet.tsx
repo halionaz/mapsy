@@ -73,9 +73,7 @@ export function Sheet({ open, onOpenChange, title, footer, children }: SheetProp
                 because this is a modal. That leaves touch-with-assistive-tech
                 users nothing, so they get a button and nobody else sees one.
               */}
-              <Drawer.CloseTrigger className={css({ srOnly: true })}>
-                닫기
-              </Drawer.CloseTrigger>
+              <Drawer.CloseTrigger className={css({ srOnly: true })}>닫기</Drawer.CloseTrigger>
             </header>
 
             <div className={body}>{children}</div>

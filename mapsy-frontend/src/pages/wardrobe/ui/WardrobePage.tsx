@@ -260,9 +260,7 @@ export function WardrobePage() {
     // a deliberately broken category table, dropping the argument is what turns
     // three failing call sites into two, with this one silently among the
     // survivors. See `ResolvableSubcategoryId`.
-    const present = new Set<CategoryGroupId>(
-      inWardrobe.map((entry) => groupIdOf(entry.categoryId)),
-    )
+    const present = new Set<CategoryGroupId>(inWardrobe.map((entry) => groupIdOf(entry.categoryId)))
     return CATEGORY_GROUPS.filter((group) => present.has(group.id) || group.id === activeGroup)
   }, [inWardrobe, activeGroup])
 
@@ -363,8 +361,7 @@ export function WardrobePage() {
    * submitting rewrites a whole day, so a selection seeded from a collection
    * that has not arrived is an empty set about to be written over real records.
    */
-  const canRecord =
-    wearsAnswered && userId !== null && (view === 'grid' || view === 'noMatches')
+  const canRecord = wearsAnswered && userId !== null && (view === 'grid' || view === 'noMatches')
 
   /**
    * Whether a selection is actually in progress, which is not the same question
@@ -573,7 +570,12 @@ export function WardrobePage() {
         is offset by are the same number read from the same element, and cannot
         drift apart.
       */}
-      <div ref={statusStrip} className={statusStripScrim} data-stuck={stuck || undefined} aria-hidden="true" />
+      <div
+        ref={statusStrip}
+        className={statusStripScrim}
+        data-stuck={stuck || undefined}
+        aria-hidden="true"
+      />
 
       {/* Zero height, and the whole trigger for the bar below.
           It sits exactly where the bar's top edge rests, so the moment it

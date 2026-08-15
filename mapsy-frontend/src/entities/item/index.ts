@@ -7,13 +7,7 @@
  * `coverOf`: reachable only through the hooks below).
  */
 
-export type {
-  Item,
-  ItemDraft,
-  ItemImage,
-  ItemStatus,
-  WardrobeItem,
-} from './model/types'
+export type { Item, ItemDraft, ItemImage, ItemStatus, WardrobeItem } from './model/types'
 
 export {
   useCreateItem,

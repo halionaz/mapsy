@@ -123,9 +123,7 @@ function friendly(message: string, code: unknown): string | null {
  * text is Postgres's and can be reworded, the code cannot.
  */
 export function hasErrorCode(error: unknown, code: string): boolean {
-  return (
-    error != null && typeof error === 'object' && (error as { code?: unknown }).code === code
-  )
+  return error != null && typeof error === 'object' && (error as { code?: unknown }).code === code
 }
 
 export function errorMessage(error: unknown, fallback = '알 수 없는 오류'): string {

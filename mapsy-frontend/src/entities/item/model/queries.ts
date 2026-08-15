@@ -153,8 +153,7 @@ export function useUpdateItem() {
   const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
-    mutationFn: (vars: { id: string; draft: ItemDraft }) =>
-      api.updateItem(vars.id, vars.draft),
+    mutationFn: (vars: { id: string; draft: ItemDraft }) => api.updateItem(vars.id, vars.draft),
     onSuccess: async (updated) => {
       await before()
       patchCache(queryClient, (entries) =>
@@ -197,8 +196,7 @@ export function useSetStatus() {
   const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
-    mutationFn: (vars: { id: string; status: ItemStatus }) =>
-      api.setStatus(vars.id, vars.status),
+    mutationFn: (vars: { id: string; status: ItemStatus }) => api.setStatus(vars.id, vars.status),
     onSuccess: async (_data, { id, status }) => {
       await before()
       patchCache(queryClient, (entries) =>
@@ -213,8 +211,7 @@ export function useDeleteItem() {
   const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
-    mutationFn: (vars: { id: string; userId: string }) =>
-      api.deleteItem(vars.id, vars.userId),
+    mutationFn: (vars: { id: string; userId: string }) => api.deleteItem(vars.id, vars.userId),
     // The most visible of the five without this: an in-flight fetch holding a
     // pre-delete snapshot puts the garment back on the grid, with no error and
     // nothing to retry — the row really is gone, so it disappears again at the

@@ -123,10 +123,7 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
   // would be detached and reattached on each one. Swiping in the viewer scrolls
   // the strip behind it, which re-renders the screen, so "every render" is every
   // frame of a swipe.
-  const slots = useMemo(
-    () => photoSlots(photos, urls, unloadable),
-    [photos, urls, unloadable],
-  )
+  const slots = useMemo(() => photoSlots(photos, urls, unloadable), [photos, urls, unloadable])
 
   return {
     photos,

@@ -1,7 +1,4 @@
-import type {
-  CategoryGroupId,
-  SubcategoryId,
-} from '@/shared/config/categories'
+import type { CategoryGroupId, SubcategoryId } from '@/shared/config/categories'
 import type { ColorId } from '@/shared/config/colors'
 import type { SeasonId } from '@/shared/config/seasons'
 import type { ItemStatus } from '@/entities/item'

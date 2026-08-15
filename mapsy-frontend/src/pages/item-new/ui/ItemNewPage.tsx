@@ -42,11 +42,7 @@ export function ItemNewPage() {
       flushBottom={userId != null}
     >
       {userId ? (
-        <ItemForm
-          submitLabel="등록"
-          onSubmit={handleSubmit}
-          onCancel={() => navigate('/')}
-        />
+        <ItemForm submitLabel="등록" onSubmit={handleSubmit} onCancel={() => navigate('/')} />
       ) : (
         <EmptyState
           icon={<Unplug size={24} />}

@@ -42,7 +42,11 @@ export function SettingsPage() {
    * garments this screen draws instead of to every garment in the wardrobe.
    */
   const disposed = useMemo(
-    () => attachWears((data ?? []).filter((item) => item.status === 'disposed'), wearData ?? []),
+    () =>
+      attachWears(
+        (data ?? []).filter((item) => item.status === 'disposed'),
+        wearData ?? [],
+      ),
     [data, wearData],
   )
 
@@ -83,8 +87,7 @@ export function SettingsPage() {
 
         <section className={vstack({ gap: '3', alignItems: 'stretch' })}>
           <h2 className={sectionTitle}>
-            처분한 옷
-            <span className={css({ ml: '2', color: 'fg.subtle' })}>{disposed.length}</span>
+            처분한 옷<span className={css({ ml: '2', color: 'fg.subtle' })}>{disposed.length}</span>
           </h2>
 
           {disposed.length === 0 ? (

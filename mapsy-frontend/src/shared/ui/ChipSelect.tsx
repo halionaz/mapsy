@@ -48,9 +48,7 @@ export function ChipSelect<T extends string>({
 }: ChipSelectProps<T>) {
   return (
     <fieldset className={css({ border: 'none', p: '0', m: '0' })}>
-      <legend className={chipLegend}>
-        {label}
-      </legend>
+      <legend className={chipLegend}>{label}</legend>
       <div className={hstack({ gap: '2', flexWrap: 'wrap' })}>
         {options.map((option) => (
           <button

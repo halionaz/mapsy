@@ -29,8 +29,8 @@ describe('formatDate', () => {
     // place, so the process timezone is pinned for this assertion.
     // Reached through globalThis so the app's tsconfig doesn't need node types
     // just for this one assertion.
-    const env = (globalThis as { process?: { env: Record<string, string | undefined> } })
-      .process?.env
+    const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process
+      ?.env
     const original = env?.TZ
     if (env) env.TZ = 'America/New_York'
     try {

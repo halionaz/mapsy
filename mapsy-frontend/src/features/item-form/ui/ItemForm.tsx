@@ -3,11 +3,7 @@ import { ChevronDown } from 'lucide-react'
 import { css, cx } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
-import {
-  CATEGORY_GROUPS,
-  groupIdOf,
-  type SubcategoryId,
-} from '@/shared/config/categories'
+import { CATEGORY_GROUPS, groupIdOf, type SubcategoryId } from '@/shared/config/categories'
 import { CLOTHING_COLORS, MAX_COLORS_PER_ITEM, type ColorId } from '@/shared/config/colors'
 import { fitPresetsFor, hasFitField } from '@/shared/config/fits'
 import { MAX_SEASONS_PER_ITEM, SEASONS, type SeasonId } from '@/shared/config/seasons'
@@ -57,9 +53,7 @@ export function ItemForm({
 }: ItemFormProps) {
   const [photos, setPhotos] = useState<ProcessedPhoto[]>(initial?.photos ?? [])
   const [title, setTitle] = useState(initial?.title ?? '')
-  const [categoryId, setCategoryId] = useState<SubcategoryId | null>(
-    initial?.categoryId ?? null,
-  )
+  const [categoryId, setCategoryId] = useState<SubcategoryId | null>(initial?.categoryId ?? null)
   const [colors, setColors] = useState<ColorId[]>(initial?.colors ?? [])
   const [seasons, setSeasons] = useState<SeasonId[]>(initial?.seasons ?? [])
   const [size, setSize] = useState(initial?.size ?? '')
@@ -114,7 +108,11 @@ export function ItemForm({
   }, [price])
 
   const parsedTags = useMemo(
-    () => tagText.split(',').map((t) => t.trim().replace(/^#/, '')).filter(Boolean),
+    () =>
+      tagText
+        .split(',')
+        .map((t) => t.trim().replace(/^#/, ''))
+        .filter(Boolean),
     [tagText],
   )
   const tagProblem =
@@ -204,7 +202,12 @@ export function ItemForm({
         </Field>
       )}
 
-      <Field label="이름" htmlFor={`${uid}-title`} required hint="나중에 알아볼 수 있는 별명이면 충분해요">
+      <Field
+        label="이름"
+        htmlFor={`${uid}-title`}
+        required
+        hint="나중에 알아볼 수 있는 별명이면 충분해요"
+      >
         <input
           id={`${uid}-title`}
           value={title}
@@ -481,14 +484,14 @@ function hasOptionalValues(initial: Partial<ItemFormValues> | undefined): boolea
   if (!initial) return false
   return Boolean(
     initial.brand ||
-      initial.size ||
-      initial.fit ||
-      initial.price != null ||
-      initial.purchasedAt ||
-      initial.purchasePlace ||
-      initial.memo ||
-      initial.colors?.length ||
-      initial.seasons?.length ||
-      initial.tags?.length,
+    initial.size ||
+    initial.fit ||
+    initial.price != null ||
+    initial.purchasedAt ||
+    initial.purchasePlace ||
+    initial.memo ||
+    initial.colors?.length ||
+    initial.seasons?.length ||
+    initial.tags?.length,
   )
 }

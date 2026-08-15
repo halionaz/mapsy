@@ -60,9 +60,7 @@ export function ConfirmDialog({
             <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
               <Dialog.Title className={css({ textStyle: 'heading' })}>{title}</Dialog.Title>
               {description && (
-                <Dialog.Description
-                  className={css({ textStyle: 'body', color: 'fg.muted' })}
-                >
+                <Dialog.Description className={css({ textStyle: 'body', color: 'fg.muted' })}>
                   {description}
                 </Dialog.Description>
               )}

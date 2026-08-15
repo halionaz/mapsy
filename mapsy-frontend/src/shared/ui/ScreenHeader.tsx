@@ -97,9 +97,7 @@ export function ScreenHeader({
             <p className={css({ textStyle: 'eyebrow', color: 'accent.text' })}>{eyebrow}</p>
           )}
           <h1 className={css({ textStyle: 'title', wordBreak: 'keep-all' })}>{title}</h1>
-          {subtitle && (
-            <p className={css({ textStyle: 'body', color: 'fg.muted' })}>{subtitle}</p>
-          )}
+          {subtitle && <p className={css({ textStyle: 'body', color: 'fg.muted' })}>{subtitle}</p>}
         </div>
 
         {children}

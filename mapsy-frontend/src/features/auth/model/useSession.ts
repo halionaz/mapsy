@@ -36,18 +36,14 @@ export function useSession(): SessionState {
       // flag stops the slower answer from overwriting the fresher one.
       if (!active) return
       setState(
-        data.session
-          ? { status: 'authenticated', session: data.session }
-          : { status: 'anonymous' },
+        data.session ? { status: 'authenticated', session: data.session } : { status: 'anonymous' },
       )
     })
 
     // Also fires when the OAuth redirect returns with a session in the URL,
     // which is what actually completes the Google sign-in round trip.
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setState(
-        session ? { status: 'authenticated', session } : { status: 'anonymous' },
-      )
+      setState(session ? { status: 'authenticated', session } : { status: 'anonymous' })
     })
 
     return () => {

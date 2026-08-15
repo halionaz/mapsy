@@ -4,13 +4,7 @@ import { warnIfTruncated } from '@/shared/api/warnIfTruncated'
 import { newId } from '@/shared/lib/id'
 import type { ProcessedPhoto } from '@/shared/lib/image'
 import type { Item, ItemDraft, ItemStatus, WardrobeItem } from '../model/types'
-import {
-  toItem,
-  toItemImage,
-  toItemInsert,
-  toItemUpdate,
-  type ItemImageInsert,
-} from './mapRow'
+import { toItem, toItemImage, toItemInsert, toItemUpdate, type ItemImageInsert } from './mapRow'
 
 /**
  * Supabase access for the wardrobe.
