@@ -17,6 +17,9 @@ export const DB_CONSTRAINTS = [
   'item_images_path_not_blank',
   'item_images_pkey',
   'item_images_sort_order_range',
+  'item_wears_item_date_key',
+  'item_wears_item_fk',
+  'item_wears_pkey',
   'items_brand_length',
   'items_category_group_valid',
   'items_colors_distinct',
@@ -45,6 +48,7 @@ export const DB_CONSTRAINTS = [
 export const DB_CONSTRAINT_DEFS =
 {
     "items_pkey": "PRIMARY KEY (id)",
+    "item_wears_pkey": "PRIMARY KEY (id)",
     "items_price_max": "CHECK (((price IS NULL) OR (price <= 1000000000)))",
     "item_images_pkey": "PRIMARY KEY (id)",
     "items_fit_length": "CHECK (((fit IS NULL) OR (length(fit) <= 40)))",
@@ -52,6 +56,7 @@ export const DB_CONSTRAINT_DEFS =
     "items_id_user_key": "UNIQUE (id, user_id)",
     "items_memo_length": "CHECK (((memo IS NULL) OR (length(memo) <= 2000)))",
     "items_size_length": "CHECK (((size IS NULL) OR (length(size) <= 40)))",
+    "item_wears_item_fk": "FOREIGN KEY (item_id, user_id) REFERENCES items(id, user_id) ON DELETE CASCADE",
     "items_brand_length": "CHECK (((brand IS NULL) OR (length(brand) <= 100)))",
     "items_colors_limit": "CHECK ((cardinality(colors) <= 3))",
     "items_colors_valid": "CHECK ((colors <@ ARRAY['black'::text, 'white'::text, 'gray'::text, 'beige'::text, 'brown'::text, 'navy'::text, 'blue'::text, 'sky'::text, 'green'::text, 'khaki'::text, 'yellow'::text, 'orange'::text, 'red'::text, 'pink'::text, 'purple'::text, 'multi'::text]))",
@@ -65,6 +70,7 @@ export const DB_CONSTRAINT_DEFS =
     "items_colors_distinct": "CHECK (private.has_unique_elements(colors))",
     "items_title_not_blank": "CHECK ((length(btrim(title)) > 0))",
     "items_seasons_distinct": "CHECK (private.has_unique_elements(seasons))",
+    "item_wears_item_date_key": "UNIQUE (item_id, worn_on)",
     "items_price_non_negative": "CHECK (((price IS NULL) OR (price >= 0)))",
     "item_images_item_sort_key": "UNIQUE (item_id, sort_order) DEFERRABLE INITIALLY DEFERRED",
     "items_tags_element_length": "CHECK ((private.max_element_length(tags) <= 40))",

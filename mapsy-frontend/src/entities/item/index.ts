@@ -36,4 +36,4 @@ export { usePendingUploads, type PendingUpload } from './model/pendingUploads'
  */
 export { deleteItemImage, reorderItemImages } from './api/itemApi'
 
-export { CardSkeleton, ItemCard, PendingCard } from './ui/ItemCard'
+export { CardSkeleton, ItemCard, PendingCard, SelectableItemCard } from './ui/ItemCard'

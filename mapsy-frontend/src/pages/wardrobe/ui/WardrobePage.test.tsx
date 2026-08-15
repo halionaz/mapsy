@@ -1,11 +1,17 @@
 /** @vitest-environment jsdom */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PendingUpload, WardrobeItem } from '@/entities/item'
+import { closeWearDraft, openWearDraft } from '@/features/wear-log'
+import { toaster } from '@/shared/ui/toast'
+import { todayLocal } from '@/shared/lib/calendarDay'
 import { WardrobePage } from './WardrobePage'
+
+/** The signed-in user these tests run as. Matches the item fixture's `userId`. */
+const OWNER = 'u1'
 
 /**
  * Which screens offer a way to register a garment.
@@ -22,9 +28,18 @@ import { WardrobePage } from './WardrobePage'
  * it queues.
  */
 
-const { useWardrobeMock, usePendingUploadsMock } = vi.hoisted(() => ({
+const {
+  useWardrobeMock,
+  usePendingUploadsMock,
+  useWearsMock,
+  submitWearsMock,
+  useCurrentUserIdMock,
+} = vi.hoisted(() => ({
   useWardrobeMock: vi.fn(),
   usePendingUploadsMock: vi.fn(),
+  useWearsMock: vi.fn(),
+  submitWearsMock: vi.fn(),
+  useCurrentUserIdMock: vi.fn(),
 }))
 
 /** The shape `useWardrobe` returns, with only what this screen reads. */
@@ -50,6 +65,32 @@ vi.mock('@/entities/item', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/entities/item')>()),
   useWardrobe: useWardrobeMock,
   usePendingUploads: usePendingUploadsMock,
+}))
+
+/**
+ * The wear log's two hooks, and nothing else from the entity.
+ *
+ * `attachWears` and `itemIdsWornOn` stay real: they are what turns the rows
+ * below into what the cards and the seeded selection actually show, and mocking
+ * them would leave these tests asserting against a fixture instead of against
+ * the merge.
+ */
+vi.mock('@/entities/wear', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/entities/wear')>()),
+  useWears: useWearsMock,
+  useSetWears: () => ({ mutate: submitWearsMock, isPending: false }),
+}))
+
+/**
+ * The signed-in user, because a draft now carries whose it is.
+ *
+ * There is no Supabase in a unit run, so the real hook answers `null` — which
+ * the screen reads as "cannot record" and would have taken the whole feature off
+ * every screen below.
+ */
+vi.mock('@/features/auth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/auth')>()),
+  useCurrentUserId: useCurrentUserIdMock,
 }))
 
 const uploading: PendingUpload = {
@@ -88,6 +129,16 @@ beforeEach(() => {
   useWardrobeMock.mockReset()
   usePendingUploadsMock.mockReset()
   usePendingUploadsMock.mockReturnValue([])
+  useWearsMock.mockReset()
+  // The default is "answered, nothing recorded". `undefined` — the state before
+  // the log has replied — is a case some tests below ask for on purpose.
+  useWearsMock.mockReturnValue({ data: [] })
+  submitWearsMock.mockReset()
+  useCurrentUserIdMock.mockReset()
+  useCurrentUserIdMock.mockReturnValue(OWNER)
+  // A module-level store that outlives a render, so it has to be put back
+  // between tests or a selection left open leaks into the next one.
+  closeWearDraft()
 })
 afterEach(cleanup)
 
@@ -387,6 +438,543 @@ describe('WardrobePage — uploads in flight', () => {
     // from it drew a childless <ul> — one more "list, 0 items" for a screen
     // reader to walk into.
     expect([...container.querySelectorAll('ul')].map((list) => list.children.length)).toEqual([1])
+  })
+})
+
+/**
+ * 오늘 입은 옷 — the button, the mode it opens, and what it submits.
+ *
+ * The load-bearing assertion is the first one. A submit replaces a whole day, so
+ * a selection seeded before the wear log has answered would send an empty set
+ * over records that are really there — the feature deleting its own data on a
+ * slow connection. Everything else here is behaviour; that one is a guard.
+ */
+describe('WardrobePage — 착용 기록', () => {
+  const today = todayLocal()
+
+  /** `8.15` from `2026-08-15`, computed without the formatter under test. */
+  const monthDay = (day: string) => {
+    const [, month, date] = day.split('-')
+    return `${Number(month)}.${Number(date)}`
+  }
+
+  // Both resting labels — the invitation and the "already recorded" one. They
+  // are the same button, and a test that only knew one of them silently found
+  // nothing the moment a day had anything in it.
+  const wearButton = () => screen.queryByRole('button', { name: /입은 옷 기록하기|기록 고치기/ })
+  const cards = () => screen.queryAllByRole('button', { name: /마산 플리스|흰 티/ })
+  // The date is a label rather than a control now, so it is found by its text.
+  const dateLabel = () => screen.queryByText(/^\d+\.\d+ \(오늘\)$/)
+
+  it('offers nothing to press until the wear log has answered', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    useWearsMock.mockReturnValue({ data: undefined })
+    renderWardrobe()
+
+    expect(wearButton()).toBeNull()
+    // And the cards are still links, so a tap goes to the garment rather than
+    // into a selection that has nothing to seed itself from.
+    expect(screen.getByRole('link', { name: /마산 플리스/ })).toBeDefined()
+  })
+
+  it('invites a recording when the day is empty', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    expect(wearButton()).not.toBeNull()
+  })
+
+  /**
+   * Today is the only day this writes.
+   *
+   * 어제 was the default for a while and is where this is going again, but that
+   * needs a date picker rather than a two-value toggle — the control is gone
+   * until then, and the day is an invariant instead of a choice.
+   */
+  it('opens on today, with today’s garments already ticked', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    useWearsMock.mockReturnValue({
+      data: [
+        { itemId: 'i1', wornOn: today },
+        { itemId: 'i2', wornOn: '2020-01-01' },
+      ],
+    })
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    expect(dateLabel()?.textContent).toBe(`${monthDay(today)} (오늘)`)
+    expect(cards().map((card) => card.getAttribute('aria-pressed'))).toEqual(['true', 'false'])
+  })
+
+  it('고르는 중인 날짜가 접근 가능한 이름에 들어간다', () => {
+    // The date is a `<p>` with no role and no tab stop, so the group's name is
+    // the only place it can be heard. Printing it and then not saying it takes
+    // away the very thing it was printed for — checking which day a screen left
+    // open since before midnight is about to write.
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    expect(
+      screen.getByRole('group', { name: `${monthDay(today)} (오늘) 입은 옷 고르기` }),
+    ).toBeDefined()
+  })
+
+  it('the date is not pressable', () => {
+    // A pill that looks like a control and answers nothing is worse than a
+    // plain one; there is nothing to switch to until the picker exists.
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    expect(dateLabel()).not.toBeNull()
+    expect(screen.queryByRole('button', { name: /오늘\)/ })).toBeNull()
+    expect(dateLabel()?.closest('button')).toBeNull()
+  })
+
+  it('says what the day already holds instead of inviting again', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    useWearsMock.mockReturnValue({
+      data: [
+        { itemId: 'i1', wornOn: today },
+        { itemId: 'i2', wornOn: today },
+      ],
+    })
+    renderWardrobe()
+
+    // Not a disappearance: adding a jacket to a day's record after the fact is
+    // the ordinary shape of this, so the button stays and carries the count.
+    expect(screen.getByRole('button', { name: /오늘 2벌 기록 고치기/ })).toBeDefined()
+  })
+
+  it('replaces the register button with the date, submit and cancel', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    // Registering a garment is not what the mode is for, and three pills plus a
+    // fourth do not fit across a phone.
+    expect(registerFab()).toBeNull()
+    expect(dateLabel()).not.toBeNull()
+    expect(screen.getByRole('button', { name: '고르기 취소' })).toBeDefined()
+  })
+
+  it('submits the picked garments against today', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+    fireEvent.click(screen.getByRole('button', { name: /흰 티/ }))
+    fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
+
+    expect(submitWearsMock).toHaveBeenCalledTimes(1)
+    expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: today, itemIds: ['i2'] })
+  })
+
+  /**
+   * With nothing picked the submit button is disabled, so cancel is the only way
+   * out of the mode — which is why it is never the control that gives up its
+   * width.
+   */
+  it('leaves the mode on cancel, with the cards back to links', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+    fireEvent.click(screen.getByRole('button', { name: '고르기 취소' }))
+
+    expect(screen.getByRole('link', { name: /마산 플리스/ })).toBeDefined()
+    expect(registerFab()).not.toBeNull()
+    expect(submitWearsMock).not.toHaveBeenCalled()
+  })
+
+  it('will not submit an empty set over a day that was already empty', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    renderWardrobe()
+
+    fireEvent.click(wearButton()!)
+
+    // Clearing a day that holds something is a real edit and stays pressable;
+    // this one would write nothing over nothing.
+    expect(screen.getByRole('button', { name: '옷을 골라주세요' }).hasAttribute('disabled')).toBe(
+      true,
+    )
+  })
+
+  it('offers to clear a day that does hold something', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+    useWearsMock.mockReturnValue({ data: [{ itemId: 'i1', wornOn: today }] })
+    renderWardrobe()
+
+    fireEvent.click(screen.getByRole('button', { name: /오늘 1벌 기록 고치기/ }))
+    fireEvent.click(screen.getByRole('button', { name: /마산 플리스/ }))
+    fireEvent.click(screen.getByRole('button', { name: '기록 지우기' }))
+
+    expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: today, itemIds: [] })
+  })
+
+  it('draws when a garment was last worn, and nothing at all when it never was', () => {
+    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', title: '흰 티' })] }))
+    useWearsMock.mockReturnValue({ data: [{ itemId: 'i1', wornOn: today }] })
+    renderWardrobe()
+
+    // For the first weeks after this ships every card would otherwise carry the
+    // same 기록 없음, which is a caption rather than information.
+    expect(screen.getAllByText('오늘').length).toBeGreaterThan(0)
+    expect(screen.queryByText('기록 없음')).toBeNull()
+  })
+
+  /**
+   * The delete this tab cannot see.
+   *
+   * `dropItemWears` and `knownIds` between them cover every garment removed
+   * here; neither can reach one removed on another device, which stays in this
+   * tab's `data` and rides along on the submit. The database rejects it, and
+   * because `set_item_wears` is one transaction the whole day fails.
+   *
+   * What makes that worth a branch is that nothing else recovers from it:
+   * `staleTime` is 30 minutes, focus refetch respects it, and this mutation
+   * invalidates nothing — so the same press fails identically for half an hour.
+   */
+  describe('다른 기기에서 지워진 옷', () => {
+    const fkError = {
+      message: 'violates foreign key constraint "item_wears_item_fk"',
+      code: '23503',
+    }
+
+    // Split, because the two halves cannot share an `act`: entering the mode
+    // is what turns the card into a button, and a batched block would still be
+    // looking at a link when it goes to tick one.
+    function pickOne() {
+      fireEvent.click(wearButton()!)
+      fireEvent.click(screen.getByRole('button', { name: /마산 플리스/ }))
+    }
+
+    function submit() {
+      fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
+    }
+
+    function pickOneAndSubmit() {
+      pickOne()
+      submit()
+    }
+
+    it('옷장을 다시 불러오고, 고르던 것은 그대로 둔다', () => {
+      const refetch = vi.fn().mockResolvedValue({ isError: false })
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOneAndSubmit()
+
+      expect(refetch).toHaveBeenCalledTimes(1)
+      // The mode closes on success and only on success — a failure has to leave
+      // the picks where they are.
+      expect(dateLabel()).not.toBeNull()
+    })
+
+    /**
+     * The message waits for the refetch, and that is the whole of the fix.
+     *
+     * The first version fired `void refetch()` and announced 다시 불러왔으니 한
+     * 번 더 눌러주세요 in the same tick — a completed-sounding instruction that,
+     * followed immediately, re-sent the identical set, because `knownIds` comes
+     * from `data` and `data` had not moved yet.
+     *
+     * Asserted on `toaster.create` rather than on the payload of a second press:
+     * the payload version passes against the broken code too, since a test can
+     * hand the refetch a synchronous mock and then redraw by hand. What actually
+     * changed is *when* the sentence appears, so that is what is measured.
+     */
+    it('옷장을 다시 불러오기 전에는 아무 말도 하지 않는다', async () => {
+      let land!: (result: { isError: boolean }) => void
+      const inFlight = new Promise<{ isError: boolean }>((resolve) => {
+        land = resolve
+      })
+      const refetch = vi.fn(() => inFlight)
+      const toast = vi.spyOn(toaster, 'create')
+
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOne()
+      await act(async () => {
+        submit()
+      })
+
+      expect(refetch).toHaveBeenCalledTimes(1)
+      expect(toast).not.toHaveBeenCalled()
+
+      /**
+       * And it is not silent while it waits.
+       *
+       * The mutation is already settled by the time `onError` runs — see
+       * `entities/wear/model/queries.premise.test.tsx` — so the button lost its
+       * spinner the instant the request failed and sat live through the whole
+       * refetch. Measured then: a second press sent the identical set and
+       * started a second refetch, which is one signed URL per garment again.
+       *
+       * `isPending` is mocked `false` throughout this file, so what passes here
+       * can only be the screen's own recovery flag.
+       */
+      const button = screen.getByRole('button', { name: '1벌 기록' })
+      expect(button.hasAttribute('disabled')).toBe(true)
+      expect(button.getAttribute('aria-busy')).toBe('true')
+
+      fireEvent.click(button)
+      expect(submitWearsMock).toHaveBeenCalledTimes(1)
+      expect(refetch).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        land({ isError: false })
+        await inFlight
+      })
+
+      expect(toast).toHaveBeenCalledTimes(1)
+      // And the lock comes off, or the mode is stuck for as long as it is open.
+      expect(
+        screen.getByRole('button', { name: '1벌 기록' }).hasAttribute('disabled'),
+      ).toBe(false)
+      toast.mockRestore()
+    })
+
+    /**
+     * The lock is on the submit and on nothing else.
+     *
+     * `recovering` is screen state and survives the selection it came from, so
+     * reopening during the refetch shows a locked submit on the new one — a
+     * measured, bounded oddity the flag's docblock argues for leaving alone.
+     * What must never join it is 취소: locking that would trap the mode until
+     * the refetch lands, and the failing branch carries `retry: 2` and its
+     * backoff. Held down here because the two are one prop away from each other.
+     */
+    it('복구 중에도 취소는 눌리고, 모드가 갇히지 않는다', async () => {
+      let land!: (result: { isError: boolean }) => void
+      const inFlight = new Promise<{ isError: boolean }>((resolve) => {
+        land = resolve
+      })
+      const refetch = vi.fn(() => inFlight)
+
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOne()
+      await act(async () => {
+        submit()
+      })
+
+      const cancel = screen.getByRole('button', { name: '고르기 취소' })
+      expect(cancel.hasAttribute('disabled')).toBe(false)
+      fireEvent.click(cancel)
+      expect(screen.queryByRole('group', { name: /입은 옷 고르기/ })).toBeNull()
+
+      await act(async () => {
+        land({ isError: false })
+        await inFlight
+      })
+    })
+
+    it('다시 불러오지 못하면 그렇게 말한다', async () => {
+      // `void` threw this answer away, so an offline retry got the same
+      // completed-sounding sentence and the half-hour deadlock came back with
+      // nothing on screen saying so.
+      const refetch = vi.fn().mockResolvedValue({ isError: true })
+      const toast = vi.spyOn(toaster, 'create')
+
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOne()
+      await act(async () => {
+        submit()
+      })
+
+      expect(toast.mock.calls[0][0].description).toContain('연결을 확인')
+      toast.mockRestore()
+    })
+
+    /**
+     * The recovery, end to end.
+     *
+     * This one guards the filter rather than the timing — it passes against the
+     * `void` version, because the mock refetch lands synchronously and the
+     * redraw is by hand. Kept for what it does cover: that `selectedIds` is
+     * derived from `knownIds` at all, so a shorter wardrobe produces a shorter
+     * payload without anyone touching the draft.
+     */
+    it('다시 불러온 뒤의 누름은 사라진 옷을 빼고 나간다', async () => {
+      const refetch = vi.fn(() => {
+        // What the server actually holds: i2 was deleted on another device.
+        useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+        return Promise.resolve({ isError: false })
+      })
+      submitWearsMock.mockImplementation((_vars, options) => options?.onError?.(fkError))
+      useWardrobeMock.mockReturnValue(
+        query({ data: [item(), item({ id: 'i2', title: '흰 티' })], refetch }),
+      )
+      const { rerender } = renderWardrobe()
+
+      fireEvent.click(wearButton()!)
+      fireEvent.click(screen.getByRole('button', { name: /마산 플리스/ }))
+      fireEvent.click(screen.getByRole('button', { name: /흰 티/ }))
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '2벌 기록' }))
+      })
+      expect(submitWearsMock.mock.calls[0][0].itemIds).toEqual(['i1', 'i2'])
+
+      // The refetch has landed; the screen redraws against the shorter wardrobe.
+      rerender()
+      submitWearsMock.mockImplementation(() => undefined)
+      fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
+
+      expect(submitWearsMock.mock.calls[1][0]).toEqual({ wornOn: today, itemIds: ['i1'] })
+    })
+
+    it('그 밖의 실패로는 옷장을 다시 부르지 않는다', () => {
+      // A refetch re-signs every cover URL and reloads every thumbnail, so it is
+      // for the one failure that says the collection is wrong — not for a
+      // dropped connection, where there is nothing new to learn.
+      const refetch = vi.fn().mockResolvedValue({ isError: false })
+      submitWearsMock.mockImplementation((_vars, options) =>
+        options?.onError?.(new Error('offline')),
+      )
+      useWardrobeMock.mockReturnValue(query({ data: [item()], refetch }))
+      renderWardrobe()
+
+      pickOneAndSubmit()
+
+      expect(refetch).not.toHaveBeenCalled()
+    })
+  })
+
+  /**
+   * A draft outlives a reload, so it can be here before there is a screen for it
+   * to be on. Four ways that goes wrong, and all four were reachable.
+   */
+  describe('열려 있던 초안', () => {
+    it('옷장이 아직 오는 중이면 고르는 모드를 열지 않는다', () => {
+      // Measured: the wear log usually lands first — the wardrobe fetch signs
+      // every cover URL on the way — so the submit bar drew over the loading
+      // skeletons, a mode for picking garments on a screen with none to pick.
+      openWearDraft(OWNER, today, ['i1'])
+      useWardrobeMock.mockReturnValue(query({ isLoading: true, isFetching: true }))
+      renderWardrobe()
+
+      expect(dateLabel()).toBeNull()
+      expect(screen.queryByRole('button', { name: /벌 기록|옷을 골라주세요/ })).toBeNull()
+      // The register button is untouched — it works with the network down.
+      expect(registerFab()).not.toBeNull()
+    })
+
+    it('옷장을 불러오지 못한 화면에서도 열지 않는다', () => {
+      openWearDraft(OWNER, today, ['i1'])
+      useWardrobeMock.mockReturnValue(query({ error: new Error('offline') }))
+      renderWardrobe()
+
+      expect(dateLabel()).toBeNull()
+    })
+
+    it('오늘이 아닌 날짜의 초안은 열지 않는다', () => {
+      // `wearDraft` used to check the day only when restoring. A draft for any
+      // other day cannot be produced by the UI any more, but one written before
+      // the date control was removed still can be — and it would have submitted
+      // against a day nothing on screen names.
+      openWearDraft(OWNER, '2020-01-01', ['i1'])
+      useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+      renderWardrobe()
+
+      expect(dateLabel()).toBeNull()
+      fireEvent.click(wearButton()!)
+      expect(dateLabel()?.textContent).toBe(`${monthDay(today)} (오늘)`)
+    })
+
+    /**
+     * The one the earlier test did not construct.
+     *
+     * Seeding a stale draft before mount exercises the restore path; this moves
+     * the clock *after* mount, which is what "a tab left open across midnight"
+     * actually means and the case the guard was written for. It only passes
+     * because `useToday` has a timer — with the event listeners alone the bar
+     * kept saying 8.15 (오늘) on the 16th and submitted against it.
+     */
+    it('마운트 뒤에 자정을 넘기면 닫히고, 다시 열면 새 오늘이 된다', () => {
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(new Date(2026, 7, 15, 23, 59, 0))
+        useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+        renderWardrobe()
+
+        fireEvent.click(wearButton()!)
+        expect(dateLabel()?.textContent).toBe('8.15 (오늘)')
+
+        // No visibilitychange and no focus — the window was simply looked at.
+        act(() => {
+          vi.advanceTimersByTime(2 * 60 * 1000)
+        })
+
+        expect(dateLabel()).toBeNull()
+
+        fireEvent.click(wearButton()!)
+        expect(dateLabel()?.textContent).toBe('8.16 (오늘)')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('다른 사용자의 초안은 열지 않는다', () => {
+      // localStorage survives a sign-out. Without the owner check the next
+      // person's screen opens holding a stranger's picks, with none of the
+      // ticked cards visible, and the submit fails on the foreign key.
+      openWearDraft('another-user', today, ['i1'])
+      useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+      renderWardrobe()
+
+      expect(dateLabel()).toBeNull()
+      expect(wearButton()).not.toBeNull()
+    })
+  })
+
+  /**
+   * Two stores hold item ids the wardrobe can outlive, and `dropItemWears`
+   * reaches only one of them, only in this tab. Deleting on a second device or
+   * walking to 설정 → 처분한 옷 with a selection already open both get past it.
+   *
+   * What made that worth guarding is the size of the failure: the id rides along
+   * on the submit, `set_item_wears` trips `item_wears_item_fk`, and because the
+   * function is one transaction the whole day fails rather than just that
+   * garment.
+   */
+  describe('사라진 옷', () => {
+    it('열려 있는 초안에서 빠지고, 개수와 그리드와 제출이 같이 줄어든다', () => {
+      useWardrobeMock.mockReturnValue(query({ data: [item({ id: 'i2', title: '흰 티' })] }))
+      openWearDraft(OWNER, today, ['gone', 'i2'])
+      renderWardrobe()
+
+      // One card, one in the count, one in the payload — the three readings of
+      // the draft cannot disagree, which is why nothing has to be announced.
+      expect(screen.queryAllByRole('button', { name: /흰 티/ })).toHaveLength(1)
+      fireEvent.click(screen.getByRole('button', { name: '1벌 기록' }))
+
+      expect(submitWearsMock.mock.calls[0][0]).toEqual({ wornOn: today, itemIds: ['i2'] })
+    })
+
+    it('착용 기록만 남은 유령은 버튼 개수에 잡히지 않는다', () => {
+      useWardrobeMock.mockReturnValue(query({ data: [item()] }))
+      useWearsMock.mockReturnValue({ data: [{ itemId: 'gone', wornOn: today }] })
+      renderWardrobe()
+
+      // 오늘 1벌 would be counting a row the database cascaded away with its
+      // garment, on a screen where nothing can be pressed to remove it.
+      expect(screen.queryByRole('button', { name: /기록 고치기/ })).toBeNull()
+      expect(screen.getByRole('button', { name: /오늘 입은 옷 기록하기/ })).toBeDefined()
+    })
   })
 })
 

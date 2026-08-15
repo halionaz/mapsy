@@ -69,6 +69,40 @@ begin
 end;
 $$;
 
+/**
+ * Same as `fails`, but pins the SQLSTATE rather than the message.
+ *
+ * For the codes the frontend *branches* on rather than merely prints. The
+ * wardrobe screen refetches the whole collection when a wear submit comes back
+ * `23503`, on the reasoning that a foreign key failure there can only mean the
+ * items it built the request from are behind the database — and a unit test can
+ * assert that against nothing but a fixture it wrote itself. This is the only
+ * place the value meets a real Postgres.
+ */
+create or replace function tests.fails_with_sqlstate(stmt text, state text, label text)
+returns void
+language plpgsql
+as $$
+declare
+  actual text;
+begin
+  begin
+    execute stmt;
+  exception when others then
+    -- `sqlstate`, the special variable, and not `returned_sqlstate` — that name
+    -- only exists as an item for `get stacked diagnostics`. Same pairing as
+    -- `sqlerrm` above.
+    actual := sqlstate;
+    if actual <> state then
+      raise exception 'FAIL  % — SQLSTATE % 를 기대했는데 실제는 %', label, state, actual;
+    end if;
+    raise notice '  ok  % (SQLSTATE %)', label, state;
+    return;
+  end;
+  raise exception 'FAIL  % — 실패해야 하는데 성공함', label;
+end;
+$$;
+
 -- anon too: some assertions run as an anonymous session to check what it is
 -- allowed to call.
 grant usage on schema tests to authenticated, anon;

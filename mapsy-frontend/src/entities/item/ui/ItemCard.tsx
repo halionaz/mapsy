@@ -1,8 +1,10 @@
-import { Star } from 'lucide-react'
+import { Check, Star } from 'lucide-react'
 import { Link } from 'react-router'
 import { css, cx } from 'styled-system/css'
 import { vstack } from 'styled-system/patterns'
 
+import type { Worn } from '@/entities/wear'
+import { formatDayAgo } from '@/shared/lib/format'
 import { Button, Spinner } from '@/shared/ui/Button'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
 import { skeletonSurface } from '@/shared/ui/skeletonStyle'
@@ -30,7 +32,14 @@ import type { PendingUpload } from '../model/pendingUploads'
  * progress indicator that may need repairing.
  */
 
+/**
+ * `display: block` because this is a `<span>`, and it is a span because
+ * `SelectableItemCard` wraps the whole face in a `<button>` — whose content
+ * model is phrasing content, so a `<p>` inside it is invalid markup. Nothing
+ * here was ever a paragraph; it is a garment's name.
+ */
 const title = css({
+  display: 'block',
   textStyle: 'caption',
   color: 'fg',
   overflow: 'hidden',
@@ -50,6 +59,43 @@ const metaRow = css({
   // One line of caption text at the inherited line-height, so the row is the
   // same height whether it holds colour dots, "저장 중", or nothing at all.
   height: '4.5',
+  // The row now has two occupants, and a card is a third of the page width less
+  // two gutters — under 100px on the narrowest screen the app targets (PRD §9).
+  // Clipping here rather than letting the line grow keeps the grid's rows level;
+  // which of the two gives way is decided below.
+  overflow: 'hidden',
+})
+
+/** The dots, and the half of the row that yields when there is not enough of it. */
+const swatches = css({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '1',
+  overflow: 'hidden',
+  flexShrink: 1,
+  minWidth: 0,
+})
+
+/**
+ * When this garment was last worn, at the end of the meta row.
+ *
+ * Drawn only when there is an answer. A garment with no wear yet gets nothing
+ * rather than "기록 없음": for the first weeks after this feature ships that
+ * label would be on every card in the wardrobe, and a screen where every item
+ * says the same thing has been given a caption, not information. Where the
+ * absence *does* mean something — 최근 입은순, where the unworn sink to the
+ * bottom — the sort itself is what says so.
+ *
+ * `flexShrink: 0` so the dots clip before the text does. A partly cut dot row
+ * reads as "and more colours"; a cut date reads as a bug.
+ */
+const wornAgo = css({
+  ml: 'auto',
+  pl: '1',
+  flexShrink: 0,
+  textStyle: 'caption',
+  color: 'fg.subtle',
+  whiteSpace: 'nowrap',
 })
 
 const tile = cx(
@@ -71,9 +117,28 @@ const tile = cx(
   }),
 )
 
-export function ItemCard({ item }: { item: WardrobeItem }) {
+/**
+ * Everything inside a card, so that the link version and the checkbox version
+ * cannot drift into being two different cards.
+ *
+ * `selected` is three-valued on purpose: `undefined` is "not in selection mode"
+ * and draws no check at all, where `false` draws an empty one. An unselected
+ * card and a card on a screen with no selection happening are different states,
+ * and a boolean would have made them the same.
+ */
+function CardFace({
+  item,
+  today,
+  selected,
+}: {
+  item: Worn<WardrobeItem>
+  today: string
+  selected?: boolean
+}) {
+  const wornLabel = item.lastWornOn ? formatDayAgo(item.lastWornOn, today) : null
+
   return (
-    <Link to={`/items/${item.id}`} className={tile}>
+    <>
       {/* alt is empty on purpose: the title is the next line, and announcing it
           twice is noise rather than description. */}
       <SquarePhoto
@@ -86,6 +151,14 @@ export function ItemCard({ item }: { item: WardrobeItem }) {
         // as having none.
         fallback={item.images.length > 0 ? 'failed' : 'empty'}
       >
+        {selected && <span className={selectedRing} aria-hidden="true" />}
+
+        {selected !== undefined && (
+          <span className={checkBadge} data-selected={selected || undefined} aria-hidden="true">
+            {selected && <Check size={12} strokeWidth={3.5} />}
+          </span>
+        )}
+
         {item.isFavorite && (
           <span aria-label="즐겨찾기" className={favoriteBadge}>
             <Star size={11} fill="currentColor" strokeWidth={0} />
@@ -93,16 +166,121 @@ export function ItemCard({ item }: { item: WardrobeItem }) {
         )}
       </SquarePhoto>
 
-      <p className={title}>{item.title}</p>
+      <span className={title}>{item.title}</span>
 
-      <div className={metaRow}>
-        {item.colors.map((color) => (
-          <ColorSwatch key={color} color={color} />
-        ))}
-      </div>
+      <span className={metaRow}>
+        <span className={swatches}>
+          {item.colors.map((color) => (
+            <ColorSwatch key={color} color={color} />
+          ))}
+        </span>
+        {wornLabel && <span className={wornAgo}>{wornLabel}</span>}
+      </span>
+    </>
+  )
+}
+
+export function ItemCard({ item, today }: { item: Worn<WardrobeItem>; today: string }) {
+  return (
+    <Link to={`/items/${item.id}`} className={tile}>
+      <CardFace item={item} today={today} />
     </Link>
   )
 }
+
+/**
+ * The same card as a checkbox, for 오늘 입은 옷.
+ *
+ * A `<button aria-pressed>` rather than a `<Link>`, which is the whole
+ * difference between the two modes: in selection mode a tap records a garment
+ * instead of opening it. Sharing `tile` keeps them the same size and shape, so
+ * entering the mode changes what a tap *means* without moving anything.
+ *
+ * No route to the detail screen from here, deliberately. A long-press would be
+ * the usual answer and it is not one — nothing on a phone advertises it, so it
+ * is a feature only the person who wrote it can find. Leaving the mode is one
+ * tap on 취소.
+ */
+export function SelectableItemCard({
+  item,
+  today,
+  selected,
+  onToggle,
+}: {
+  item: Worn<WardrobeItem>
+  today: string
+  selected: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onToggle}
+      className={cx(tile, selectableTile)}
+    >
+      <CardFace item={item} today={today} selected={selected} />
+    </button>
+  )
+}
+
+/**
+ * A button has to be told it is a card.
+ *
+ * Panda's preflight already strips the fill, the border and the font, so this is
+ * only what `tile` assumes and a `<button>` does not give: the full width of its
+ * grid track, text that starts on the left, and a pointer.
+ */
+const selectableTile = css({
+  width: 'full',
+  textAlign: 'left',
+  cursor: 'pointer',
+})
+
+/**
+ * The accent edge around a selected photo.
+ *
+ * An inset shadow rather than a border on the frame: `SquarePhoto` clips its
+ * children, so an inset one lands exactly on the rounded corner, and a border
+ * would sit a hair outside it. It is also drawn *over* the photograph, which is
+ * the point — a ring outside the tile would be lost in the 12px gutter between
+ * grid columns.
+ */
+const selectedRing = css({
+  position: 'absolute',
+  inset: '0',
+  rounded: 'card',
+  boxShadow: 'inset 0 0 0 3px {colors.accent}',
+  pointerEvents: 'none',
+})
+
+/**
+ * The check, top-left — opposite corner from the favourite star, so a favourite
+ * garment being selected does not stack two badges on one spot.
+ *
+ * Present but empty when unselected. A checkbox that only appears once it is
+ * ticked leaves the first tap unadvertised: nothing on the grid would say the
+ * cards had become selectable.
+ */
+const checkBadge = css({
+  position: 'absolute',
+  top: '1.5',
+  left: '1.5',
+  display: 'grid',
+  placeItems: 'center',
+  width: '5',
+  height: '5',
+  rounded: 'full',
+  bg: 'overlay.scrim',
+  backdropFilter: 'blur(4px)',
+  boxShadow: 'inset 0 0 0 1.5px {colors.overlay.fg}',
+  color: 'overlay.fg',
+  '&[data-selected]': {
+    bg: 'accent',
+    boxShadow: 'none',
+    color: 'accent.fg',
+  },
+})
 
 /**
  * The star, over an arbitrary photograph.

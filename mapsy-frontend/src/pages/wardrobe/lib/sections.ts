@@ -6,7 +6,7 @@ import {
 } from '@/shared/config/categories'
 import type { Item } from '@/entities/item'
 
-interface WardrobeSection<T> {
+export interface WardrobeSection<T> {
   group: CategoryGroup
   items: T[]
 }

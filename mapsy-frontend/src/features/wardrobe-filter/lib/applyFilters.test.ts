@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { Item } from '@/entities/item'
-import { applyFilters } from './applyFilters'
+import { applyFilters, type SortableItem } from './applyFilters'
 import { EMPTY_FILTERS, type WardrobeFilters } from '../model/filters'
 
-function item(overrides: Partial<Item> & { id: string }): Item {
+function item(overrides: Partial<SortableItem> & { id: string }): SortableItem {
   return {
     userId: 'u1',
     title: '기본 옷',
@@ -22,6 +21,9 @@ function item(overrides: Partial<Item> & { id: string }): Item {
     isFavorite: false,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
+    // Never worn is the default because it is what most of this file is about:
+    // every case that is not the `worn` sort should be indifferent to it.
+    lastWornOn: null,
     ...overrides,
   }
 }
@@ -65,7 +67,7 @@ const soldDenim = item({
 })
 
 const all = [navyJacket, blackTee, soldDenim]
-const ids = (result: Item[]) => result.map((i) => i.id)
+const ids = (result: SortableItem[]) => result.map((i) => i.id)
 
 describe('applyFilters', () => {
   it('shows only owned items by default', () => {
@@ -140,6 +142,47 @@ describe('applyFilters', () => {
 
   it('sorts by title using Korean collation', () => {
     expect(ids(applyFilters(all, filters({ sort: 'title' })))).toEqual(['b', 'a'])
+  })
+
+  it('sorts by last worn, most recent first', () => {
+    const list = [
+      item({ id: 'old', lastWornOn: '2026-05-01' }),
+      item({ id: 'new', lastWornOn: '2026-07-20' }),
+      item({ id: 'mid', lastWornOn: '2026-06-11' }),
+    ]
+    expect(ids(applyFilters(list, filters({ sort: 'worn' })))).toEqual(['new', 'mid', 'old'])
+  })
+
+  it('sinks never-worn garments below every worn one', () => {
+    // The whole point of the axis: a garment registered this morning and never
+    // worn must not outrank the shirt actually worn months ago. The rejected
+    // shape — `lastWornOn ?? createdAt` — puts `fresh` first here.
+    const list = [
+      item({ id: 'fresh', createdAt: '2026-08-14T00:00:00Z' }),
+      item({ id: 'worn', lastWornOn: '2026-03-02', createdAt: '2026-01-01T00:00:00Z' }),
+    ]
+    expect(ids(applyFilters(list, filters({ sort: 'worn' })))).toEqual(['worn', 'fresh'])
+  })
+
+  it('orders the never-worn by registration, oldest last', () => {
+    // The bottom of the list is the answer to "what have I been ignoring", so
+    // the garment registered longest ago without ever being worn ends up there.
+    const list = [
+      item({ id: 'ancient', createdAt: '2026-01-05T00:00:00Z' }),
+      item({ id: 'recent', createdAt: '2026-08-01T00:00:00Z' }),
+    ]
+    expect(ids(applyFilters(list, filters({ sort: 'worn' })))).toEqual(['recent', 'ancient'])
+  })
+
+  it('breaks a same-day tie by registration rather than by cache order', () => {
+    // A day's worth of garments all carry one date, so this is the ordinary
+    // case. Handed in the opposite order to the one expected, so a comparator
+    // that returned 0 here would pass only by the sort being stable.
+    const list = [
+      item({ id: 'older', lastWornOn: '2026-08-10', createdAt: '2026-02-01T00:00:00Z' }),
+      item({ id: 'newer', lastWornOn: '2026-08-10', createdAt: '2026-04-01T00:00:00Z' }),
+    ]
+    expect(ids(applyFilters(list, filters({ sort: 'worn' })))).toEqual(['newer', 'older'])
   })
 
   it('does not mutate or reorder the input array', () => {

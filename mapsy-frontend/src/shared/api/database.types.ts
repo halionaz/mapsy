@@ -58,6 +58,38 @@ export type Database = {
           },
         ]
       }
+      item_wears: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          user_id: string
+          worn_on: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          user_id: string
+          worn_on: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          user_id?: string
+          worn_on?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_wears_item_fk"
+            columns: ["item_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       items: {
         Row: {
           brand: string | null
@@ -129,6 +161,10 @@ export type Database = {
       delete_item_image: { Args: { p_image_id: string }; Returns: undefined }
       reorder_item_images: {
         Args: { p_image_ids: string[]; p_item_id: string }
+        Returns: undefined
+      }
+      set_item_wears: {
+        Args: { p_item_ids: string[]; p_worn_on: string }
         Returns: undefined
       }
     }

@@ -14,8 +14,20 @@ import type { ItemStatus } from '@/entities/item'
  * row.
  */
 
+/**
+ * `worn` is the one axis the wear log adds, and it is deliberately alone.
+ *
+ * "많이 입은순" and "오래 안 입은순" were both drafted beside it and both
+ * dropped. The second is this list upside down, and a section here holds one
+ * category of one wardrobe — the bottom of it is a scroll away, not a second
+ * control. The first counts, and a count states a frequency the log cannot
+ * honestly claim: a few unrecorded mornings move the number without moving the
+ * truth. "When did I last wear this" survives a gap in the record, because it is
+ * a smaller claim.
+ */
 export const SORT_OPTIONS = [
   { id: 'recent', label: '최근 등록순' },
+  { id: 'worn', label: '최근 입은순' },
   { id: 'price_desc', label: '가격 높은순' },
   { id: 'price_asc', label: '가격 낮은순' },
   { id: 'title', label: '이름순' },

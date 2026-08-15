@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { dropItemWears } from '@/entities/wear'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { errorMessage } from '@/shared/lib/errorMessage'
 import * as api from '../api/itemApi'
@@ -221,6 +222,9 @@ export function useDeleteItem() {
     onSuccess: async (_data, { id }) => {
       await before()
       patchCache(queryClient, (entries) => entries.filter((entry) => entry.id !== id))
+      // The wear log is a second cache holding rows the database has just
+      // cascaded away. `dropItemWears` says what happens without this.
+      await dropItemWears(queryClient, id)
       after()
     },
   })

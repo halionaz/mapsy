@@ -48,10 +48,29 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   item_images_dimensions_positive: '사진 크기를 읽지 못했어요.',
   item_images_item_sort_key: '사진 순서가 중복됐어요.',
   item_images_item_fk: '사진을 붙일 옷을 찾을 수 없어요.',
+  // The wear log's three, and none of them currently reaches a screen.
+  //
+  // The two unique ones because nothing writes in a way that can trip them:
+  // `set_item_wears` is `on conflict do nothing` and the single toggle is an
+  // `ignoreDuplicates` upsert.
+  //
+  // The foreign key is different — it fires in ordinary use, when a submit
+  // carries a garment another device has deleted — but the wardrobe screen now
+  // reads its SQLSTATE first. A 23503 there means the collection is stale, so
+  // that screen refetches and writes a sentence about *that* instead of asking
+  // this map for one. The detail screen's wear toggle never asks either; its
+  // failure toast is a fixed string.
+  //
+  // Listed anyway, for the reason the fit entry above is: this map is a mirror
+  // of the schema, and deciding which unreachable names to leave out is the
+  // judgement that put gaps in it three times.
+  item_wears_item_date_key: '그날 입은 옷으로 이미 기록돼 있어요.',
+  item_wears_item_fk: '착용 기록을 붙일 옷을 찾을 수 없어요.',
   items_id_user_key: '이미 있는 옷이에요.',
   items_user_id_fkey: '계정을 찾을 수 없어요. 다시 로그인해주세요.',
   items_pkey: '이미 있는 옷이에요.',
   item_images_pkey: '이미 있는 사진이에요.',
+  item_wears_pkey: '이미 있는 착용 기록이에요.',
 }
 
 /** Exported for the coverage test; not part of the public surface otherwise. */
@@ -89,6 +108,24 @@ function friendly(message: string, code: unknown): string | null {
   if (named && named in CONSTRAINT_MESSAGES) return CONSTRAINT_MESSAGES[named]
   if (typeof code === 'string' && code in CODE_MESSAGES) return CODE_MESSAGES[code]
   return null
+}
+
+/**
+ * Whether a data-layer failure carries this SQLSTATE.
+ *
+ * For the callers that need to *do* something about a specific failure rather
+ * than describe it — the wear submit refetches the wardrobe on `23503`, because
+ * a foreign key violation there means the collection it built the request from
+ * is behind the database.
+ *
+ * By code and not by matching the message, which is the same reason the lookup
+ * above extracts the constraint name instead of scanning for a substring: the
+ * text is Postgres's and can be reworded, the code cannot.
+ */
+export function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    error != null && typeof error === 'object' && (error as { code?: unknown }).code === code
+  )
 }
 
 export function errorMessage(error: unknown, fallback = '알 수 없는 오류'): string {

@@ -12,11 +12,23 @@ migrations/
 ├── 20260801000005_private_helpers.sql     CHECK 헬퍼 비노출 · 함수 권한
 ├── 20260801000006_revoke_anon_execute.sql RPC에서 anon EXECUTE 회수
 ├── 20260801000007_price_ceiling.sql       가격 상한 · 트리거 함수 권한
-└── 20260801000008_private_helper_grants.sql private 헬퍼 EXECUTE 정리
+├── 20260801000008_private_helper_grants.sql private 헬퍼 EXECUTE 정리
+└── 20260815000001_item_wears.sql          착용 기록 · 미래 날짜 트리거 · set_item_wears RPC
 tests/
 ├── run.sh                                 컨테이너에 마이그레이션 적용 + 회귀 검사
 └── 03_wardrobe.sql                        단언 본체
 ```
+
+## 착용 기록에서 알아둘 것
+
+- **`worn_on`은 클라이언트가 보내는 로컬 달력 날짜**다. 컬럼에 기본값을 두지 않은 것이 그 규칙을
+  강제하는 방법 — 서버 `now()`는 UTC라 한국 오전 아홉 시까지가 전날로 기록된다.
+- **미래 날짜는 트리거 `item_wears_reject_future`가 막고, 허용 오차는 정확히 하루다.** 그 하루는
+  느슨함이 아니라 시차다. CHECK로 못 쓰는 이유는 `current_date`가 IMMUTABLE이 아니어서다.
+- **하루치를 쓸 때는 `set_item_wears(worn_on, item_ids)`를 쓴다.** 클라이언트에서 DELETE 후
+  INSERT를 하면 각각 별개 트랜잭션이라, 삭제만 성공하면 그날 기록이 통째로 날아간다.
+- 새 테이블·제약을 추가했으면 `pnpm test:db`를 돌려 `dbConstraints.generated.ts`를 갱신하고,
+  `shared/lib/errorMessage.ts`의 메시지 맵을 맞춰야 한다. 둘은 단위 테스트가 양방향으로 검사한다.
 
 ---
 
