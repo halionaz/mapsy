@@ -59,9 +59,12 @@ export function applyFilters<T extends Item>(
     if (item.status !== filters.status) return false
     if (filters.favoriteOnly && !item.isFavorite) return false
 
-    if (filters.groupIds.length > 0) {
-      const group = groupIdOf(item.categoryId)
-      if (!group || !filters.groupIds.includes(group)) return false
+    // No arm for "this id has no group": `Item.categoryId` is a `SubcategoryId`,
+    // which `groupIdOf` answers totally. The guard that used to be here read as
+    // caution but could only have meant "hide the garment", and it covered a
+    // case `mapRow` already folds into 기타 at the boundary.
+    if (filters.groupIds.length > 0 && !filters.groupIds.includes(groupIdOf(item.categoryId))) {
+      return false
     }
 
     if (filters.categoryIds.length > 0 && !filters.categoryIds.includes(item.categoryId)) {

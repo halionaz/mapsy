@@ -136,6 +136,41 @@ export type CategoryGroup = (typeof CATEGORY_GROUPS)[number]
 export type Subcategory = CategoryGroup['subcategories'][number]
 export type SubcategoryId = Subcategory['id']
 
+/**
+ * The subcategory ids this table can actually resolve to a group.
+ *
+ * Identical to `SubcategoryId` today, and the point is that the compiler is what
+ * says so. `CATEGORY_GROUP_IDS` and `CATEGORY_GROUPS` are two hand-written lists
+ * and nothing pairs them, while `SubcategoryDef.id` only demands
+ * `${CategoryGroupId}.${string}` — so a subcategory can keep the prefix of a
+ * group that has been deleted from the table and still be a perfectly good
+ * `SubcategoryId`. Measured before this existed: with `onepiece` removed from
+ * the table and `onepiece.dress` left sitting in 상의, `tsc -b` passed and the
+ * garment stopped appearing on 내 옷장 — filed by `groupSections` under
+ * `undefined`, a bucket nothing ever draws from.
+ *
+ * Narrowing `groupIdOf`'s total overload to this type moves that failure to
+ * compile time and to the places that depend on it: `Item.categoryId` is a
+ * `SubcategoryId`, so the day the two stop being the same type, a caller passing
+ * one falls through to the `string` overload and is handed an `undefined`.
+ *
+ * It only bites where the result lands somewhere with a type of its own —
+ * `Array.includes`, `Map.get`, `Map.set`. A fresh container infers its element
+ * type *from* the value and swallows the `undefined` in silence, which is why
+ * the wardrobe's rail writes `new Set<CategoryGroupId>(…)` rather than
+ * `new Set(…)`; measured on the broken table, that one type argument is the
+ * difference between three call sites failing and two.
+ *
+ * Counted: four callers. `applyFilters`, `groupSections` and the rail stop
+ * compiling; `ItemForm` does not, and should not — it reaches the call through
+ * `categoryId ? … : undefined`, so it has declared the `undefined` itself and
+ * the presets it feeds already take one.
+ */
+type ResolvableSubcategoryId = Extract<
+  SubcategoryId,
+  `${(typeof CATEGORY_GROUPS)[number]['id']}.${string}`
+>
+
 const SUBCATEGORY_BY_ID = new Map<string, Subcategory>(
   CATEGORY_GROUPS.flatMap((group) =>
     group.subcategories.map((sub) => [sub.id, sub] as [string, Subcategory]),
@@ -154,10 +189,23 @@ export function isSubcategoryId(value: string): value is SubcategoryId {
 /**
  * Derives the group from a subcategory id.
  *
- * Takes a plain `string` rather than `SubcategoryId` on purpose: the input comes
- * from the database, where an id written by an older build may no longer be in
- * the table. Unknown ids return undefined instead of throwing.
+ * Two signatures, and which one applies says where the id came from. A plain
+ * `string` is a database value, where an id written by an older build may no
+ * longer be in the table — that arm returns undefined instead of throwing. A
+ * `SubcategoryId` came out of the table above, so its group exists and there is
+ * nothing for the caller to handle.
+ *
+ * The narrow arm is not an optimism, and it is held down at both ends.
+ * `mapRow.toCategoryId` folds unrecognised ids to `etc.etc` at the boundary, so
+ * every `Item` reaching the UI carries one of the ids listed here; and
+ * `ResolvableSubcategoryId` is what makes "listed here" mean "has a group in
+ * this table" rather than merely "looks like one". Together they are what lets
+ * the wardrobe be split into sections without a branch for garments that belong
+ * to no section — a branch that could only ever be written as "drop it", which
+ * on the home screen reads as the item having been deleted.
  */
+export function groupIdOf(categoryId: ResolvableSubcategoryId): CategoryGroupId
+export function groupIdOf(categoryId: string): CategoryGroupId | undefined
 export function groupIdOf(categoryId: string): CategoryGroupId | undefined {
   return GROUP_BY_ID.get(categoryId.split('.')[0])?.id
 }
