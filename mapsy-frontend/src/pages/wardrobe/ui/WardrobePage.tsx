@@ -144,9 +144,13 @@ export function WardrobePage() {
    * with nothing left explaining why.
    *
    * Not because there would be no way out: that state is `noMatches`, whose
-   * 필터 모두 해제 clears `groupIds` directly. The one path with no way out is
-   * owned-0 plus an upload in flight, where `pending` makes the view `grid` and
-   * that button is never drawn — and it ends when the upload lands.
+   * 필터 모두 해제 clears `groupIds` directly.
+   *
+   * There are states where the rail is hidden and nothing can clear the filter,
+   * and they need nothing — hidden means the list below is at most one group, so
+   * every owned garment is already inside the selected one and the filter
+   * excludes nothing. It could only begin excluding something once a second
+   * group exists, and that is the same moment the rail comes back.
    */
   const railGroups = useMemo(() => {
     // The element type is named rather than inferred, and that is the whole
@@ -203,8 +207,14 @@ export function WardrobePage() {
    * enough to trigger it.
    *
    * `failed` is now only the cold case: the fetch failed and there is nothing
-   * cached to fall back on. A failure with rows in hand keeps this at `grid` and
-   * takes `stale` below, which draws over the grid rather than in place of it.
+   * cached to fall back on. A failure with rows in hand is simply not `failed`;
+   * which view it *is* depends on the filters, and `SHOWS_STALE_NOTICE` above is
+   * what answers the banner for each of them.
+   *
+   * Which is why that Record carries `noMatches` and not only `grid`. Measured:
+   * a search left in the box when a focus refetch misses puts a wardrobe that is
+   * entirely in memory on 조건에 맞는 옷이 없어요, with the banner over it. An
+   * entry that looks unused there is load-bearing.
    */
   const view: View = isLoading
     ? 'loading'
