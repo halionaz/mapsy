@@ -246,6 +246,42 @@ describe('PhotoPicker', () => {
     }
   })
 
+  /**
+   * The slop measures the finger, and the finger is on the glass.
+   *
+   * A pan scrolls the page under the finger at 1:1, so in page space the point
+   * under it barely moves at all — measure the hold there and a scroll reads as
+   * a finger holding perfectly still, which is the one thing that lifts a tile.
+   * The photo grid sits at the top of an eleven-field form, so starting a scroll
+   * on a photo is the ordinary case, not an edge one.
+   */
+  it('lets a finger scroll even when the page keeps up with it', () => {
+    vi.useFakeTimers()
+    const scrolled = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(0)
+    try {
+      render(
+        <PhotoPicker
+          photos={[stored('a'), stored('b')]}
+          onChange={vi.fn()}
+          storedUrls={new Map()}
+        />,
+      )
+      const tile = screen.getByLabelText('사진 1')
+
+      fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 400 })
+
+      // The finger travels 30px up the glass and the page follows it exactly.
+      scrolled.mockReturnValue(30)
+      fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 370 })
+      act(() => void vi.advanceTimersByTime(300))
+
+      expect(tile.getAttribute('aria-pressed')).toBe('false')
+    } finally {
+      scrolled.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it('keeps the tile under the cursor when the page scrolls mid-drag', () => {
     // A mouse drag never blocks the wheel — only touch panning is prevented — so
     // the page can move under a lifted tile. Everything the drag measures is in
@@ -275,6 +311,45 @@ describe('PhotoPicker', () => {
       expect(tile.parentElement?.style.transform).toContain('110px')
     } finally {
       scrolled.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  /**
+   * The settle waits for the transition that is in force when the tile lands.
+   *
+   * Which is not the one in force when it lifts: the movement's duration comes
+   * from the `[data-rearranging]` rule, and that attribute only exists while
+   * something is held. Read at lift, the tile answers with its resting rule
+   * instead — today the same number, and the day the two want different speeds,
+   * a commit that cuts the movement short and drops the tile a jump from where
+   * it was going. Here the resting rule is "no transition", so reading at the
+   * wrong moment shows up as committing immediately.
+   */
+  it('waits for the transition the tile has when it lands, not when it lifts', () => {
+    vi.useFakeTimers()
+    try {
+      const onChange = vi.fn()
+      const entries = [stored('a'), stored('b'), stored('c')]
+      render(<PhotoPicker photos={entries} onChange={onChange} storedUrls={new Map()} />)
+      const tile = screen.getByLabelText('사진 1')
+
+      fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 40 })
+      act(() => void vi.advanceTimersByTime(300))
+
+      // Stands in for what [data-rearranging] turns on, which arrives after the
+      // lift and not before it.
+      if (tile.parentElement) tile.parentElement.style.transitionDuration = '150ms'
+
+      fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 232, clientY: 40 })
+      fireEvent.pointerUp(tile, { pointerId: 1, pointerType: 'touch', clientX: 232, clientY: 40 })
+
+      act(() => void vi.advanceTimersByTime(100))
+      expect(onChange).not.toHaveBeenCalled()
+
+      act(() => void vi.advanceTimersByTime(100))
+      expect(onChange).toHaveBeenCalledWith([entries[1], entries[2], entries[0]])
+    } finally {
       vi.useRealTimers()
     }
   })

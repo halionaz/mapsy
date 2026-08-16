@@ -54,25 +54,40 @@ interface Held {
 }
 
 /**
- * Where a pointer is, in page coordinates.
+ * Where a pointer is, in both coordinate systems.
  *
- * The grid is measured in page coordinates because a mouse drag can scroll the
- * page under it — the wheel is never blocked, only touch panning is. The tile's
- * own offset has to be measured in the same space: from client deltas alone it
- * drifts away from the cursor by however far the page moved, while the drop
- * still lands where the cursor is, so the tile you are aiming with and the slot
- * you are aiming at stop agreeing.
+ * A drag asks two different questions of the same movement and they do not take
+ * the same answer, which is a distinction this file has now got wrong once in
+ * each direction. So the names carry the space:
+ *
+ * **Page** — for the tile's offset and for which slot is under the pointer. The
+ * grid is measured in page coordinates because a mouse drag can scroll the page
+ * under it (the wheel is never blocked, only touch panning is), and a tile
+ * positioned from client deltas drifts away from the cursor by however far the
+ * page moved while the drop still lands where the cursor is.
+ *
+ * **Client** — for the hold's slop, which asks whether the *finger moved on the
+ * glass*. A pan scrolls the page under the finger at 1:1, so page-space movement
+ * during a scroll is ~0: measured there, a scroll is indistinguishable from
+ * holding still, and holding still is what lifts a tile.
  */
-function pagePoint(event: React.PointerEvent<HTMLElement>): { x: number; y: number } {
-  return { x: event.clientX + window.scrollX, y: event.clientY + window.scrollY }
+function pointerPoint(event: React.PointerEvent<HTMLElement>) {
+  return {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    pageX: event.clientX + window.scrollX,
+    pageY: event.clientY + window.scrollY,
+  }
 }
+
+type PointerPoint = ReturnType<typeof pointerPoint>
 
 interface Gesture {
   pointerId: number
   index: number
   element: HTMLElement
-  startX: number
-  startY: number
+  /** Where it went down, in both spaces — see `pointerPoint`. */
+  start: PointerPoint
   holdTimer: number | null
   lifted: boolean
   /** The authority on where it would land — pointerup can arrive before a re-render. */
@@ -121,8 +136,6 @@ export function useDragReorder({
 }): DragReorder {
   const gridRef = useRef<HTMLDivElement>(null)
   const geometry = useRef<GridGeometry | null>(null)
-  /** How long the drop waits before rewriting the list — read off the tile when it lifts. */
-  const settleMs = useRef(0)
   const gesture = useRef<Gesture | null>(null)
   const settleTimer = useRef<number | null>(null)
   const unblockScroll = useRef<(() => void) | null>(null)
@@ -170,12 +183,6 @@ export function useDragReorder({
     current.lifted = true
     current.holdTimer = null
     measure()
-    // From the tile itself, not the grid: the transition being waited on is the
-    // tile's, and asking the element is what makes `prefers-reduced-motion`
-    // answer for itself — the token alone says 200ms to someone whose tiles move
-    // in one. Only the pointer path needs it; a keyboard drop commits where the
-    // tile already is, with nothing to wait for.
-    settleMs.current = readTransitionMs(current.element.parentElement ?? current.element)
     blockScroll()
     // So a finger that wanders off the tile — which is the entire point — keeps
     // reporting to it.
@@ -209,14 +216,11 @@ export function useDragReorder({
     if (held || gesture.current) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
 
-    const start = pagePoint(event)
     const current: Gesture = {
       pointerId: event.pointerId,
       index,
       element: event.currentTarget,
-      // Page coordinates, like the grid geometry — see `pagePoint`.
-      startX: start.x,
-      startY: start.y,
+      start: pointerPoint(event),
       holdTimer: null,
       lifted: false,
       to: index,
@@ -236,12 +240,16 @@ export function useDragReorder({
     const current = gesture.current
     if (!current || event.pointerId !== current.pointerId) return
 
-    const point = pagePoint(event)
-    const x = point.x - current.startX
-    const y = point.y - current.startY
+    const point = pointerPoint(event)
 
     if (!current.lifted) {
-      const travelled = Math.hypot(x, y)
+      // On the glass: did the finger itself move? A page that scrolled out from
+      // under it does not count, and in page space that is all a scroll looks
+      // like.
+      const travelled = Math.hypot(
+        point.clientX - current.start.clientX,
+        point.clientY - current.start.clientY,
+      )
       if (event.pointerType === 'mouse') {
         if (travelled > MOUSE_SLOP_PX) lift(current)
       } else if (travelled > HOLD_SLOP_PX) {
@@ -252,11 +260,17 @@ export function useDragReorder({
       return
     }
 
+    // In the document, from here down: both the tile's offset and the slot under
+    // the pointer are answers about where things sit on the page.
+    const follow = {
+      x: point.pageX - current.start.pageX,
+      y: point.pageY - current.start.pageY,
+    }
     const grid = geometry.current
-    const to = grid ? slotAt(point, grid, count) : current.index
+    const to = grid ? slotAt({ x: point.pageX, y: point.pageY }, grid, count) : current.index
     if (to !== current.to) tick(4)
     current.to = to
-    setHeld({ from: current.index, to, follow: { x, y }, keyboard: false })
+    setHeld({ from: current.index, to, follow, keyboard: false })
   }
 
   function handlePointerUp(event: React.PointerEvent<HTMLElement>) {
@@ -268,7 +282,23 @@ export function useDragReorder({
     }
 
     const { index: from, to } = current
+    const tile = current.element.parentElement
     forget()
+
+    /**
+     * Read here rather than at lift, and from the tile rather than from the
+     * token.
+     *
+     * Here, because the transition to wait for is the one `[data-rearranging]`
+     * turns on, and that attribute only exists while something is held — at lift
+     * the tile still answers with the base rule's duration, which today happens
+     * to be the same number and would stop being one the day the shadow and the
+     * movement want different speeds.
+     *
+     * From the tile, because that is what makes `prefers-reduced-motion` answer
+     * for itself: the token says 200ms to someone whose tiles move in one.
+     */
+    const settle = tile ? readTransitionMs(tile) : 0
 
     // Dropping the offset lets the tile animate into its slot; the list is
     // rewritten once it gets there, which is why nothing visibly jumps at the
@@ -278,7 +308,7 @@ export function useDragReorder({
       settleTimer.current = null
       commit(from, to)
       setAnnouncement(`${to + 1}번째에 놓았어요.`)
-    }, settleMs.current)
+    }, settle)
   }
 
   /**

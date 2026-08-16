@@ -63,10 +63,13 @@ export function readGridGeometry(element: HTMLElement): GridGeometry | null {
  * under that setting the tiles move in 1ms, and a settle still waiting 200ms
  * would be a fifth of a second in which the drop appears to have done nothing.
  *
- * Units are both spellings on purpose. The token is authored as `200ms` and the
- * built stylesheet emits `.2s` — measured in `dist` — so an implementation that
- * only handled one of them would be wrong in exactly the environment that is
- * hardest to notice it in.
+ * Both unit spellings are handled, and only one of them is the browser's. A
+ * computed `<time>` serialises in seconds, so what a browser returns here is
+ * `0.2s` whatever the stylesheet authored; `200ms` is what **jsdom** returns,
+ * because it hands back the inline value unnormalised (measured). So the `ms`
+ * branch is there for the tests that stand on it — the seconds branch is the one
+ * production takes, and deleting it because the token reads `200ms` would make
+ * every drop commit in a fifth of a millisecond.
  *
  * Zero is an answer rather than a failure: a tile with no transition has nothing
  * to wait for, and committing immediately is what that means. Nothing to read at

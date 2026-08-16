@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   displaySlot,
   moveItem,
+  readGridGeometry,
   readTransitionMs,
   slotAt,
   slotOffset,
@@ -70,6 +71,44 @@ describe('slotAt', () => {
   })
 })
 
+describe('readGridGeometry', () => {
+  function gridElement(): HTMLElement {
+    const element = document.createElement('div')
+    element.style.gridTemplateColumns = '84px 84px 84px'
+    element.style.columnGap = '12px'
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+      left: 10,
+      top: 20,
+    } as DOMRect)
+    document.body.append(element)
+    return element
+  }
+
+  it('reads the pitch and the column count off the used track list', () => {
+    // Not copied from the stylesheet: `repeat(auto-fill, 84px)` resolves to the
+    // tracks that actually got laid out, so this survives the tile changing size.
+    const grid = readGridGeometry(gridElement())
+    expect(grid?.pitch).toBe(96)
+    expect(grid?.columns).toBe(3)
+  })
+
+  it('answers in page coordinates, so a scroll mid-drag does not move the slots', () => {
+    // The only measurement a drag takes, and it is taken once at lift. In
+    // viewport coordinates a mouse wheel — never blocked, unlike touch panning —
+    // would shift every slot out from under the pointer for the rest of the drag.
+    const scrolled = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(100)
+    try {
+      expect(readGridGeometry(gridElement())).toMatchObject({ left: 10, top: 120 })
+    } finally {
+      scrolled.mockRestore()
+    }
+  })
+
+  it('gives up on an element with no layout rather than inventing a grid', () => {
+    expect(readGridGeometry(document.createElement('div'))).toBeNull()
+  })
+})
+
 describe('readTransitionMs', () => {
   function tile(duration: string): HTMLElement {
     const element = document.createElement('div')
@@ -79,19 +118,20 @@ describe('readTransitionMs', () => {
   }
 
   /**
-   * Both spellings, because production only ever sends one of them and it is not
-   * the one the config file shows. `panda.config.ts` authors `200ms`; the built
-   * stylesheet emits `.2s` (checked in `dist`). With only the `ms` case covered,
-   * dropping the seconds branch — which reads like dead code next to the config
-   * — would make every drop commit in 0.2ms and every tile jump, with the whole
-   * suite still green.
+   * The seconds case is the browser's — a computed `<time>` serialises in
+   * seconds no matter how the stylesheet authored it — and it is the one that
+   * reads like dead code, because `panda.config.ts` says `200ms` right there.
+   * Deleting it on that reading makes every drop commit in a fifth of a
+   * millisecond and every tile jump.
    */
-  it('reads milliseconds', () => {
-    expect(readTransitionMs(tile('200ms'))).toBe(200)
+  it('reads the seconds a browser reports', () => {
+    expect(readTransitionMs(tile('.2s'))).toBe(200)
   })
 
-  it('reads the seconds the stylesheet actually ships', () => {
-    expect(readTransitionMs(tile('.2s'))).toBe(200)
+  it('reads milliseconds, which is what jsdom hands back', () => {
+    // Unnormalised inline values, which is why the tests above this file can
+    // stand on either spelling.
+    expect(readTransitionMs(tile('200ms'))).toBe(200)
   })
 
   it('answers zero for a tile with nothing to wait for', () => {
