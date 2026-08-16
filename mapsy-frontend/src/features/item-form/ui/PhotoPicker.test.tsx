@@ -316,6 +316,43 @@ describe('PhotoPicker', () => {
   })
 
   /**
+   * The drag turns the tile's transition off through the longhand.
+   *
+   * `transition: none` would do it too, and would also reset every longhand it
+   * omits — `transition-duration` back to 0s. The drop reads that duration off
+   * this element, while this is still applied, to know how long to wait; through
+   * the shorthand it read 0 at every drop and the settle animation never ran.
+   *
+   * Asserted as a shape rather than as an outcome, because the outcome is not
+   * observable here: jsdom does not expand shorthands (measured — after
+   * `style.transition = 'none'` the duration is still there), so the failure
+   * this pins is invisible to every test in this file. What jsdom *can* see is
+   * that the shorthand leaves `style.transitionProperty` empty, which is what
+   * makes this assertion fail if anyone writes it back.
+   */
+  it('turns the tile transition off without blanking the duration the drop reads', () => {
+    vi.useFakeTimers()
+    try {
+      render(
+        <PhotoPicker
+          photos={[stored('a'), stored('b')]}
+          onChange={vi.fn()}
+          storedUrls={new Map()}
+        />,
+      )
+      const tile = screen.getByLabelText('사진 1')
+
+      fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 40 })
+      act(() => void vi.advanceTimersByTime(300))
+      fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 120, clientY: 40 })
+
+      expect(tile.parentElement?.style.transitionProperty).toBe('none')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /**
    * The settle waits for the transition that is in force when the tile lands.
    *
    * Which is not the one in force when it lifts: the movement's duration comes
@@ -323,8 +360,11 @@ describe('PhotoPicker', () => {
    * something is held. Read at lift, the tile answers with its resting rule
    * instead — today the same number, and the day the two want different speeds,
    * a commit that cuts the movement short and drops the tile a jump from where
-   * it was going. Here the resting rule is "no transition", so reading at the
-   * wrong moment shows up as committing immediately.
+   * it was going.
+   *
+   * The duration below is planted, because jsdom carries no stylesheet. That
+   * makes this a test of *when* the read happens and nothing more — what the
+   * read then lands on in a browser is the assertion above.
    */
   it('waits for the transition the tile has when it lands, not when it lifts', () => {
     vi.useFakeTimers()

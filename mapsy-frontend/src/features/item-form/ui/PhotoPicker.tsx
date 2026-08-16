@@ -127,10 +127,22 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
               data-held={held || undefined}
               style={{
                 transform: `translate3d(${offset.x}px, ${offset.y}px, 0)${held ? ' scale(1.06)' : ''}`,
-                // The tile under the finger has to track it exactly; anything
-                // else here reads as lag. Inline so it beats the class rule
-                // rather than racing it on specificity.
-                transition: held && drag.following ? 'none' : undefined,
+                /**
+                 * The tile under the finger has to track it exactly; anything
+                 * else here reads as lag. Inline so it beats the class rule
+                 * rather than racing it on specificity.
+                 *
+                 * The longhand, and that is not a style preference. `transition`
+                 * is a shorthand, so writing it here resets every longhand it
+                 * omits — including `transition-duration`, back to 0s. The drop
+                 * reads that duration off this very element to know how long to
+                 * wait before rewriting the list, and it reads it while this is
+                 * still applied: through the shorthand it read 0 every time, so
+                 * the drop animation was cut on its first frame at every drop.
+                 * Turning the *property* off leaves the duration where the
+                 * stylesheet put it.
+                 */
+                transitionProperty: held && drag.following ? 'none' : undefined,
                 zIndex: held ? 1 : undefined,
               }}
             >
