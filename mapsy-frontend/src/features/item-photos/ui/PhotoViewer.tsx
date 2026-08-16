@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import { css } from 'styled-system/css'
 
 import { clamp } from '@/shared/lib/clamp'
-import { appBarBox } from '@/shared/ui/appBarStyle'
+import * as styles from './PhotoViewer.css'
 import { indexAfterChange } from '../lib/followSlots'
 import type { PhotoSlot } from '../lib/photoSlots'
 import {
@@ -24,95 +23,57 @@ import {
 } from '../lib/photoTransform'
 
 /**
- * Full-screen photo viewer: swipe between an item's photos, pinch or
- * double-tap to zoom, drag to pan.
+ * 전체 화면 사진 뷰어 — 스와이프로 넘기고, 핀치나 더블탭으로 확대하고, 끌어서 옮긴다.
  *
- * Every gesture is handled here rather than delegated to the browser, and that
- * is a deliberate trade. The cheap version pages with CSS scroll-snap and lets
- * `touch-action` hand pinches to the browser — but the browser only pinch-zooms
- * the visual viewport, so the chrome zooms along with the photo, and a
- * two-finger gesture inside a horizontal scroller gets claimed as a scroll
- * (which then fires pointercancel and kills the pinch half the time). Owning
- * the surface with `touch-action: none` means paging, zooming and panning are
- * decided by one piece of code that knows which is which.
+ * 모든 제스처를 직접 다루는 것은 의도한 거래다. 브라우저의 핀치는 비주얼 뷰포트를 확대해
+ * 크롬까지 함께 커지고, 가로 스크롤러 안의 두 손가락 제스처는 스크롤로 가져가진다.
+ * `touch-action: none`으로 표면을 소유하면 페이징·확대·이동을 어느 쪽인지 아는 코드
+ * 하나가 정한다. 대가는 스냅을 직접 쓰는 것과, 튕김에 관성이 없다는 것이다.
  *
- * The trade-off is that snapping has to be written out, and that a flick has no
- * momentum past it — a swipe lands on the next photo or springs back, and never
- * carries through two.
- *
- * The geometry lives in `photoTransform.ts`, which is where it can be tested.
- *
- * Rendered as a native <dialog> so Esc, focus trapping and inertness of the
- * page behind it are the platform's problem rather than ours.
+ * 기하는 검사할 수 있는 자리인 `photoTransform.ts`에 있다. 네이티브 `<dialog>`라
+ * Esc·포커스 트랩·뒤 페이지 비활성화는 플랫폼의 몫이다.
  */
 
 interface PhotoViewerProps {
   /**
-   * Every photo the item has, in order, each carrying whether it is here yet.
+   * 옷이 가진 모든 사진을 순서대로. 각각이 아직 도착했는지를 싣는다.
    *
-   * Slots rather than a list of URLs. A bare `string[]` cannot say why it is
-   * short: a photo still being signed and a photo that failed both come through
-   * as absent, and the viewer drew the difference it could not see — announcing
-   * a failure for the length of every signing round trip. That distinction is
-   * the whole point of `photoSlots`, and flattening it at this boundary threw it
-   * away one function call after it was made. It also left the viewer unable to
-   * page to a photo it could not show, so a failure found in here could not be
-   * reported to the tile that offered it.
+   * URL 목록이 아니라 슬롯이다. 맨 `string[]`은 왜 짧은지 말하지 못한다 — 서명 중인
+   * 사진과 실패한 사진이 똑같이 없음으로 오고, 뷰어는 볼 수 없는 차이를 그리게 된다.
+   * 그 구분이 `photoSlots`의 존재 이유이고, 이 경계에서 납작하게 만들면 만든 지 한
+   * 호출 만에 버리는 셈이다.
    */
   slots: PhotoSlot[]
-  /** Which photo to open on; the first one if it is not among the slots. */
+  /** 어느 사진으로 열지. 슬롯에 없으면 첫 장. */
   startId: string | null
-  /** Item title — used for the accessible name and each photo's alt text. */
+  /** 옷 이름 — 접근 가능한 이름과 각 사진의 alt에 쓴다. */
   title: string
   /**
-   * Which photo is on screen now. The strip behind the viewer follows it, so
-   * that closing leaves the screen showing the photo the user was looking at
-   * rather than the one they opened — which is the whole distance they swiped,
-   * silently undone.
+   * 지금 화면에 있는 사진. 뷰어 뒤의 스트립이 이것을 따라가므로, 닫았을 때 열었던 사진이
+   * 아니라 보고 있던 사진이 남는다.
    */
   onPageChange?: (slot: PhotoSlot) => void
   /**
-   * A photo would not load in here. Required, not optional: for every photo but
-   * the first this is the first attempt anywhere — the tiles behind are lazy —
-   * so a viewer that kept the discovery to itself would leave the tile offering
-   * a photo that is known not to arrive.
+   * 여기서 사진이 로드되지 않았다. 선택이 아니라 필수다 — 첫 장을 뺀 모든 사진에게는
+   * 여기가 어디에서든 첫 시도이므로(뒤의 타일은 lazy다), 뷰어가 그 발견을 혼자 알고
+   * 있으면 타일이 오지 않을 사진을 계속 내준다.
    */
   onLoadError: (id: string) => void
   onClose: () => void
 }
 
 const DOUBLE_TAP_MS = 300
-/** A press that moves less than this is a tap, not a drag. */
+/** 이보다 덜 움직인 누름은 끌기가 아니라 탭이다. */
 const TAP_SLOP_PX = 12
-/** Two taps further apart than this are two taps, not a double tap. */
+/** 이보다 멀리 떨어진 두 탭은 더블탭이 아니라 탭 둘이다. */
 const DOUBLE_TAP_SLOP_PX = 40
 const SNAP_TRANSITION = 'transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1)'
 
 /**
- * What a page says when it has no photograph on it.
+ * 페이지 위에 무엇을 말할지. 사진이 스스로 말하면 `null`.
  *
- * Positioned over the page rather than laid out beside the photo, so that it
- * covers the whole page whatever is or is not in it — and so that nothing moves
- * at the moment the photo appears underneath it.
- */
-const pageNotice = css({
-  position: 'absolute',
-  inset: '0',
-  display: 'grid',
-  placeItems: 'center',
-  px: '6',
-  textAlign: 'center',
-  fontSize: 'sm',
-  color: 'overlay.fg',
-  opacity: 0.7,
-})
-
-/**
- * What to say over a page, or `null` when the photograph speaks for itself.
- *
- * "Signed" and "arrived" are two different things, so a `ready` slot is still a
- * wait until its pixels are here — which is why this asks about the URL and not
- * only about the slot.
+ * "서명됐다"와 "도착했다"는 다른 일이라, `ready` 슬롯도 픽셀이 오기 전까지는 기다림이다 —
+ * 그래서 슬롯만이 아니라 URL을 묻는다.
  */
 function pageMessage(slot: PhotoSlot, decoded: ReadonlySet<string>): string | null {
   if (slot.state === 'failed') return '사진을 불러오지 못했어요'
@@ -121,11 +82,11 @@ function pageMessage(slot: PhotoSlot, decoded: ReadonlySet<string>): string | nu
 }
 
 type Gesture =
-  /** One finger, photo at rest — dragging the track sideways. */
+  /** 한 손가락, 사진은 원래 크기 — 트랙을 옆으로 끈다. */
   | { kind: 'swipe'; startX: number; dx: number }
-  /** One finger, photo zoomed in — dragging the photo inside the frame. */
+  /** 한 손가락, 사진은 확대됨 — 사진을 틀 안에서 끈다. */
   | { kind: 'pan'; startX: number; startY: number; lastX: number; lastY: number }
-  /** Two fingers — scaling around the point held between them. */
+  /** 두 손가락 — 그 사이의 점을 중심으로 배율을 바꾼다. */
   | { kind: 'pinch'; startDistance: number; startScale: number; focus: Point }
 
 export function PhotoViewer({
@@ -141,32 +102,26 @@ export function PhotoViewer({
   const trackRef = useRef<HTMLDivElement>(null)
   const imageRefs = useRef<(HTMLImageElement | null)[]>([])
 
-  // Worked out once and used by both the initial state and the seating effect
-  // below, which would otherwise be the same expression written twice and
-  // liable to be changed once.
+  // 한 번 계산해 초기 상태와 아래 앉히기 effect가 함께 쓴다. 아니면 같은 식이 두 번
+  // 적히고 한 번만 고쳐진다.
   const startIndex = Math.max(
     0,
     slots.findIndex((slot) => slot.id === startId),
   )
 
-  // Seated from the start, not left at zero for the effect below to correct.
-  // The window around the current page is what decides which photos are
-  // fetched, so an index that is briefly wrong is a fetch for the wrong photo,
-  // and the one the user asked for starts a render late.
+  // 0에 두고 아래 effect가 고치게 하지 않고 처음부터 앉힌다. 현재 페이지 주변의 창이
+  // 어떤 사진을 받을지 정하므로, 잠깐 틀린 인덱스는 틀린 사진을 받아오는 일이다.
   const [index, setIndex] = useState(startIndex)
 
   /**
-   * Photos that have actually arrived, by URL.
+   * 실제로 도착한 사진을 URL로.
    *
-   * `ready` means a URL was signed, which is not the same as pixels having been
-   * fetched and decoded — and between the two the `<img>` has no intrinsic size,
-   * so the page is the viewer's own near-black background with a counter on it.
-   * That is the state `SquarePhoto` keeps a skeleton up for; the viewer was
-   * telling the user about failures and saying nothing about waiting.
+   * `ready`는 URL이 서명됐다는 뜻이지 픽셀이 와서 디코드됐다는 뜻이 아니다. 그 사이의
+   * `<img>`는 고유 크기가 없어서 페이지는 뷰어의 검은 배경에 카운터만 얹힌 상태가 된다.
    *
-   * By URL rather than by photo id, because re-signing gives the same photo a
-   * new URL that has to be fetched again — an id would report the new URL as
-   * already arrived and hand back the blank page this exists to prevent.
+   * 사진 id가 아니라 URL로 잡는 것은, 재서명이 같은 사진에 다시 받아야 하는 새 URL을
+   * 주기 때문이다 — id로 잡으면 새 URL을 이미 도착한 것으로 보고하고, 이 상태가 막으려던
+   * 빈 페이지를 돌려준다.
    */
   const [decoded, setDecoded] = useState<ReadonlySet<string>>(() => new Set())
 
@@ -174,16 +129,14 @@ export function PhotoViewer({
     setDecoded((seen) => (seen.has(url) ? seen : new Set(seen).add(url)))
   }
 
-  // Gesture state lives in refs, not state: a pinch produces a pointermove per
-  // frame per finger, and re-rendering the tree on each one to move a transform
-  // that React does not otherwise care about is how a viewer ends up stuttering.
-  // `index` is the exception — the counter is rendered from it.
+  // 제스처 상태는 state가 아니라 ref에 산다. 핀치는 손가락마다 프레임마다 pointermove를
+  // 내고, React가 달리 신경 쓰지 않는 transform을 옮기려고 그때마다 트리를 다시 그리면
+  // 뷰어가 끊긴다. `index`만 예외다 — 카운터가 그것으로 그려진다.
   const indexRef = useRef(index)
 
-  // Read through a ref so that `goTo` does not have to list it as a dependency:
-  // the callers pass an inline closure, so a new identity arrives every render,
-  // and goTo would be rebuilt — along with the key handler bound to it — on each
-  // one, which is a memo that only looks like a memo.
+  // ref로 읽어서 `goTo`가 이것을 의존성으로 적지 않게 한다. 호출부가 인라인 클로저를
+  // 넘기므로 매 렌더 새 identity가 오고, goTo와 거기 묶인 키 핸들러가 매번 다시
+  // 만들어진다 — memo처럼 생겼을 뿐인 memo다.
   const pageChangeRef = useRef(onPageChange)
   useEffect(() => {
     pageChangeRef.current = onPageChange
@@ -197,8 +150,8 @@ export function PhotoViewer({
     const track = trackRef.current
     if (!track) return
     track.style.transition = animate ? SNAP_TRANSITION : 'none'
-    // Percentages resolve against the track's own width, which is one photo
-    // wide, so -100% is exactly one page.
+    // 퍼센트는 트랙 자신의 너비를 기준으로 풀리고 그 너비가 사진 한 장이라, -100%가
+    // 정확히 한 페이지다.
     track.style.transform = `translate3d(calc(${-page * 100}% + ${dx}px), 0, 0)`
   }, [])
 
@@ -219,28 +172,25 @@ export function PhotoViewer({
   )
 
   /**
-   * Which photo is on screen, by id.
+   * 화면에 있는 사진을 id로.
    *
-   * `index` is a position, and a position stops meaning the same thing the
-   * moment the collection changes underneath it. This is what survives that —
-   * see the effect that follows the collection, below.
+   * `index`는 위치이고, 위치는 그 아래 컬렉션이 바뀌는 순간 같은 뜻이기를 그만둔다.
+   * 이것이 그것을 살아남는다 — 아래의 컬렉션 추적 effect 참고.
    */
   const shownIdRef = useRef<string | null>(null)
 
   const goTo = useCallback(
     (next: number, animate = true) => {
-      // `Math.max` for the same reason `pageAfterSwipe` needs it: with no photos
-      // the last index is -1, and clamping between 0 and -1 yields -1.
+      // `pageAfterSwipe`가 필요로 하는 것과 같은 이유의 `Math.max` — 사진이 없으면
+      // 마지막 인덱스가 -1이고, 0과 -1 사이로 가두면 -1이 나온다.
       const target = clamp(next, 0, Math.max(0, slots.length - 1))
       const shown = slots[target]
-      // Reset before the index moves, so it is the photo being left behind that
-      // goes back to fit — arriving on a page still zoomed from last time reads
-      // as a bug.
+      // 인덱스가 움직이기 전에 되돌린다 — 원래 크기로 돌아가는 것이 떠나는 사진이어야
+      // 한다. 지난번 배율이 남은 페이지에 도착하는 것은 버그로 읽힌다.
       //
-      // Compared by id rather than by position: a photo that only *moved*,
-      // because one before it was deleted, is still the photo being looked at,
-      // and snapping it back to fit would be the viewer reacting to something
-      // that happened somewhere else.
+      // 위치가 아니라 id로 비교한다. 앞의 사진이 지워져 *자리만 옮긴* 사진은 여전히
+      // 보고 있던 사진이고, 그것을 원래 크기로 되돌리는 것은 다른 데서 일어난 일에
+      // 뷰어가 반응하는 일이다.
       if (shown?.id !== shownIdRef.current) resetZoom(false)
       shownIdRef.current = shown?.id ?? null
       indexRef.current = target
@@ -256,8 +206,8 @@ export function PhotoViewer({
     if (!dialog) return
     dialog.showModal()
 
-    // <dialog> makes the page inert but not unscrollable: on iOS the wardrobe
-    // behind the viewer still rubber-bands under a pan that overshoots.
+    // `<dialog>`는 페이지를 비활성으로 만들지만 스크롤을 막지는 않는다. iOS에서는
+    // 뷰어 뒤의 옷장이 여전히 고무줄처럼 늘어난다.
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
@@ -265,18 +215,13 @@ export function PhotoViewer({
     }
   }, [])
 
-  // Puts the track under the page `index` already names — the initial state is
-  // the right page, but the transform that shows it is a DOM write, and this is
-  // where DOM writes happen.
+  // `index`가 이미 부르고 있는 페이지 아래로 트랙을 옮긴다 — 초기 상태는 맞는 페이지지만
+  // 그것을 보여주는 transform은 DOM 쓰기이고, DOM 쓰기는 여기서 한다.
   //
-  // Through `goTo` rather than by hand, so that the strip behind is told where
-  // the viewer ended up. The restore path is exactly the one where the two would
-  // otherwise start out disagreeing.
+  // 손으로 하지 않고 `goTo`를 거치므로 뒤 스트립도 뷰어가 어디 앉았는지 듣는다.
   //
-  // An empty `slots` here means an item with no photos at all, not one whose
-  // photos are unknown: the screen around this only renders once the item is
-  // loaded, and every photo is a slot from the first render whether or not its
-  // URL has been signed.
+  // 여기서 `slots`가 비었다는 것은 사진이 아예 없는 옷이라는 뜻이지 사진을 모른다는
+  // 뜻이 아니다.
   const seated = useRef(false)
   useEffect(() => {
     if (seated.current || slots.length === 0) return
@@ -285,50 +230,24 @@ export function PhotoViewer({
   }, [slots.length, startIndex, goTo])
 
   /**
-   * Follows the collection when it changes under the viewer.
+   * 뷰어 아래에서 컬렉션이 바뀌면 따라간다. 달리 그것을 하는 것이 없다 — 인덱스는
+   * 앉히기·방향키·스와이프 끝에서만 움직이고 `startId`는 앉힐 때 한 번 읽힌다.
    *
-   * Nothing else does: the index only moves on seating, an arrow key or the end
-   * of a swipe, and `startId` is read once when seating. So a photo deleted
-   * while the viewer was open used to go wrong in two different ways depending
-   * on where it was.
-   *
-   * Deleted *after* the open page — the index fell off the end. The track stayed
-   * translated to a page that no longer exists (a blank screen), the counter
-   * read "5 / 4" and `slots[index]` was undefined, until the user happened to
-   * swipe.
-   *
-   * Deleted *before* it — worse, because nothing looked wrong. The length shrank
-   * but the index stayed in range, so the same position quietly addressed the
-   * next photo along: `[A,B,C,D,E]` at index 2 is C, and losing A makes index 2
-   * D. This is the tiles-showing-their-neighbour's-photo failure that
-   * `photoSlots` says in its own header it got wrong twice, at full screen.
-   *
-   * Following the id closes both, and only clamps when the photo is genuinely
-   * gone. Reachable today by deleting a photo on another device and
-   * foregrounding this one — the focus refetch brings back an item with fewer
-   * images.
-   *
-   * The rule itself is in `../lib/followSlots`, where the tests beside it can
-   * hold both directions down without a DOM.
+   * 규칙과 그것이 막는 두 실패는 `../lib/followSlots`에 있다.
    */
   useEffect(() => {
     const target = indexAfterChange(slots, shownIdRef.current, indexRef.current)
     if (target !== null) goTo(target, false)
-    // Re-read afterwards rather than trusting `goTo` to have run. The one branch
-    // that returns `null` while the screen changed anyway is a photo deleted
-    // whose replacement lands on the same index — `[A,B]` losing A shows B at
-    // index 0 — and leaving the id at the deleted photo makes this ref, the one
-    // source of what is on screen, quietly wrong. Nothing reads it that way
-    // today; this file exists because position and identity were confused twice.
+    // `goTo`가 돌았으리라 믿지 않고 뒤에서 다시 읽는다. 화면은 바뀌었는데 `null`이
+    // 반환되는 가지가 하나 있다 — 지워진 사진의 자리를 같은 인덱스가 이어받는 경우
+    // (`[A,B]`에서 A가 사라지면 인덱스 0이 B다). 거기서 id를 지워진 사진에 두면 화면에
+    // 무엇이 있는지에 대한 유일한 출처가 조용히 틀린다.
     shownIdRef.current = slots[indexRef.current]?.id ?? null
   }, [slots, goTo])
 
-  // A re-sign hands the current page a new URL, and with it a new <img> element
-  // carrying no transform — while `transform.current` still describes the one
-  // that went away. Left alone the viewer believes it is zoomed in when the
-  // photo on screen is not: one-finger drags route to panning, so swiping stops
-  // working, and the next thing to touch the transform snaps the photo up to a
-  // magnification the user did not ask for.
+  // 재서명은 현재 페이지에 새 URL을, 그리고 transform이 없는 새 `<img>`를 건넨다 —
+  // `transform.current`는 사라진 쪽을 여전히 서술하는 채로. 그대로 두면 뷰어는 확대돼
+  // 있다고 믿는데 화면의 사진은 아니어서, 한 손가락 끌기가 이동으로 가고 스와이프가 멈춘다.
   const currentUrl = slots[index]?.url ?? null
   useEffect(() => {
     resetZoom(false)
@@ -347,13 +266,13 @@ export function PhotoViewer({
     return () => dialog.removeEventListener('keydown', handleKeyDown)
   }, [goTo])
 
-  /** Applies the frame's measurements to the bounds check. */
+  /** 틀의 측정값을 경계 검사에 넣는다. */
   function settle(next: Transform): Transform {
     const image = imageRefs.current[indexRef.current]
     const stage = stageRef.current
     if (!image || !stage) return next
-    // offsetWidth is the laid-out size, unaffected by the transform, so it stays
-    // correct however deep into a pinch we are.
+    // offsetWidth는 배치된 크기라 transform의 영향을 받지 않는다 — 핀치가 얼마나
+    // 진행됐든 맞는 값이다.
     return clampToBounds(
       next,
       { width: image.offsetWidth, height: image.offsetHeight },
@@ -361,15 +280,14 @@ export function PhotoViewer({
     )
   }
 
-  /** Pointer position relative to the middle of the stage, which is where the
-   * photo's transform-origin sits. */
+  /** 스테이지 중앙 기준의 포인터 위치. 사진의 transform-origin이 거기 있다. */
   function toStageCenter(point: Point): Point {
     const rect = stageRef.current?.getBoundingClientRect()
     if (!rect) return { x: 0, y: 0 }
     return { x: point.x - (rect.left + rect.width / 2), y: point.y - (rect.top + rect.height / 2) }
   }
 
-  /** The two live pointers, or undefined if a pinch has stopped being one. */
+  /** 살아 있는 두 포인터. 핀치가 더 이상 핀치가 아니면 undefined. */
   function fingerPair(): [Point, Point] | undefined {
     const [a, b] = [...pointers.current.values()]
     return a && b ? [a, b] : undefined
@@ -378,11 +296,9 @@ export function PhotoViewer({
   function beginPinch() {
     const pair = fingerPair()
     if (!pair) return
-    // Two fingers rarely land in the same frame, so the first one has usually
-    // already dragged the track a few pixels as a swipe. Nothing downstream of
-    // here touches the track again — the gesture is about the photo now — so
-    // without this the page stays sitting off-centre until the next swipe
-    // recomputes it, which is most visible while panning a zoomed photo.
+    // 두 손가락이 같은 프레임에 닿는 일은 드물어서, 첫 손가락이 보통 트랙을 몇 픽셀
+    // 스와이프로 끌어놓은 뒤다. 여기서부터는 아무도 트랙을 다시 건드리지 않으므로
+    // (제스처가 이제 사진의 것이다) 이것이 없으면 다음 스와이프까지 페이지가 어긋난 채 앉아 있다.
     applyTrack(indexRef.current, 0, true)
 
     const mid = toStageCenter(midpoint(...pair))
@@ -456,7 +372,7 @@ export function PhotoViewer({
       lastTap.current = { time: event.timeStamp, x: event.clientX, y: event.clientY }
       return
     }
-    // Cleared so a third tap starts over rather than reading as another double.
+    // 세 번째 탭이 또 다른 더블탭으로 읽히지 않고 처음부터 시작하도록 비운다.
     lastTap.current = { time: 0, x: 0, y: 0 }
 
     if (isZoomed(transform.current)) {
@@ -477,8 +393,8 @@ export function PhotoViewer({
 
     if (finished?.kind === 'pinch') {
       const remaining = [...pointers.current.values()][0]
-      // Lifting one finger mid-pinch continues as a pan rather than ending the
-      // gesture, which is what the hand that is still on the screen expects.
+      // 핀치 도중 손가락 하나를 떼면 제스처가 끝나지 않고 이동으로 이어진다. 화면에
+      // 남은 손이 기대하는 것이 그것이다.
       gesture.current = remaining
         ? {
             kind: 'pan',
@@ -500,8 +416,8 @@ export function PhotoViewer({
         resetZoom(true)
         return
       }
-      // A press that went nowhere while zoomed in is a tap, and the second one
-      // is how you get back out — without this, double-tap only ever zooms in.
+      // 확대된 상태에서 움직이지 않은 누름은 탭이고, 두 번째 탭이 빠져나오는 길이다 —
+      // 이것이 없으면 더블탭은 확대만 한다.
       const travelled = distance(
         { x: event.clientX, y: event.clientY },
         { x: finished.startX, y: finished.startY },
@@ -535,102 +451,51 @@ export function PhotoViewer({
       ref={dialogRef}
       onClose={onClose}
       aria-label={`${title} 사진`}
-      className={css({
-        position: 'fixed',
-        inset: '0',
-        width: '100dvw',
-        maxWidth: '100dvw',
-        height: '100dvh',
-        maxHeight: '100dvh',
-        m: '0',
-        p: '0',
-        border: 'none',
-        overflow: 'hidden',
-        bg: 'overlay',
-        color: 'overlay.fg',
-        '&::backdrop': { background: '{colors.overlay}' },
-      })}
+      className={styles.dialog}
     >
       <div
         ref={stageRef}
-        // Every gesture is ours; leaving any default action to the browser is
-        // what makes a pinch turn into a page scroll halfway through.
-        className={css({
-          position: 'absolute',
-          inset: '0',
-          overflow: 'hidden',
-          touchAction: 'none',
-          userSelect: 'none',
-        })}
+        className={styles.stage}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
       >
-        <div
-          ref={trackRef}
-          className={css({
-            display: 'flex',
-            width: 'full',
-            height: 'full',
-            willChange: 'transform',
-          })}
-        >
+        <div ref={trackRef} className={styles.track}>
           {slots.map((slot, position) => {
             const message = pageMessage(slot, decoded)
             return (
-              <div
-                key={slot.id}
-                className={css({
-                  position: 'relative',
-                  flex: '0 0 100%',
-                  height: 'full',
-                  display: 'grid',
-                  placeItems: 'center',
-                  overflow: 'hidden',
-                })}
-              >
-                {/* Only the page in view and its two neighbours are fetched. The
-                    track moves by transform, so every slide is inside the viewport
-                    as far as the browser is concerned and `loading="lazy"` would
-                    fetch the lot — which would undo the detail screen's lazy tiles
-                    the instant the viewer opened. One page either side is enough
-                    that a swipe lands on a photo that is already there. */}
+              <div key={slot.id} className={styles.page}>
+                {/* 보이는 페이지와 양옆 하나씩만 받아온다. 트랙이 transform으로 움직이므로
+                    브라우저가 보기에는 모든 슬라이드가 뷰포트 안이고 `loading="lazy"`는
+                    전부를 받아온다 — 뷰어가 열리는 순간 상세 화면의 lazy 타일을 무효로
+                    만드는 셈이다. 양옆 하나면 스와이프가 이미 있는 사진에 앉는다. */}
                 {Math.abs(position - index) <= 1 && (
                   <>
                     {slot.state === 'ready' && (
                       <img
                         ref={(node) => {
                           imageRefs.current[position] = node
-                          // A photo already in the cache can finish before React
-                          // attaches onLoad — the same race `SquarePhoto` keeps a
-                          // ref check for — and without this the page would stay
-                          // covered by a notice about a wait that already ended.
+                          // 캐시에 있는 사진은 React가 onLoad를 붙이기 전에 끝날 수
+                          // 있다 — `SquarePhoto`가 ref 검사를 두는 것과 같은 경합이고,
+                          // 없으면 이미 끝난 기다림을 알리는 문구가 페이지를 덮은 채 남는다.
                           if (node?.complete && node.naturalWidth > 0) markDecoded(slot.url)
                         }}
                         src={slot.url}
                         alt={`${title} 사진 ${position + 1}`}
-                        // Otherwise a mouse drag starts a native image drag and
-                        // the swipe dies on the first pointermove.
+                        // 없으면 마우스 끌기가 네이티브 이미지 드래그를 시작해
+                        // 스와이프가 첫 pointermove에서 죽는다.
                         draggable={false}
                         onLoad={() => markDecoded(slot.url)}
                         onError={() => onLoadError(slot.id)}
-                        className={css({
-                          display: 'block',
-                          maxWidth: 'full',
-                          maxHeight: 'full',
-                          objectFit: 'contain',
-                          transformOrigin: 'center',
-                          willChange: 'transform',
-                        })}
+                        className={styles.photo}
                       />
                     )}
 
-                    {/* A page with nothing on it yet says which nothing it is.
-                        Words rather than a skeleton: a pale pulsing block is what
-                        a photo looks like against a page, and this is a room with
-                        the lights off. */}
-                    {message != null && <p className={pageNotice}>{message}</p>}
+                    {/* 아직 아무것도 없는 페이지가 어떤 없음인지 말한다. 스켈레톤이
+                        아니라 말인 것은, 옅게 맥동하는 블록이 페이지 위 사진처럼 보이는데
+                        여기는 불 꺼진 방이기 때문이다. */}
+                    {message != null && <p className={styles.notice}>{message}</p>}
                   </>
                 )}
               </div>
@@ -638,61 +503,23 @@ export function PhotoViewer({
           })}
         </div>
 
-        {/* Outside the track, which is a flex row with no position of its own —
-            in there this centred-by-absolute notice would sit in the top-left
-            corner under the close button. The stage is the positioned box. */}
-        {slots.length === 0 && <p className={pageNotice}>사진이 없어요</p>}
+        {/* 트랙 밖에 둔다. 트랙은 자기 position이 없는 flex 행이라, 안에 넣으면 이
+            absolute 중앙 정렬 문구가 닫기 버튼 아래 왼쪽 위 구석에 앉는다. */}
+        {slots.length === 0 && <p className={styles.notice}>사진이 없어요</p>}
       </div>
 
-      {/* `appBarBox` for the vertical metrics, the same ones every screen's bar
-          wears — so the close button sits at the height the back chevron was at
-          on the screen this opened from. */}
-      <div
-        className={css(appBarBox, {
-          position: 'absolute',
-          insetInline: '0',
-          top: '0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '2',
-          px: '2',
-          // Sits over the photo, so it carries its own darkening rather than
-          // hoping the top of the picture is dark enough to read against.
-          bgGradient: 'to-b',
-          gradientFrom: '{colors.overlay.scrim}',
-          gradientTo: 'transparent',
-          // The bar spans the full width over the top of the photo. Left
-          // clickable it would swallow every swipe and pinch that started in
-          // that band, so only the button in it takes pointers.
-          pointerEvents: 'none',
-        })}
-      >
+      <div className={styles.topBar}>
         <button
           type="button"
           aria-label="사진 닫기"
           onClick={() => dialogRef.current?.close()}
-          className={css({
-            display: 'grid',
-            placeItems: 'center',
-            width: 'tap',
-            height: 'tap',
-            ml: '1',
-            color: 'overlay.fg',
-            rounded: 'full',
-            cursor: 'pointer',
-            pointerEvents: 'auto',
-            // The page's own focus ring is an orange that has to be legible over
-            // an arbitrary photograph; here it is drawn in the overlay's
-            // foreground colour, which the scrim above guarantees contrast for.
-            _focusVisible: { outline: '2px solid', outlineColor: 'overlay.fg', outlineOffset: '0' },
-          })}
+          className={styles.closeButton}
         >
           <X size={22} />
         </button>
 
         {slots.length > 1 && (
-          <span aria-live="polite" className={counter}>
+          <span aria-live="polite" className={styles.counter}>
             {index + 1} / {slots.length}
           </span>
         )}
@@ -700,21 +527,3 @@ export function PhotoViewer({
     </dialog>
   )
 }
-
-/**
- * The page counter, in a pill rather than loose over the photo.
- *
- * The gradient above it fades out before the counter's baseline on a tall photo,
- * so the text was relying on whatever happened to be behind it.
- */
-const counter = css({
-  px: '3',
-  py: '1.5',
-  mr: '2',
-  rounded: 'full',
-  bg: 'overlay.scrim',
-  backdropFilter: 'blur(6px)',
-  color: 'overlay.fg',
-  textStyle: 'caption',
-  fontVariantNumeric: 'tabular-nums',
-})

@@ -1,16 +1,15 @@
 /**
- * Korean initial-consonant (초성) search.
+ * 초성 검색.
  *
- * On a phone, typing "ㄴㅍㅅ" is far less work than "노스페이스", and a wardrobe
- * is searched constantly while standing in front of it. Doing this on the client
- * is also why the whole collection is loaded up front (PRD §8.4) — the same
- * matching in Postgres would need a generated column and a trigram index.
+ * 폰에서 "ㄴㅍㅅ"는 "노스페이스"보다 훨씬 적은 일이고, 옷장은 그 앞에 선 채로 계속
+ * 검색된다. 클라이언트에서 하는 것은 컬렉션을 통째로 미리 불러오는 결정(PRD §8.4)의
+ * 일부다 — 같은 매칭을 Postgres에서 하려면 생성 컬럼과 trigram 인덱스가 필요하다.
  */
 
 const HANGUL_BASE = 0xac00 // '가'
 const HANGUL_LAST = 0xd7a3 // '힣'
 
-// Index matches the composition order of the Unicode Hangul syllable block.
+// 인덱스가 유니코드 한글 음절 블록의 조합 순서와 맞는다.
 const CHOSEONG = [
   'ㄱ',
   'ㄲ',
@@ -36,7 +35,7 @@ const CHOSEONG = [
 const JUNGSEONG_COUNT = 21
 const JONGSEONG_COUNT = 28
 
-/** The 초성 of a composed syllable, or the character itself if it isn't one. */
+/** 조합된 음절의 초성. 음절이 아니면 글자 그대로. */
 function initialOf(char: string): string {
   const code = char.charCodeAt(0)
   if (code < HANGUL_BASE || code > HANGUL_LAST) return char
@@ -55,19 +54,18 @@ function stripSpaces(text: string): string {
   return text.replace(/\s/g, '')
 }
 
-/** True when every character of `query` is a bare 초성 jamo. */
+/** `query`가 전부 낱자 초성인지. */
 function isInitialsQuery(query: string): boolean {
   const compact = stripSpaces(query)
   return compact.length > 0 && [...compact].every((c) => CHOSEONG.includes(c))
 }
 
 /**
- * Matches `query` against `text`, case-insensitively.
+ * `query`를 `text`에 맞춰본다. 대소문자는 가리지 않는다.
  *
- * A query made entirely of 초성 jamo is matched against the text's initials;
- * anything else is a plain substring match. Restricting initials matching to
- * jamo-only queries keeps "니트" from matching every ㄴ-ㅌ word — once the user
- * has typed real syllables they mean them literally.
+ * 전부 초성 낱자인 질의만 초성끼리 비교하고, 나머지는 평범한 부분 문자열 비교다.
+ * 그 제한이 "니트"가 모든 ㄴ-ㅌ 단어에 걸리는 것을 막는다 — 음절을 쳤다면 그대로를
+ * 뜻한 것이다.
  */
 export function matchesQuery(text: string, query: string): boolean {
   const needle = query.trim().toLowerCase()
@@ -77,9 +75,8 @@ export function matchesQuery(text: string, query: string): boolean {
   if (haystack.includes(needle)) return true
 
   if (isInitialsQuery(needle)) {
-    // Whitespace is dropped from both sides: nobody types the spaces when
-    // entering initials, so "ㅅㅈㅋ" should still find "노스페이스 자켓" across
-    // the word boundary.
+    // 양쪽 모두 공백을 버린다 — 초성을 칠 때 띄어쓰기를 하는 사람은 없으므로
+    // "ㅅㅈㅋ"가 단어 경계를 넘어 "노스페이스 자켓"을 찾아야 한다.
     return stripSpaces(toInitials(haystack)).includes(stripSpaces(needle))
   }
 

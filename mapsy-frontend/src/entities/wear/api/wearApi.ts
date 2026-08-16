@@ -3,32 +3,25 @@ import { warnIfTruncated } from '@/shared/api/warnIfTruncated'
 import type { WearEntry } from '../model/types'
 
 /**
- * Supabase access for the wear log.
+ * 착용 기록의 Supabase 접근.
  *
- * Like `itemApi`, reads and writes carry no owner condition — the policy scopes
- * every row to `auth.uid()`, and repeating that here would suggest the security
- * lives in the client.
+ * `itemApi`처럼 읽기·쓰기에 소유자 조건이 없다 — 정책이 모든 행을 `auth.uid()`로 좁힌다.
  *
- * `removeWear` is the exception, and not for the reason `deleteItem` is: it
- * names `item_id` and `worn_on` because that pair *is* the row's identity. There
- * is no id to delete by, which is the same fact the unique constraint states.
+ * `removeWear`는 예외이고 `deleteItem`과는 다른 이유다. `item_id`와 `worn_on`을 부르는 것은
+ * 그 짝이 행의 *정체*이기 때문이다. 지울 id 자체가 없고, 유니크 제약이 같은 사실을 말한다.
  */
 
 /**
- * Ceiling on the full fetch. See `warnIfTruncated` for why `count: 'exact'` is
- * what detects a short answer rather than this limit.
+ * 전량 로드의 상한. 짧은 답을 잡아내는 것은 이 한도가 아니라 `count: 'exact'`다 —
+ * `warnIfTruncated` 참고.
  *
- * Four garments a day for ten years is about 14,600 rows, so this sits past any
- * wardrobe that is still worth loading whole. Reaching it means the same thing
- * the item ceiling means: the client-side bet has been outgrown.
+ * 하루 네 벌씩 10년이면 14,600행쯤이므로, 통째로 받을 만한 어떤 옷장보다도 위에 있다.
  */
 const WEAR_FETCH_LIMIT = 20000
 
 export async function fetchWears(): Promise<WearEntry[]> {
-  // Two columns, not `*`. This is the one query whose row count grows without
-  // limit — every other table is bounded by how many garments a person owns —
-  // so the three columns nothing reads (`id`, `user_id`, `created_at`) are three
-  // columns' worth of payload on every load, forever.
+  // `*`가 아니라 두 컬럼. 행 수가 한없이 자라는 유일한 쿼리다 — 다른 테이블은 가진
+  // 옷의 수로 묶인다 — 그래서 아무도 읽지 않는 세 컬럼은 매 로드마다 영원히 실리는 짐이다.
   const { data, error, count } = await getSupabase()
     .from('item_wears')
     .select('item_id, worn_on', { count: 'exact' })
@@ -42,12 +35,11 @@ export async function fetchWears(): Promise<WearEntry[]> {
 }
 
 /**
- * Rewrites one day to exactly this set of garments.
+ * 하루를 정확히 이 옷들로 다시 쓴다.
  *
- * Through the database function rather than a delete followed by an insert:
- * each PostgREST request is its own transaction, so a delete that lands while
- * the insert fails is the day's record wiped with nothing to retry from. The
- * function does both or neither — see the migration.
+ * delete 후 insert가 아니라 DB 함수를 거친다. PostgREST 요청은 각각이 트랜잭션이라,
+ * delete가 들어가고 insert가 실패하면 그날의 기록이 재시도할 것도 없이 지워진다.
+ * 함수는 둘 다 하거나 둘 다 안 한다.
  */
 export async function setWears(wornOn: string, itemIds: string[]): Promise<void> {
   const { error } = await getSupabase().rpc('set_item_wears', {
@@ -58,12 +50,11 @@ export async function setWears(wornOn: string, itemIds: string[]): Promise<void>
 }
 
 /**
- * Records one garment on one day.
+ * 옷 하나를 하루에 기록한다.
  *
- * `upsert` with `ignoreDuplicates`, not `insert`. The unique constraint makes
- * recording the same day twice a no-op by design, and an ordinary insert would
- * turn that no-op into a 23505 the caller has to recognise and swallow — which
- * is a race the detail screen can lose honestly, by being open on two devices.
+ * `insert`가 아니라 `ignoreDuplicates` upsert다. 유니크 제약이 같은 날 두 번 기록하는 것을
+ * 설계상 무효 연산으로 만드는데, 평범한 insert는 그것을 호출부가 알아보고 삼켜야 하는
+ * 23505로 바꾼다 — 상세 화면이 두 기기에 열려 있으면 정당하게 지는 경합이다.
  */
 export async function addWear(itemId: string, userId: string, wornOn: string): Promise<void> {
   const { error } = await getSupabase()

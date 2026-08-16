@@ -4,21 +4,19 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 /**
- * What a mutation reports while a `mutate`-level `onError` is still running —
- * the premise the wardrobe's 23503 recovery rests on.
+ * `mutate` 수준의 `onError`가 아직 도는 동안 뮤테이션이 무엇을 보고하는가 —
+ * 옷장의 23503 복구가 딛고 선 전제.
  *
- * That callback awaits a wardrobe refetch before it says anything, and for the
- * length of that await the submit button has to look busy. The obvious source
- * for "busy" is the mutation's own `isPending`, and it is the wrong one: by the
- * time the callback is entered the mutation has already settled. The screen
- * therefore carries a second flag, and this is why it needs one.
+ * 그 콜백은 아무 말을 하기 전에 옷장 갱신을 기다리고, 그 기다림 내내 제출 버튼은 바빠
+ * 보여야 한다. "바쁨"의 뻔한 출처는 뮤테이션 자신의 `isPending`인데 그것이 틀린
+ * 출처다 — 콜백에 들어올 때 뮤테이션은 이미 끝나 있다. 그래서 화면이 두 번째 플래그를
+ * 들고, 이것이 그 이유다.
  *
- * Asserted against the real library rather than reasoned about, because the
- * screen's own tests mock `useSetWears` and hand it `isPending: false` — they
- * would agree with any answer.
+ * 추론하지 않고 진짜 라이브러리에 대고 검사한다. 화면 자신의 테스트는 `useSetWears`를
+ * 목으로 바꿔 `isPending: false`를 건네므로 어떤 답에도 동의한다.
  */
-describe('react-query, the premise the 23503 recovery rests on', () => {
-  it('has already left isPending by the time a mutate-level onError runs, and does not wait for it', async () => {
+describe('react-query — 23503 복구가 딛고 선 전제', () => {
+  it('mutate 수준 onError가 돌 때는 이미 isPending을 떠나 있고, 그것을 기다리지도 않는다', async () => {
     const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
 
     let release!: () => void
@@ -32,8 +30,8 @@ describe('react-query, the premise the 23503 recovery rests on', () => {
         const mutation = useMutation({
           mutationFn: () => Promise.reject(new Error('boom')),
         })
-        // Both read on every render, which is what keeps this subscribed — v5
-        // only re-renders for the properties a render actually touched.
+        // 둘 다 매 렌더에서 읽어야 구독이 유지된다 — v5는 렌더가 실제로 만진
+        // 프로퍼티에만 다시 그린다.
         return { mutate: mutation.mutate, isPending: mutation.isPending }
       },
       {
@@ -54,14 +52,13 @@ describe('react-query, the premise the 23503 recovery rests on', () => {
     await waitFor(() => expect(seen.atEntry).toBeDefined())
     seen.whileAwaiting = result.current.isPending
 
-    // Entered with the mutation already settled, and still settled while the
-    // callback is suspended — so nothing about `isPending` describes the work
-    // the callback is doing.
+    // 뮤테이션이 이미 끝난 채로 들어왔고, 콜백이 멈춰 있는 동안에도 끝난 채다 —
+    // `isPending`의 무엇도 콜백이 하는 일을 서술하지 않는다.
     expect(seen.atEntry).toBe(false)
     expect(seen.whileAwaiting).toBe(false)
 
-    // And the callback's promise is not awaited by anything: the mutation was
-    // finished before this line, which is why `finished` is still unset.
+    // 그리고 콜백의 promise를 기다리는 것이 없다 — 뮤테이션은 이 줄 전에 끝났고,
+    // 그래서 `finished`가 아직 비어 있다.
     expect(seen.finished).toBeUndefined()
 
     release()

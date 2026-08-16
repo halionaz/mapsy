@@ -5,26 +5,22 @@ import type { WearSummary } from '@/entities/wear'
 import type { SortId, WardrobeFilters } from '../model/filters'
 
 /**
- * What this needs beyond an item's own columns.
+ * 옷 자신의 컬럼 말고 이 파일이 더 필요로 하는 것.
  *
- * Through `Pick` rather than spelling `{ lastWornOn: string | null }` out again:
- * the field is the wear entity's, and a copy of its type here is a copy that can
- * disagree with it. The nullability in particular is load-bearing — the `worn`
- * comparator is built around null meaning "never", not "long ago".
+ * `{ lastWornOn: string | null }`을 다시 적지 않고 `Pick`으로 가져온다 — 그 필드는 착용
+ * 엔티티의 것이고, 여기 복사본을 두면 언젠가 어긋난다. 특히 nullable이 중요하다.
+ * `worn` 비교 함수는 null이 "오래전"이 아니라 "한 번도"라는 위에 지어져 있다.
  */
 export type SortableItem = Item & Pick<WearSummary, 'lastWornOn'>
 
 /**
- * Client-side filtering and sorting — PRD §6.1, §8.4.
+ * 클라이언트 필터링·정렬 — PRD §6.1, §8.4.
  *
- * The whole wardrobe is held in memory, so this runs on every keystroke and chip
- * tap with no network round trip. Pure on purpose: this is the logic that
- * decides what the user sees, and it should be testable without a database.
+ * 옷장 전체가 메모리에 있어서 타이핑 한 글자, 칩 한 번마다 왕복 없이 돌아간다.
+ * 순수하게 두는 것은 의도다 — 사용자가 보는 것을 정하는 로직이고, DB 없이 검사할 수 있어야 한다.
  *
- * Values within one axis are OR'd and the axes are AND'd, so selecting 블랙 and
- * 네이비 widens the result while adding 여름 narrows it. That asymmetry is what
- * people expect from faceted filters, and getting it backwards makes multi-select
- * feel broken.
+ * 한 축 안의 값은 OR, 축끼리는 AND다. 블랙과 네이비를 고르면 결과가 넓어지고 여름을
+ * 더하면 좁아진다. 반대로 만들면 다중 선택이 고장 난 것처럼 느껴진다.
  */
 
 function hasAny<T>(itemValues: readonly T[], selected: readonly T[]): boolean {
@@ -37,7 +33,7 @@ function includesOrEmpty(value: string | null, selected: readonly string[]): boo
   return value !== null && selected.includes(value)
 }
 
-/** Searches the fields a person would expect to search: name, brand, memo, tags. */
+/** 사람이 검색될 것이라 기대하는 필드 — 이름, 브랜드, 메모, 태그. */
 function matchesSearch(item: Item, query: string): boolean {
   if (!query.trim()) return true
   const haystacks = [item.title, item.brand, item.memo, ...item.tags]
@@ -51,34 +47,28 @@ function compare(a: SortableItem, b: SortableItem, sort: SortId): number {
     case 'title':
       return a.title.localeCompare(b.title, 'ko')
     case 'worn': {
-      // Two tiers, and the second one is the point of the axis.
+      // 두 층이고, 두 번째가 이 축의 요점이다.
       //
-      // Worn garments first, most recent at the top. Never-worn ones after all
-      // of them, newest registration first — so the very bottom of a section is
-      // "registered a long time ago and never once worn", which is the garment
-      // this sort exists to find.
+      // 입은 옷이 먼저, 최근이 위. 한 번도 안 입은 옷은 그 뒤에 최근 등록순으로 —
+      // 그래서 구획의 맨 아래가 "오래전에 등록하고 한 번도 안 입은 옷"이 된다.
       //
-      // Not `lastWornOn ?? createdAt`, which was the first shape and is wrong at
-      // the other end: a garment registered this morning and never worn would
-      // outrank the shirt actually worn yesterday, at the top of a list labelled
-      // 최근 입은순.
+      // `lastWornOn ?? createdAt`은 반대쪽 끝에서 틀린다. 오늘 아침 등록하고 안 입은 옷이
+      // 어제 실제로 입은 셔츠를 제치고 최근 입은순의 맨 위에 온다.
       if (a.lastWornOn == null && b.lastWornOn == null) {
         return b.createdAt.localeCompare(a.createdAt)
       }
       if (a.lastWornOn == null) return 1
       if (b.lastWornOn == null) return -1
 
-      // Same-day ties are the ordinary case, not a corner: a day's worth of
-      // garments all carry one date. Falling through to registration order makes
-      // the comparator total instead of leaving the answer to the incidental
-      // order of the cache array and the sort's stability.
+      // 같은 날 동점은 예외가 아니라 평범한 경우다 — 하루치 옷이 전부 한 날짜를 단다.
+      // 등록순으로 흘려보내면 비교 함수가 전순서가 되고, 답이 캐시 배열의 우연한 순서에
+      // 맡겨지지 않는다.
       const byDay = b.lastWornOn.localeCompare(a.lastWornOn)
       return byDay !== 0 ? byDay : b.createdAt.localeCompare(a.createdAt)
     }
     case 'price_desc':
     case 'price_asc': {
-      // Items with no price sink to the bottom either way — a missing price is
-      // unknown, not zero, and burying it keeps the top of the list meaningful.
+      // 가격 없는 옷은 어느 방향이든 바닥으로 — 빠진 가격은 0이 아니라 모름이다.
       if (a.price == null && b.price == null) return b.createdAt.localeCompare(a.createdAt)
       if (a.price == null) return 1
       if (b.price == null) return -1
@@ -95,10 +85,9 @@ export function applyFilters<T extends SortableItem>(
     if (item.status !== filters.status) return false
     if (filters.favoriteOnly && !item.isFavorite) return false
 
-    // No arm for "this id has no group": `Item.categoryId` is a `SubcategoryId`,
-    // which `groupIdOf` answers totally. The guard that used to be here read as
-    // caution but could only have meant "hide the garment", and it covered a
-    // case `mapRow` already folds into 기타 at the boundary.
+    // "대분류가 없는 id"를 위한 가지는 없다. `Item.categoryId`는 `SubcategoryId`이고
+    // `groupIdOf`가 전순함수로 답한다. 여기 있던 가드는 조심처럼 읽혔지만 뜻할 수 있는
+    // 것은 "그 옷을 감춘다"뿐이었고, `mapRow`가 이미 경계에서 기타로 접는 경우였다.
     if (filters.groupIds.length > 0 && !filters.groupIds.includes(groupIdOf(item.categoryId))) {
       return false
     }
@@ -118,7 +107,7 @@ export function applyFilters<T extends SortableItem>(
     return matchesSearch(item, filters.query)
   })
 
-  // Copy before sorting: the input is the query cache's array and mutating it
-  // would reorder every other reader.
+  // 정렬 전에 복사한다 — 입력이 쿼리 캐시의 배열이라, 그 자리에서 정렬하면 그것을
+  // 읽는 다른 모두의 순서가 바뀐다.
   return [...matched].sort((a, b) => compare(a, b, filters.sort))
 }

@@ -7,36 +7,31 @@ import { MAX_SEASONS_PER_ITEM, SEASON_IDS } from '@/shared/config/seasons'
 import { LIMITS, MAX_PHOTOS } from './limits'
 
 /**
- * The form's copies of database ceilings, checked against the schema.
+ * 폼이 들고 있는 DB 상한의 사본을 스키마와 맞춰본다.
  *
- * The generated inventory used to carry names only, and a name is not what
- * drifts: `items_price_max` kept its name while the number beside it was wrong
- * by a factor of ten, and what found it was a user whose five photos had already
- * uploaded. So the definitions are generated too, and every ceiling in them has
- * to be accounted for here — either mirrored, or written down as deliberately
- * unmirrored with the reason.
+ * 생성된 목록이 이름만 싣던 시절이 있었고, 어긋나는 것은 이름이 아니다 —
+ * `items_price_max`는 이름을 지킨 채 옆의 숫자가 열 배 틀렸고, 그것을 찾은 것은 사진
+ * 다섯 장을 이미 올린 사용자였다. 그래서 정의도 함께 생성하고, 거기 모든 상한이 여기서
+ * 계상되어야 한다 — 미러링하거나, 일부러 안 한다고 이유와 함께 적거나.
  *
- * The second direction is the one that matters. Anyone can add a ceiling to a
- * migration; nobody has to remember this file exists, because a new one with no
- * entry fails the last test below.
+ * 중요한 것은 두 번째 방향이다. 마이그레이션에 상한을 더하는 것은 누구나 할 수 있고,
+ * 이 파일의 존재를 아무도 기억할 필요가 없다 — 항목 없는 새 상한은 아래 마지막
+ * 테스트에서 걸린다.
  */
 
-/** The N in a `… <= N` CHECK, or null where a constraint sets no ceiling. */
+/** `… <= N` CHECK의 N. 상한을 두지 않는 제약이면 null. */
 function ceilingOf(definition: string): number | null {
   const match = /<=\s*(\d+)/.exec(definition)
   return match ? Number(match[1]) : null
 }
 
 /**
- * Does this constraint compare against a number at all?
+ * 이 제약이 숫자와 비교를 하기는 하는가.
  *
- * Deliberately looser than `ceilingOf`, and that gap is the point. `ceilingOf`
- * only understands `<= N`, so a bound written `length(x) < 101`, or with the
- * operands the other way round, or as `BETWEEN`, would produce no ceiling — and
- * a constraint with no ceiling used to fall out of the accounting entirely and
- * pass in silence, which is the same failure mode the whole file is here to
- * remove. This is what decides *whether an entry is required*; `ceilingOf` only
- * decides what the entry has to equal.
+ * `ceilingOf`보다 일부러 느슨하고, 그 간극이 요점이다. `ceilingOf`는 `<= N`만 알아서
+ * `length(x) < 101`이나 피연산자가 뒤집힌 것, `BETWEEN`은 상한을 내놓지 못하고 —
+ * 상한 없는 제약은 계상에서 통째로 빠져 조용히 통과했다. 이것이 *항목이 필요한지*를
+ * 정하고, `ceilingOf`는 그 항목이 무엇과 같아야 하는지만 정한다.
  */
 function comparesToNumber(definition: string): boolean {
   return /(<=|>=|<|>)\s*\d+|\d+\s*(<=|>=|<|>)|\bBETWEEN\b/i.test(definition)
@@ -47,18 +42,16 @@ const BOUNDED = Object.entries(DB_CONSTRAINT_DEFS).filter(([, definition]) =>
 )
 
 /**
- * The values a `<@ ARRAY[…]` or `= ANY (ARRAY[…])` CHECK admits, sorted.
+ * `<@ ARRAY[…]`나 `= ANY (ARRAY[…])` CHECK이 허용하는 값들, 정렬해서.
  *
- * The other half of the same problem. A ceiling drifts by a number and a
- * vocabulary drifts by an element, and the second is *easier* to do by accident:
- * adding a colour to `shared/config/colors.ts` puts a chip on the form with
- * nothing in that file to say the database has to agree. The garment then
- * uploads all five photos and dies on `items_colors_valid`.
+ * 같은 문제의 나머지 절반이다. 상한은 숫자 하나로 어긋나고 어휘는 원소 하나로 어긋나는데,
+ * 두 번째가 실수로 하기 *더 쉽다* — `shared/config/colors.ts`에 색 하나를 더하면 폼에
+ * 칩이 생기고, 그 파일에는 DB도 동의해야 한다고 말하는 것이 없다. 그러면 사진 다섯 장을
+ * 다 올린 뒤 `items_colors_valid`에서 죽는다.
  *
- * Scoped to the inside of the brackets on purpose. `items_category_group_valid`
- * also contains `split_part(category_id, '.'::text, 1)`, and a pattern that read
- * every quoted literal in the definition would pull that separator in as a ninth
- * category group.
+ * 괄호 안으로 범위를 좁힌 것은 의도다. `items_category_group_valid`에는
+ * `split_part(category_id, '.'::text, 1)`도 들어 있어서, 정의의 모든 인용 리터럴을 읽는
+ * 패턴은 그 구분자를 아홉 번째 카테고리 그룹으로 끌고 온다.
  */
 function setOf(definition: string): string[] | null {
   const array = /ARRAY\[([^\]]*)\]/.exec(definition)
@@ -68,7 +61,7 @@ function setOf(definition: string): string[] | null {
 
 const SETS = Object.entries(DB_CONSTRAINT_DEFS).filter(([, definition]) => setOf(definition))
 
-/** Constraint name → the client-side number that has to equal its ceiling. */
+/** 제약 이름 → 그 상한과 같아야 하는 클라이언트 쪽 숫자. */
 const MIRRORED: Record<string, number> = {
   items_title_length: LIMITS.title,
   items_brand_length: LIMITS.brand,
@@ -80,8 +73,8 @@ const MIRRORED: Record<string, number> = {
   items_price_max: LIMITS.price,
   items_colors_limit: MAX_COLORS_PER_ITEM,
   items_seasons_limit: MAX_SEASONS_PER_ITEM,
-  // The ceiling is on `sort_order`, which starts at 0 — so the last usable index
-  // is one less than the number of photos the picker will accept.
+  // 상한은 0부터 시작하는 `sort_order`에 걸려 있어, 마지막으로 쓸 수 있는 인덱스가
+  // 피커가 받는 사진 수보다 하나 작다.
   item_images_sort_order_range: MAX_PHOTOS - 1,
 }
 

@@ -1,214 +1,120 @@
 import { Check, Star } from 'lucide-react'
 import { Link } from 'react-router'
-import { css, cx } from 'styled-system/css'
-import { vstack } from 'styled-system/patterns'
 
-import type { Worn } from '@/entities/wear'
-import { formatDayAgo } from '@/shared/lib/format'
 import { Button, Spinner } from '@/shared/ui/Button'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
-import { skeletonSurface } from '@/shared/ui/skeletonStyle'
 import { SquarePhoto } from '@/shared/ui/SquarePhoto'
+import * as styles from './ItemCard.css'
 import type { WardrobeItem } from '../model/types'
 import type { PendingUpload } from '../model/pendingUploads'
 
 /**
- * Cards for the wardrobe grid.
+ * 옷장 격자의 카드.
  *
- * The photo carries the recognition, so a card is mostly image with the title
- * and colour dots as confirmation. Anything more competes with the grid's job of
- * showing a lot of clothes at once — which is also why the tile has no card
- * surface of its own: three columns of bordered boxes on a phone leaves the
- * photographs about 90px wide, and the chrome ends up louder than the clothes.
+ * 알아보게 하는 것은 사진이라 카드는 대부분 이미지다. 타일에 카드 표면이 없는 것도 같은
+ * 이유 — 테두리 상자 세 열은 사진을 밀어내고 옷보다 장식을 시끄럽게 만든다.
  *
- * Every card occupies the same box no matter how much of the item was filled in.
- * Only the title and the photo are guaranteed to exist, so the parts that render
- * optional data reserve their space instead of collapsing — otherwise an item
- * saved without colours is a visibly shorter card sitting next to one that has
- * them, and the grid reads as broken rather than as sparsely filled data.
- *
- * Saved items and in-flight registrations are separate components because they
- * are separate things: one links to a detail screen that exists, the other is a
- * progress indicator that may need repairing.
+ * 채워진 정보와 무관하게 모든 카드가 같은 상자를 차지한다. 보장된 것이 제목과 사진뿐이라,
+ * 선택 정보를 그리는 부분은 접히지 않고 자리를 잡아둔다.
  */
 
 /**
- * `display: block` because this is a `<span>`, and it is a span because
- * `SelectableItemCard` wraps the whole face in a `<button>` — whose content
- * model is phrasing content, so a `<p>` inside it is invalid markup. Nothing
- * here was ever a paragraph; it is a garment's name.
- */
-const title = css({
-  display: 'block',
-  textStyle: 'caption',
-  color: 'fg',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-})
-
-/**
- * The line under the title: colour dots on an item card, upload state on a
- * pending one. Fixed height so it takes up the same room when it is empty —
- * that is what keeps a colourless item the same size as a colourful one.
- */
-const metaRow = css({
-  display: 'flex',
-  alignItems: 'center',
-  gap: '1',
-  // One line of caption text at the inherited line-height, so the row is the
-  // same height whether it holds colour dots, "저장 중", or nothing at all.
-  height: '4.5',
-  // The row now has two occupants, and a card is a third of the page width less
-  // two gutters — under 100px on the narrowest screen the app targets (PRD §9).
-  // Clipping here rather than letting the line grow keeps the grid's rows level;
-  // which of the two gives way is decided below.
-  overflow: 'hidden',
-})
-
-/** The dots, and the half of the row that yields when there is not enough of it. */
-const swatches = css({
-  display: 'flex',
-  alignItems: 'center',
-  gap: '1',
-  overflow: 'hidden',
-  flexShrink: 1,
-  minWidth: 0,
-})
-
-/**
- * When this garment was last worn, at the end of the meta row.
+ * 카드 안쪽 전부. 링크 판본과 체크박스 판본이 서로 다른 카드로 갈라지지 않도록.
  *
- * Drawn only when there is an answer. A garment with no wear yet gets nothing
- * rather than "기록 없음": for the first weeks after this feature ships that
- * label would be on every card in the wardrobe, and a screen where every item
- * says the same thing has been given a caption, not information. Where the
- * absence *does* mean something — 최근 입은순, where the unworn sink to the
- * bottom — the sort itself is what says so.
- *
- * `flexShrink: 0` so the dots clip before the text does. A partly cut dot row
- * reads as "and more colours"; a cut date reads as a bug.
- */
-const wornAgo = css({
-  ml: 'auto',
-  pl: '1',
-  flexShrink: 0,
-  textStyle: 'caption',
-  color: 'fg.subtle',
-  whiteSpace: 'nowrap',
-})
-
-const tile = cx(
-  vstack({ gap: '2', alignItems: 'stretch' }),
-  css({
-    rounded: 'card',
-    transitionProperty: 'transform',
-    transitionDuration: 'fast',
-    transitionTimingFunction: 'out',
-    layerStyle: 'focusable',
-    // Hover-capable pointers only. On a touch screen `:hover` sticks after a tap
-    // and leaves the tapped tile floating a couple of pixels above its row.
-    '@media (hover: hover)': {
-      _hover: { transform: 'translateY(-3px)' },
-    },
-    _motionReduce: {
-      '@media (hover: hover)': { _hover: { transform: 'none' } },
-    },
-  }),
-)
-
-/**
- * Everything inside a card, so that the link version and the checkbox version
- * cannot drift into being two different cards.
- *
- * `selected` is three-valued on purpose: `undefined` is "not in selection mode"
- * and draws no check at all, where `false` draws an empty one. An unselected
- * card and a card on a screen with no selection happening are different states,
- * and a boolean would have made them the same.
+ * `selected`가 세 값인 것은 의도다. `undefined`는 "선택 모드가 아님"이라 체크를 아예
+ * 그리지 않고, `false`는 빈 체크를 그린다. 선택되지 않은 카드와 선택이 일어나지 않는
+ * 화면의 카드는 다른 상태이고, boolean은 그 둘을 같게 만든다.
  */
 function CardFace({
   item,
-  today,
+  wornLabel,
   selected,
 }: {
-  item: Worn<WardrobeItem>
-  today: string
+  item: WardrobeItem
+  wornLabel: string | null
   selected?: boolean
 }) {
-  const wornLabel = item.lastWornOn ? formatDayAgo(item.lastWornOn, today) : null
-
   return (
     <>
-      {/* alt is empty on purpose: the title is the next line, and announcing it
-          twice is noise rather than description. */}
+      {/* alt이 빈 것은 의도다 — 다음 줄이 제목이고, 두 번 알리는 것은 설명이 아니라 소음이다. */}
       <SquarePhoto
         src={item.coverUrl}
         alt=""
-        // `coverUrl` is null for two unrelated reasons — the item has no photo,
-        // or it has one whose thumbnail could not be signed — and the query
-        // hands both back the same way. The image rows are what tell them
-        // apart, and without asking, a garment with a photo would be labelled
-        // as having none.
+        // `coverUrl`이 null인 이유는 둘이고(사진이 없거나, 있는데 썸네일을 서명하지
+        // 못했거나) 쿼리는 둘을 같은 모양으로 건넨다. 그 둘을 가르는 것은 사진 행이다.
         fallback={item.images.length > 0 ? 'failed' : 'empty'}
       >
-        {selected && <span className={selectedRing} aria-hidden="true" />}
+        {selected && <span className={styles.selectedRing} aria-hidden="true" />}
 
         {selected !== undefined && (
-          <span className={checkBadge} data-selected={selected || undefined} aria-hidden="true">
+          <span
+            className={styles.checkBadge}
+            data-selected={selected || undefined}
+            aria-hidden="true"
+          >
             {selected && <Check size={12} strokeWidth={3.5} />}
           </span>
         )}
 
         {item.isFavorite && (
-          <span aria-label="즐겨찾기" className={favoriteBadge}>
+          <span aria-label="즐겨찾기" className={styles.favoriteBadge}>
             <Star size={11} fill="currentColor" strokeWidth={0} />
           </span>
         )}
       </SquarePhoto>
 
-      <span className={title}>{item.title}</span>
+      <span className={styles.title}>{item.title}</span>
 
-      <span className={metaRow}>
-        <span className={swatches}>
+      <span className={styles.metaRow}>
+        <span className={styles.swatches}>
           {item.colors.map((color) => (
             <ColorSwatch key={color} color={color} />
           ))}
         </span>
-        {wornLabel && <span className={wornAgo}>{wornLabel}</span>}
+        {wornLabel && <span className={styles.wornAgo}>{wornLabel}</span>}
       </span>
     </>
   )
 }
 
-export function ItemCard({ item, today }: { item: Worn<WardrobeItem>; today: string }) {
+interface ItemCardProps {
+  item: WardrobeItem
+  /**
+   * 마지막으로 입은 때, 이미 문장이 된 상태로. 기록이 없으면 `null`.
+   *
+   * 착용 기록은 다른 엔티티라 카드가 그것을 알지 않는다. 기록이 없는 옷이 "기록 없음"
+   * 대신 아무것도 받지 않는 것은, 그 라벨이 기능이 나가고 한동안 모든 카드에 붙고,
+   * 모두가 같은 말을 하는 화면은 정보가 아니라 캡션을 받은 것이기 때문이다.
+   *
+   * optional이 아닌 것은 의도다 — 빠뜨린 호출부가 타입 에러 대신 라벨 없는 카드를 낸다.
+   */
+  wornLabel: string | null
+}
+
+export function ItemCard({ item, wornLabel }: ItemCardProps) {
   return (
-    <Link to={`/items/${item.id}`} className={tile}>
-      <CardFace item={item} today={today} />
+    <Link to={`/items/${item.id}`} className={styles.tile}>
+      <CardFace item={item} wornLabel={wornLabel} />
     </Link>
   )
 }
 
 /**
- * The same card as a checkbox, for 오늘 입은 옷.
+ * 같은 카드를 체크박스로 — 오늘 입은 옷 고르기용.
  *
- * A `<button aria-pressed>` rather than a `<Link>`, which is the whole
- * difference between the two modes: in selection mode a tap records a garment
- * instead of opening it. Sharing `tile` keeps them the same size and shape, so
- * entering the mode changes what a tap *means* without moving anything.
+ * `<Link>`가 아니라 `<button aria-pressed>`인 것이 두 모드의 차이 전부다. 선택 모드에서
+ * 탭은 옷을 여는 대신 기록한다. `tile`을 공유해 크기와 모양이 같으므로, 모드에 들어가도
+ * 움직이는 것 없이 탭의 *뜻*만 바뀐다.
  *
- * No route to the detail screen from here, deliberately. A long-press would be
- * the usual answer and it is not one — nothing on a phone advertises it, so it
- * is a feature only the person who wrote it can find. Leaving the mode is one
- * tap on 취소.
+ * 여기서 상세 화면으로 가는 길은 일부러 없다. 길게 누르기가 흔한 답이지만 답이 아니다 —
+ * 폰에서 그것을 광고하는 것이 없어 만든 사람만 찾을 수 있는 기능이 된다.
  */
 export function SelectableItemCard({
   item,
-  today,
+  wornLabel,
   selected,
   onToggle,
-}: {
-  item: Worn<WardrobeItem>
-  today: string
+}: ItemCardProps & {
   selected: boolean
   onToggle: () => void
 }) {
@@ -217,92 +123,12 @@ export function SelectableItemCard({
       type="button"
       aria-pressed={selected}
       onClick={onToggle}
-      className={cx(tile, selectableTile)}
+      className={styles.selectableTile}
     >
-      <CardFace item={item} today={today} selected={selected} />
+      <CardFace item={item} wornLabel={wornLabel} selected={selected} />
     </button>
   )
 }
-
-/**
- * A button has to be told it is a card.
- *
- * Panda's preflight already strips the fill, the border and the font, so this is
- * only what `tile` assumes and a `<button>` does not give: the full width of its
- * grid track, text that starts on the left, and a pointer.
- */
-const selectableTile = css({
-  width: 'full',
-  textAlign: 'left',
-  cursor: 'pointer',
-})
-
-/**
- * The accent edge around a selected photo.
- *
- * An inset shadow rather than a border on the frame: `SquarePhoto` clips its
- * children, so an inset one lands exactly on the rounded corner, and a border
- * would sit a hair outside it. It is also drawn *over* the photograph, which is
- * the point — a ring outside the tile would be lost in the 12px gutter between
- * grid columns.
- */
-const selectedRing = css({
-  position: 'absolute',
-  inset: '0',
-  rounded: 'card',
-  boxShadow: 'inset 0 0 0 3px {colors.accent}',
-  pointerEvents: 'none',
-})
-
-/**
- * The check, top-left — opposite corner from the favourite star, so a favourite
- * garment being selected does not stack two badges on one spot.
- *
- * Present but empty when unselected. A checkbox that only appears once it is
- * ticked leaves the first tap unadvertised: nothing on the grid would say the
- * cards had become selectable.
- */
-const checkBadge = css({
-  position: 'absolute',
-  top: '1.5',
-  left: '1.5',
-  display: 'grid',
-  placeItems: 'center',
-  width: '5',
-  height: '5',
-  rounded: 'full',
-  bg: 'overlay.scrim',
-  backdropFilter: 'blur(4px)',
-  boxShadow: 'inset 0 0 0 1.5px {colors.overlay.fg}',
-  color: 'overlay.fg',
-  '&[data-selected]': {
-    bg: 'accent',
-    boxShadow: 'none',
-    color: 'accent.fg',
-  },
-})
-
-/**
- * The star, over an arbitrary photograph.
- *
- * A tinted disc rather than a bare glyph with a text-shadow: a shadow only
- * separates a light star from a light photo by blurring it, and on a white
- * garment the result is a grey smudge. A scrim disc has the same contrast over
- * anything.
- */
-const favoriteBadge = css({
-  position: 'absolute',
-  top: '1.5',
-  right: '1.5',
-  display: 'grid',
-  placeItems: 'center',
-  width: '5',
-  height: '5',
-  rounded: 'full',
-  bg: 'overlay.scrim',
-  backdropFilter: 'blur(4px)',
-  color: 'accent',
-})
 
 interface PendingCardProps {
   pending: PendingUpload
@@ -315,61 +141,33 @@ export function PendingCard({ pending, onRetry, onDiscard }: PendingCardProps) {
   const preview = pending.photos[0]?.previewUrl
 
   return (
-    <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
-      {/* The locally generated thumbnail stands in until the row exists, so the
-          card is never a grey box. */}
+    <div className={styles.stack}>
+      {/* 로컬에서 만든 썸네일이 행이 생길 때까지 대신 선다 — 카드가 회색 상자인 적이 없도록. */}
       <SquarePhoto src={preview ?? null} alt="" fallback="empty">
         {!failed && (
-          <span
-            className={css({
-              position: 'absolute',
-              inset: '0',
-              display: 'grid',
-              placeItems: 'center',
-              // The scrim, not a lowered opacity on the photo: it reads the
-              // same over a dark garment as over a white one.
-              bg: 'overlay.scrim',
-              color: 'overlay.fg',
-            })}
-          >
+          <span className={styles.uploadingScrim}>
             <Spinner size={18} />
           </span>
         )}
       </SquarePhoto>
 
-      <p className={title}>{pending.draft.title}</p>
+      <p className={styles.title}>{pending.draft.title}</p>
 
-      {/* Same reserved line the item card uses, so a card that is still
-          uploading lines up with the saved ones around it. */}
-      <div className={metaRow}>
+      {/* 옷 카드와 같은 예약된 줄 — 올라가는 중인 카드가 주변의 저장된 카드와 줄을 맞추도록. */}
+      <div className={styles.metaRow}>
         {failed ? (
-          <span className={css({ textStyle: 'caption', color: 'danger' })}>업로드 실패</span>
+          <span className={styles.failedText}>업로드 실패</span>
         ) : (
-          <span className={css({ textStyle: 'caption', color: 'fg.muted' })}>저장 중</span>
+          <span className={styles.uploadingText}>저장 중</span>
         )}
       </div>
 
-      {/* A failed card is deliberately the one card that grows: it is asking to
-          be repaired, and the reason and the two actions have to be reachable. */}
+      {/* 실패한 카드만 일부러 자란다 — 고쳐달라고 말하는 중이고, 이유와 두 행동에 닿을 수
+          있어야 한다. */}
       {failed && (
-        <div className={vstack({ gap: '1.5', alignItems: 'stretch' })}>
-          {pending.error && (
-            <p
-              className={css({
-                fontSize: '2xs',
-                color: 'fg.muted',
-                lineHeight: 'tight',
-                wordBreak: 'break-word',
-              })}
-            >
-              {pending.error}
-            </p>
-          )}
-          {/* Stacked, not side by side. A grid column is about 100px wide on a
-              360px phone and two labelled buttons do not fit across it — they
-              wrapped mid-word, which is how a repair prompt ends up looking like
-              the damage. */}
-          <div className={vstack({ gap: '1', alignItems: 'stretch' })}>
+        <div className={styles.repair}>
+          {pending.error && <p className={styles.errorDetail}>{pending.error}</p>}
+          <div className={styles.repairActions}>
             <Button size="sm" variant="outline" full onClick={() => onRetry(pending.tempId)}>
               재시도
             </Button>
@@ -384,22 +182,19 @@ export function PendingCard({ pending, onRetry, onDiscard }: PendingCardProps) {
 }
 
 /**
- * A card with nothing in it yet, for the first load of the wardrobe.
+ * 아직 아무것도 없는 카드, 옷장 첫 로드용.
  *
- * Same three parts in the same places as a real card, so the grid does not
- * re-lay-out when the data lands — the placeholders are simply replaced by what
- * they were standing in for.
+ * 진짜 카드와 같은 세 부분이 같은 자리에 있어서, 데이터가 도착해도 격자가 다시 배치되지
+ * 않고 자리표시자만 대신하던 것으로 바뀐다.
  */
 export function CardSkeleton() {
   return (
-    <div className={vstack({ gap: '2', alignItems: 'stretch' })} aria-hidden="true">
+    <div className={styles.stack} aria-hidden="true">
       <SquarePhoto src={null} alt="" />
-      {/* The bar is the height of the text it replaces, inside a box the height
-          of the line — so nothing moves when the real title arrives. */}
-      <div className={css({ height: '4.5', display: 'flex', alignItems: 'center' })}>
-        <div className={cx(skeletonSurface, css({ height: '2.5', width: '4/5', rounded: 'sm' }))} />
+      <div className={styles.skeletonTitleRow}>
+        <div className={styles.skeletonTitleBar} />
       </div>
-      <div className={metaRow} />
+      <div className={styles.metaRow} />
     </div>
   )
 }

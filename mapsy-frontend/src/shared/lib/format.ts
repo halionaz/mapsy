@@ -1,22 +1,16 @@
 import { daysBetween, monthsBetween, parseDay } from './calendarDay'
 
-/**
- * Prices are stored as whole won (PRD §4.1), so they are formatted with the
- * grouping people actually read rather than a currency symbol — "220,000원"
- * reads as Korean, "₩220,000" reads as a spreadsheet.
- */
+/** 원 단위 정수로 저장하므로 통화 기호가 아니라 사람이 읽는 자릿수 구분으로 쓴다. */
 export function formatPrice(price: number | null): string | null {
   if (price == null) return null
   return `${price.toLocaleString('ko-KR')}원`
 }
 
 /**
- * "2025. 11. 2." from a `YYYY-MM-DD` string.
+ * `YYYY-MM-DD` → "2025. 11. 2."
  *
- * Formatted from the parts rather than through `new Date(iso)`, which parses a
- * bare date as UTC midnight — in any negative-offset timezone that renders as
- * the previous day. `purchased_at` is a calendar date with no time in it, so it
- * should not pass through a timezone at all.
+ * `new Date(iso)`를 거치지 않고 조각에서 짓는다. 날짜만 있는 문자열은 UTC 자정으로
+ * 파싱되어, 음수 오프셋 타임존에서는 하루 전날로 그려진다.
  */
 export function formatDate(iso: string | null): string | null {
   if (!iso) return null
@@ -27,12 +21,10 @@ export function formatDate(iso: string | null): string | null {
 }
 
 /**
- * `8.14` — a day for a control that already names it in words beside them.
+ * `8.14` — 옆에서 이미 말로 날을 부르고 있는 컨트롤용.
  *
- * No year and no padding, unlike `formatDate`. That one is a field value and has
- * to stand alone; this one sits inside `8.14 (어제)`, where the parenthesis is
- * doing the work of saying which 14th and the digits are only there so the day
- * being written is an actual date rather than a relative word.
+ * `formatDate`와 달리 연도도 0 채움도 없다. 이쪽은 `8.14 (어제)` 안에 들어가고,
+ * 숫자는 기록되는 날이 상대적인 말이 아니라 실제 날짜임을 보이기 위해서만 있다.
  */
 export function formatMonthDay(iso: string): string | null {
   const day = parseDay(iso)
@@ -40,25 +32,18 @@ export function formatMonthDay(iso: string): string | null {
 }
 
 /**
- * How long ago a calendar day was, in the coarsest unit that still says
- * something — 오늘 · 어제 · 5일 전 · 3주 전 · 2개월 전 · 1년 전.
+ * 며칠 전인지를, 아직 뜻이 있는 가장 굵은 단위로 — 오늘 · 어제 · 5일 전 · 3주 전 ·
+ * 2개월 전 · 1년 전.
  *
- * `today` is passed in rather than read from the clock. Every caller already
- * holds it (a grid of cards must not each ask separately and disagree across a
- * midnight), and it is what makes this testable without freezing time.
- *
- * The unit widens as the answer gets less precise, which is the honest
- * direction: "5일 전" is a thing to act on, "142일 전" is a number nobody
- * converts. The card has room for one of these and not the other.
+ * `today`를 시계에서 읽지 않고 받는다. 카드 격자가 각자 물어 자정을 사이에 두고
+ * 어긋나면 안 되고, 시간을 얼리지 않고도 테스트할 수 있게 한다.
  */
 export function formatDayAgo(iso: string, today: string): string | null {
   const days = daysBetween(iso, today)
   if (days == null) return null
 
-  // Clamped rather than drawn as a negative. The database accepts a wear dated
-  // one day ahead of the server — that tolerance is the timezone, not slack —
-  // so a phone carried east is legitimately looking at a row from "tomorrow",
-  // and 오늘 is the least wrong thing to call it.
+  // 음수로 그리지 않고 가둔다. DB는 서버보다 하루 앞선 착용 기록을 받아주고(타임존
+  // 허용치다) 동쪽으로 옮겨간 폰은 정당하게 "내일"의 행을 본다.
   if (days <= 0) return '오늘'
   if (days === 1) return '어제'
   if (days < 7) return `${days}일 전`
@@ -67,9 +52,8 @@ export function formatDayAgo(iso: string, today: string): string | null {
   const months = monthsBetween(iso, today)
   if (months == null) return null
 
-  // Four weeks can still be zero calendar months — 1월 3일에서 1월 31일이
-  // 그렇다 — and 0개월 전 is not a sentence. Past four weeks the coarser unit is
-  // the one being used, so the floor is 1.
+  // 4주가 지나도 달력상 0개월일 수 있다 — 1월 3일에서 1월 31일이 그렇다 — 그리고
+  // 0개월 전은 문장이 아니다.
   if (months < 12) return `${Math.max(1, months)}개월 전`
   return `${Math.floor(months / 12)}년 전`
 }

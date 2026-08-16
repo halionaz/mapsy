@@ -1,88 +1,49 @@
 import { TriangleAlert } from 'lucide-react'
 import { Link, Navigate, Outlet, useLocation } from 'react-router'
-import { css } from 'styled-system/css'
-import { hstack } from 'styled-system/patterns'
 
 import { useSession } from '@/features/auth'
+import * as styles from './AppLayout.css'
 
 /**
- * Shell around every screen behind the login, and the gate that makes it so.
+ * 로그인 뒤 모든 화면을 감싸는 껍데기이자, 그것을 그렇게 만드는 게이트.
  *
- * mapsy is mobile-first; on desktop the same column is centred with a max width
- * rather than reflowed into a different layout (PRD §9). MVP has no tab bar —
- * there is only one destination — but the shell exists so adding
- * 옷장 / 코디 / 탐색 later is a change in one place.
+ * mapsy는 모바일 우선이고, 데스크톱에서는 같은 컬럼을 가운데 두되 다른 레이아웃으로
+ * 재배치하지 않는다(PRD §9). MVP에는 탭 바가 없지만 — 목적지가 하나뿐이다 — 껍데기가
+ * 있으므로 옷장 / 코디 / 탐색을 나중에 붙이는 것이 한 곳의 변경이 된다.
  */
 export function AppLayout() {
   const session = useSession()
   const location = useLocation()
 
   if (session.status === 'loading') {
-    // Deliberately blank rather than a spinner: reading the persisted token is
-    // near-instant, and a spinner that flashes for 30ms reads as jank.
-    return <div className={shell} />
+    // 스피너가 아니라 일부러 빈 화면이다. 저장된 토큰을 읽는 것은 거의 즉시라,
+    // 한 프레임 깜빡이는 스피너는 덜컹거림으로 읽힌다.
+    return <div className={styles.shell} />
   }
 
   if (session.status === 'anonymous') {
-    // `from` lets the login screen return the user to the deep link they opened.
+    // `from`이 로그인 화면에게 사용자가 열었던 딥링크로 돌려보낼 곳을 알려준다.
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
   return (
-    <div className={shell}>
+    <div className={styles.shell}>
       {session.status === 'unconfigured' && <PreviewBanner />}
       <Outlet />
     </div>
   )
 }
 
-const shell = css({
-  mx: 'auto',
-  width: 'full',
-  maxWidth: 'app',
-  minHeight: '100dvh',
-  // A flex column so screens can hand their main region `flex: 1` and have it
-  // actually fill the viewport. As a block container there is no free space to
-  // distribute, and centring has to be faked with viewport-height guesses.
-  display: 'flex',
-  flexDirection: 'column',
-  bg: 'bg',
-  // Hairline rails hint at the phone-width column on wide screens.
-  borderInlineWidth: { base: '0', md: '1px' },
-  borderInlineStyle: 'solid',
-  borderColor: 'border.subtle',
-})
-
 /**
- * Shown when there are no Supabase credentials. The app is fully browsable in
- * this state so the UI can be built before the backend exists — the banner is
- * what stops that from being mistaken for a working, signed-in app.
+ * Supabase 자격 증명이 없을 때 보인다. 그 상태에서도 앱은 온전히 둘러볼 수 있어 백엔드보다
+ * 먼저 UI를 만들 수 있고, 이 배너가 그것이 동작하는 로그인 상태로 오해되는 것을 막는다.
  */
 function PreviewBanner() {
   return (
-    <div
-      className={hstack({
-        justify: 'center',
-        gap: '2',
-        px: '4',
-        py: '2.5',
-        bg: 'accent.subtle',
-        color: 'accent.text',
-        textStyle: 'caption',
-      })}
-    >
-      <TriangleAlert size={14} aria-hidden="true" className={css({ flexShrink: 0 })} />
+    <div className={styles.previewBanner}>
+      <TriangleAlert size={14} aria-hidden="true" className={styles.previewIcon} />
       <span>Supabase 미설정 — 미리보기 모드</span>
-      <Link
-        to="/login"
-        className={css({
-          fontWeight: 'bold',
-          textDecoration: 'underline',
-          textUnderlineOffset: '2px',
-          rounded: 'sm',
-          layerStyle: 'focusable',
-        })}
-      >
+      <Link to="/login" className={styles.previewLink}>
         로그인 화면
       </Link>
     </div>

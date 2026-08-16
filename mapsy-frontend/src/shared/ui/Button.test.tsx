@@ -5,18 +5,15 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Button } from './Button'
 
 /**
- * `loading` swaps the icon rather than crowding in beside it.
+ * `loading`은 아이콘 옆에 끼어드는 게 아니라 아이콘을 대신한다.
  *
- * It used to prepend a spinner to `children`, which left every icon-bearing
- * button to hide its own glyph — `{!pending && <GoogleMark />}` — and two of the
- * three call sites remembered. The third put a spinner, a box icon and 처분 on
- * one line for the length of the mutation. Making it a prop is what took the
- * remembering away, so this holds the swap down.
+ * children 앞에 스피너를 덧붙이던 시절에는 아이콘을 가지는 호출부마다 자기 글리프를
+ * 직접 숨겨야 했다. 그 기억을 prop이 대신 가져갔으므로, 교체를 여기서 붙들어 둔다.
  */
 afterEach(cleanup)
 
 describe('Button', () => {
-  it('shows the icon when it is not loading', () => {
+  it('로딩이 아니면 아이콘을 보여준다', () => {
     render(
       <Button icon={<svg data-testid="icon" />} loading={false}>
         처분
@@ -26,7 +23,7 @@ describe('Button', () => {
     expect(screen.queryByTestId('icon')).not.toBeNull()
   })
 
-  it('replaces the icon with the spinner while loading, rather than adding one', () => {
+  it('로딩이면 아이콘을 더하지 않고 스피너로 바꾼다', () => {
     render(
       <Button icon={<svg data-testid="icon" />} loading>
         처분
@@ -36,7 +33,7 @@ describe('Button', () => {
     expect(screen.queryByTestId('icon')).toBeNull()
   })
 
-  it('disables itself while loading, so callers do not have to say it twice', () => {
+  it('로딩이면 스스로 잠근다 — 호출부가 두 번 말하지 않도록', () => {
     render(<Button loading>저장</Button>)
 
     expect(screen.getByRole('button')).toHaveProperty('disabled', true)

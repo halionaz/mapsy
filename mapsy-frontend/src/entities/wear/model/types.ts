@@ -1,33 +1,30 @@
 /**
- * Domain types for the wear log.
+ * 착용 기록의 도메인 타입.
  *
- * A wear is a fact about a (garment, day) pair and carries nothing else — no
- * note, no time, no order. That is the whole reason there is no outfit entity:
- * "what was worn together" is the set of entries sharing a `wornOn`, derived
- * rather than stored.
+ * 착용은 (옷, 날) 짝에 대한 사실이고 그 밖에는 아무것도 싣지 않는다 — 메모도, 시각도,
+ * 순서도. 코디 엔티티가 없는 이유가 그것이다. "함께 입은 것"은 같은 `wornOn`을 가진
+ * 항목들의 집합이라 저장이 아니라 파생이다.
  *
- * The row has `id`, `user_id` and `created_at` too. None of them are here
- * because none are read: the collection is fetched whole and every operation
- * addresses a row by (item, day), which is also its unique key. Not asking for
- * three unused columns is most of what keeps that full fetch small.
+ * 행에는 `id`·`user_id`·`created_at`도 있다. 여기 없는 것은 아무도 읽지 않기 때문이다 —
+ * 컬렉션은 통째로 받고 모든 연산이 (옷, 날)로 행을 가리키며, 그것이 유니크 키이기도 하다.
  */
 export interface WearEntry {
   itemId: string
-  /** The wearer's local calendar day, `YYYY-MM-DD`. See `shared/lib/calendarDay`. */
+  /** 입은 사람의 로컬 달력 날짜, `YYYY-MM-DD`. `shared/lib/calendarDay` 참고. */
   wornOn: string
 }
 
-/** What a garment's wear history amounts to, once summarised. */
+/** 옷 하나의 착용 이력을 요약한 것. */
 export interface WearSummary {
   wearCount: number
   /**
-   * The most recent day this was worn, or null if it never was.
+   * 가장 최근에 입은 날. 한 번도 안 입었으면 null.
    *
-   * Null is not "long ago" — it is "no answer", and the wardrobe's 최근 입은순
-   * sorts on that distinction rather than substituting a date.
+   * null은 "오래전"이 아니라 "답 없음"이고, 옷장의 최근 입은순은 날짜를 대신 넣지 않고
+   * 그 구분 위에서 정렬한다.
    */
   lastWornOn: string | null
 }
 
-/** An item with its wear history attached, which is what the grid sorts and draws. */
+/** 착용 이력이 붙은 옷. 격자가 정렬하고 그리는 형태다. */
 export type Worn<T> = T & WearSummary

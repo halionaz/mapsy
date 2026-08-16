@@ -1,16 +1,13 @@
 /**
- * Client-side photo processing — PRD §7.
+ * 클라이언트 사진 처리 — PRD §7.
  *
- * Every garment photo is turned into two files before it leaves the phone: a
- * display-size original and a 1:1 thumbnail for the grid. Both are produced here
- * rather than by Supabase's image transform, which is a paid feature — doing it
- * on the client keeps the free tier viable and means the grid never waits on a
- * server-side resize.
+ * 모든 옷 사진은 폰을 떠나기 전에 두 파일이 된다. 표시용 원본과 격자용 1:1 썸네일.
+ * Supabase의 이미지 변환이 유료라 여기서 만든다.
  */
 
-/** Long edge of the stored original. ~150KB at WebP q0.82 for a phone photo. */
+/** 저장되는 원본의 긴 변. */
 export const FULL_MAX_EDGE = 1280
-/** Grid thumbnails are square, so this is both width and height. */
+/** 격자 썸네일은 정사각이라 가로·세로 공용. */
 export const THUMB_SIZE = 400
 
 const FULL_QUALITY = 0.82
@@ -19,21 +16,16 @@ const THUMB_QUALITY = 0.8
 export interface ProcessedPhoto {
   full: Blob
   thumb: Blob
-  /** Dimensions of `full`, stored so the detail view can reserve space. */
+  /** `full`의 크기. 상세 화면이 자리를 미리 잡는 데 쓴다. */
   width: number
   height: number
-  /** File extension matching what the browser actually encoded. */
+  /** 브라우저가 실제로 인코딩한 것과 맞는 확장자. */
   ext: 'webp' | 'jpg'
-  /** Object URL for immediate preview. Revoke with `releasePreview`. */
+  /** 즉시 미리보기용 object URL. `releasePreview`로 반납한다. */
   previewUrl: string
 }
 
-/**
- * Scales `width`×`height` down so its longer side is at most `maxEdge`.
- *
- * Never scales up — a photo that is already small stays as it is rather than
- * being interpolated into a larger, blurrier file.
- */
+/** 긴 변이 `maxEdge` 이하가 되도록 줄인다. 키우지는 않는다. */
 export function fitWithin(
   width: number,
   height: number,
@@ -44,19 +36,14 @@ export function fitWithin(
 
   const scale = maxEdge / longest
   return {
-    // Round, then floor at 1: a very wide panorama could otherwise round its
-    // short side to 0 and produce a canvas that throws.
+    // 반올림 후 1로 바닥 — 아주 넓은 파노라마는 짧은 변이 0으로 반올림되어
+    // 캔버스가 던진다.
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
   }
 }
 
-/**
- * The source rectangle to read when centre-cropping to a square.
- *
- * Garments are usually shot centred, so the middle is the safest crop; the grid
- * needs uniform squares or the columns stop lining up.
- */
+/** 정사각으로 가운데를 자를 때 읽을 원본 사각형. */
 export function coverCropRect(
   width: number,
   height: number,
@@ -70,11 +57,10 @@ export function coverCropRect(
 }
 
 /**
- * Decodes a file, applying EXIF orientation.
+ * EXIF 방향을 적용해 파일을 디코드한다.
  *
- * `createImageBitmap` with `imageOrientation: 'from-image'` is the direct route,
- * but it is not universally available, so an `<img>` element is the fallback —
- * browsers apply orientation when rendering those.
+ * `createImageBitmap`의 `imageOrientation: 'from-image'`가 직행이지만 모든 곳에 있지는
+ * 않아, `<img>`가 대체 경로다 — 브라우저는 그것을 그릴 때 방향을 적용한다.
  */
 async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
   try {
@@ -99,11 +85,10 @@ function sourceSize(source: ImageBitmap | HTMLImageElement) {
 }
 
 /**
- * Encodes a canvas, preferring WebP.
+ * 캔버스를 인코딩한다. WebP를 먼저 시도한다.
  *
- * Safari silently falls back to PNG when asked for a type it cannot encode,
- * which would triple the upload for no benefit — so the produced type is checked
- * and JPEG is used instead when WebP did not take.
+ * Safari는 인코딩할 수 없는 타입을 요청받으면 말없이 PNG로 떨어져 업로드가 세 배가
+ * 된다. 그래서 나온 타입을 확인하고, WebP가 아니면 JPEG로 간다.
  */
 async function encode(
   canvas: HTMLCanvasElement,
@@ -144,7 +129,7 @@ function draw(
   return canvas
 }
 
-/** Turns a picked file into the two blobs that get uploaded. */
+/** 고른 파일을 업로드될 두 blob으로 바꾼다. */
 export async function processPhoto(file: File): Promise<ProcessedPhoto> {
   const source = await decode(file)
   try {
@@ -156,7 +141,7 @@ export async function processPhoto(file: File): Promise<ProcessedPhoto> {
     const encodedFull = await encode(fullCanvas, FULL_QUALITY)
 
     const crop = coverCropRect(rawWidth, rawHeight)
-    // Never upscale a small photo into a 400px square.
+    // 작은 사진을 400px 정사각으로 키우지 않는다.
     const thumbEdge = Math.min(THUMB_SIZE, crop.size)
     const thumbCanvas = draw(source, thumbEdge, thumbEdge, crop)
     const encodedThumb = await encode(thumbCanvas, THUMB_QUALITY)

@@ -1,19 +1,15 @@
 /**
- * UUID v4, with a fallback for insecure contexts.
+ * UUID v4 — 보안 컨텍스트가 아닐 때를 위한 대체 경로를 함께 둔다.
  *
- * `crypto.randomUUID` only exists in a secure context, which `localhost` is but
- * `http://192.168.x.x:5173` is not — exactly how you test on a real phone over
- * the LAN. Without the fallback, registration dies with a TypeError on the one
- * device the app is actually designed for.
+ * `crypto.randomUUID`는 보안 컨텍스트에만 있고, `localhost`는 그렇지만
+ * `http://192.168.x.x:5173`은 아니다 — 실제 폰에서 LAN으로 테스트하는 바로 그 경로다.
  */
 export function newId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
   }
 
-  // getRandomValues is available in insecure contexts; only randomUUID is not.
-  // The guard above already established that `crypto` exists at all, but re-read
-  // it through a local so this branch cannot throw ReferenceError if it doesn't.
+  // 보안 컨텍스트가 아니어도 getRandomValues는 있다. 없는 것은 randomUUID뿐.
   const webcrypto = typeof crypto !== 'undefined' ? crypto : undefined
   if (!webcrypto?.getRandomValues) {
     throw new Error('이 브라우저에서는 안전한 id를 만들 수 없어요.')

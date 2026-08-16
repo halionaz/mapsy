@@ -1,151 +1,61 @@
 import { useCallback, useRef, useState } from 'react'
-import { css, cva, cx } from 'styled-system/css'
 
-import { skeletonSurface } from './skeletonStyle'
-
-/**
- * A photo in a 1:1 box that never changes size.
- *
- * The box is square by declaration rather than sized from the image, because a
- * URL is signed asynchronously and then has to decode — so between mount and
- * paint there is a stretch where the app knows a photo exists and has nothing to
- * draw. Sizing from the image collapses the box during that stretch and pushes
- * everything below it around as each photo arrives.
- *
- * What goes inside is one of four things: a pulsing skeleton (a photo is
- * coming), a labelled placeholder (there is no photo), a failure notice (one was
- * coming and did not arrive), or the photo faded in over the skeleton.
- *
- * `fit` is the part worth reading before reusing this. Only the *thumbnails* are
- * square — `processPhoto` centre-crops those on upload — so `cover` on a
- * thumbnail is a no-op, the crop already happened. Full-size originals keep the
- * proportions they were shot in, so `cover` on one of those genuinely cuts the
- * top and bottom off a tall garment.
- *
- * The detail screen asks for exactly that anyway, on purpose: its photo is the
- * top of the screen and a letterboxed hero with bars down two sides is not one.
- * The crop is safe *there* because tapping it opens the full-screen viewer,
- * which fits the whole photograph and lets it be pinched and panned. Anywhere
- * that trade is not available, a full-size photo wants `contain`.
- */
+import * as styles from './SquarePhoto.css'
 
 /**
- * What an absent `src` means. The component cannot tell these apart on its own —
- * all three are `null` from here — so the caller says which.
+ * 크기가 변하지 않는 1:1 사진 상자.
+ *
+ * 이미지에서 크기를 받지 않고 선언으로 정사각인 것은, URL이 비동기로 서명된 뒤 디코드까지
+ * 되어야 해서 마운트와 페인트 사이에 "사진이 있다는 건 알지만 그릴 게 없는" 구간이 있기
+ * 때문이다. 그 구간 동안 상자가 접히면 아래 것들이 사진이 도착할 때마다 밀린다.
+ *
+ * `fit`은 재사용 전에 읽어야 하는 부분이다. 정사각인 것은 *썸네일*뿐이라(`processPhoto`가
+ * 업로드 때 가운데를 잘라낸다) 썸네일의 `cover`는 아무 일도 하지 않는다. 원본은 찍힌
+ * 비율 그대로라, 원본에 `cover`를 걸면 긴 옷의 위아래가 진짜로 잘린다. 상세 화면은 그걸
+ * 감수한다 — 탭하면 전체 뷰어가 열려 사진 전체를 맞춰 보여주기 때문이다.
  */
+
+/** `src`가 없다는 것이 무슨 뜻인지. 셋 다 여기서는 `null`이라 호출부가 말해줘야 한다. */
 export type PhotoFallback =
-  /** A photo is coming; keep the skeleton up. */
+  /** 사진이 오는 중 — 스켈레톤을 유지한다. */
   | 'pending'
-  /** There is no photo to wait for. */
+  /** 기다릴 사진이 없다. */
   | 'empty'
-  /** There was one and it did not arrive. */
+  /** 있었는데 도착하지 못했다. */
   | 'failed'
 
 interface SquarePhotoProps {
-  /** `null` while the URL is still being signed, or when there is no photo. */
+  /** URL을 서명하는 중이거나, 사진이 없을 때 `null`. */
   src: string | null
   alt: string
-  /** What `src == null` means here. */
+  /** 여기서 `src == null`이 무슨 뜻인지. */
   fallback?: PhotoFallback
-  /** `cover` fills the square and crops; `contain` fits the whole photo in. */
+  /** `cover`는 정사각을 채우며 자르고, `contain`은 사진 전체를 맞춘다. */
   fit?: 'cover' | 'contain'
-  /** `flush` drops the corners and hairline, for a photo used as a page edge. */
+  /** `flush`는 모서리와 실선을 없앤다 — 페이지 가장자리로 쓰이는 사진용. */
   shape?: 'card' | 'flush'
-  /** `eager` for a photo that is already on screen, e.g. the first tile. */
+  /** 이미 화면에 있는 사진(첫 타일 등)은 `eager`. */
   loading?: 'eager' | 'lazy'
   /**
-   * The photo was there and would not load.
+   * 사진이 있었는데 로드되지 않았다.
    *
-   * Reported rather than only drawn, because a caller that thinks the photo is
-   * fine will keep offering it: a tile that says 불러오지 못함 and still opens a
-   * full-screen viewer onto the same broken URL is a worse failure than the one
-   * this component was catching.
+   * 그리기만 하지 않고 알리는 이유는, 사진이 멀쩡하다고 믿는 호출부가 계속 그것을
+   * 내주기 때문이다 — 불러오지 못함이라 적힌 타일이 같은 깨진 URL로 전체 뷰어를 여는
+   * 것이 이 컴포넌트가 잡던 실패보다 나쁘다.
    */
   onLoadError?: () => void
-  /** Overlays drawn on top of the photo: the favourite star, an upload scrim. */
+  /** 사진 위에 그리는 오버레이 — 즐겨찾기 별, 업로드 스크림. */
   children?: React.ReactNode
 }
 
-// Owned here so that a photo which failed to load and a photo whose URL never
-// arrived cannot drift into saying different things to the same user.
+// 여기서 소유해서, 로드에 실패한 사진과 URL이 오지 않은 사진이 같은 사용자에게 서로 다른
+// 말을 하지 않도록 한다.
 const FALLBACK_LABELS: Record<Exclude<PhotoFallback, 'pending'>, string> = {
   empty: '사진 없음',
   failed: '불러오지 못함',
 }
 
-// A span rather than a div: the detail screen wraps this in a <button>, whose
-// content model is phrasing content.
-const frame = cva({
-  base: {
-    display: 'block',
-    position: 'relative',
-    aspectRatio: '1',
-    width: 'full',
-    overflow: 'hidden',
-    bg: 'bg.subtle',
-  },
-  variants: {
-    shape: {
-      /** A tile on a page — the wardrobe grid, the picker. */
-      card: {
-        rounded: 'card',
-        // A garment shot on a white sheet has no edge of its own; without this
-        // the tile bleeds into a light page and floats in a dark one.
-        boxShadow: 'inset 0 0 0 1px {colors.border.subtle}',
-      },
-      /**
-       * Edge to edge, as the top of a screen. No corners and no hairline: both
-       * are ways of saying "this is an object on a page", and the point of a
-       * full-bleed photo is that it is the page.
-       *
-       * Stated rather than left to the base, so that giving the base a radius
-       * later cannot quietly round this one. `'0'`, not `'none'` — there is no
-       * `radii.none` token, and Panda passes an unknown value through, so
-       * `rounded: 'none'` emits `border-radius: none` and the browser drops it.
-       */
-      flush: { rounded: '0' },
-    },
-  },
-  defaultVariants: { shape: 'card' },
-})
-
-const skeleton = cx(skeletonSurface, css({ position: 'absolute', inset: '0' }))
-
-const notice = css({
-  position: 'absolute',
-  inset: '0',
-  display: 'grid',
-  placeItems: 'center',
-  px: '2',
-  textAlign: 'center',
-  color: 'fg.subtle',
-  textStyle: 'caption',
-})
-
-const photo = cva({
-  base: {
-    position: 'absolute',
-    inset: '0',
-    width: 'full',
-    height: 'full',
-    transitionProperty: 'opacity',
-    transitionDuration: 'fast',
-  },
-  variants: {
-    // Fading in over the skeleton rather than replacing it avoids the flash of
-    // background between the two.
-    loaded: {
-      true: { opacity: 1 },
-      false: { opacity: 0 },
-    },
-    fit: {
-      cover: { objectFit: 'cover' },
-      contain: { objectFit: 'contain' },
-    },
-  },
-})
-
-/** Which URL settled, and how. Keyed by URL so a re-signed photo starts over. */
+/** 어떤 URL이 어떻게 끝났는지. URL로 키를 잡아 재서명된 사진은 처음부터 다시 시작한다. */
 interface LoadState {
   src: string
   outcome: 'loaded' | 'failed'
@@ -161,19 +71,17 @@ export function SquarePhoto({
   onLoadError,
   children,
 }: SquarePhotoProps) {
-  // Not a boolean: the detail screen re-signs its URLs, and a boolean would stay
-  // true across the swap and show the new photo before it had decoded.
+  // boolean이 아닌 이유는 상세 화면이 URL을 재서명하기 때문 — boolean이면 교체를 넘어
+  // true로 남아 디코드되지 않은 새 사진을 보여준다.
   const [state, setState] = useState<LoadState | null>(null)
   const outcome = src != null && state?.src === src ? state.outcome : null
 
   /**
-   * Records an outcome, and does nothing at all if it is the one already
-   * recorded.
+   * 결과를 기록하되, 이미 기록된 것과 같으면 아무 일도 하지 않는다.
    *
-   * The bail-out is load-bearing rather than tidy. `checkComplete` re-runs every
-   * time React re-attaches the ref, which is every render once anything in its
-   * closure changes; storing a fresh object each time would be a new state value
-   * each time, and a component that re-renders itself on every render.
+   * 이 조기 반환은 정리가 아니라 필수다. `checkComplete`는 React가 ref를 다시 붙일
+   * 때마다 — 클로저가 바뀐 렌더마다 — 다시 돌고, 매번 새 객체를 저장하면 매 렌더가
+   * 새 상태값이 되어 스스로를 다시 렌더하는 컴포넌트가 된다.
    */
   const settle = useCallback((settledSrc: string, outcome: LoadState['outcome']) => {
     setState((previous) =>
@@ -184,25 +92,16 @@ export function SquarePhoto({
   }, [])
 
   /**
-   * Read through a ref so that `fail` — and `checkComplete` below it — do not
-   * depend on the caller's function identity.
+   * ref로 읽어서 `fail`과 `checkComplete`가 호출부 함수의 identity에 의존하지 않게 한다.
    *
-   * Every call site builds this inline, and the one that matters cannot do
-   * otherwise: the detail screen renders a tile per photo inside a `map`, so
-   * `onLoadError={() => markUnloadable(slot.id)}` is a new function on every
-   * render and there is no `useCallback` available inside a loop. Depending on
-   * it made `checkComplete` new every render, and React tears down and
-   * re-attaches a callback ref whose identity changed — on a screen that
-   * re-renders once per frame while the viewer is being swiped. Owning the
-   * problem here fixes it for every caller instead of asking each one to.
+   * 모든 호출부가 이걸 인라인으로 만들고, 중요한 쪽은 달리 할 수도 없다 — 상세 화면은
+   * `map` 안에서 사진마다 타일을 그리므로 루프 안에 `useCallback`이 없다. 의존하면
+   * `checkComplete`가 매 렌더 새로워지고, React는 identity가 바뀐 콜백 ref를 떼었다
+   * 다시 붙인다.
    *
-   * Assigned during render, not in an effect. `checkComplete` is a callback ref
-   * and can call `fail` the moment it attaches — for a cached broken image, in
-   * the same commit. Measured order on a re-render is `ref attach` →
-   * `useLayoutEffect` → `useEffect`, so *both* effect kinds land after the only
-   * consumer, and the ref would still hold the previous render's closure when it
-   * mattered: a photo set that changed in the same render would have its
-   * neighbour marked unloadable.
+   * effect가 아니라 렌더 중에 대입한다. `checkComplete`는 콜백 ref라 붙는 즉시 —
+   * 캐시된 깨진 이미지라면 같은 커밋 안에서 — `fail`을 부를 수 있는데, effect는 그보다
+   * 늦게 돌아 ref가 이전 렌더의 클로저를 들고 있게 된다.
    */
   const onLoadErrorRef = useRef(onLoadError)
   onLoadErrorRef.current = onLoadError
@@ -215,17 +114,13 @@ export function SquarePhoto({
     [settle],
   )
 
-  // A photo already in the browser cache can finish before React has attached
-  // onLoad, which would leave the skeleton up for good. The ref runs once the
-  // element exists, so `complete` is answerable. Memoised on `src` so it isn't
-  // torn down and re-attached on every render.
+  // 브라우저 캐시에 있는 사진은 React가 onLoad를 붙이기 전에 끝날 수 있고, 그러면
+  // 스켈레톤이 영영 남는다. ref는 요소가 생긴 뒤 도므로 `complete`를 물어볼 수 있다.
   const checkComplete = useCallback(
     (node: HTMLImageElement | null) => {
       if (!node?.complete || src == null) return
-      // `complete` is true for a broken image too, so it cannot stand on its own
-      // — a cached failure would otherwise fade a broken-image icon in at full
-      // opacity, which is the same failure looking completely different
-      // depending on whether it happened to be cached.
+      // `complete`는 깨진 이미지에도 true라 혼자서는 못 쓴다 — 캐시된 실패가 깨진
+      // 이미지 아이콘을 불투명도 1로 페이드인시킨다.
       if (node.naturalWidth > 0) settle(src, 'loaded')
       else fail(src)
     },
@@ -237,11 +132,11 @@ export function SquarePhoto({
   const pending = showing === 'pending' || (src != null && outcome == null)
 
   return (
-    <span className={frame({ shape })}>
-      {pending && <span className={skeleton} />}
+    <span className={styles.frame({ shape })}>
+      {pending && <span className={styles.skeleton} />}
 
       {showing != null && showing !== 'pending' && (
-        <span className={notice}>{FALLBACK_LABELS[showing]}</span>
+        <span className={styles.notice}>{FALLBACK_LABELS[showing]}</span>
       )}
 
       {src != null && !failed && (
@@ -249,10 +144,10 @@ export function SquarePhoto({
           src={src}
           alt={alt}
           loading={loading}
-          className={photo({ loaded: outcome === 'loaded', fit })}
+          className={styles.photo({ loaded: outcome === 'loaded', fit })}
           onLoad={() => settle(src, 'loaded')}
-          // Signed URLs expire and networks drop; without this the skeleton
-          // pulses for ever and a failure reads as a slow connection.
+          // 서명 URL은 만료되고 네트워크는 끊긴다. 이게 없으면 스켈레톤이 영원히
+          // 맥동하고 실패가 느린 연결처럼 읽힌다.
           onError={() => fail(src)}
           ref={checkComplete}
         />

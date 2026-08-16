@@ -1,15 +1,11 @@
-import { css } from 'styled-system/css'
-import { vstack } from 'styled-system/patterns'
+import * as styles from './Field.css'
 
 /**
- * A labelled block: caption, optional hint, the control, and whatever the
- * control has to say about itself.
+ * 라벨이 붙은 블록 — 캡션, 힌트, 컨트롤, 그리고 컨트롤이 자신에 대해 하는 말.
  *
- * Renders a real `<label>` only when it wraps exactly one form control
- * (`htmlFor`). Wrapping everything in one was invalid HTML the moment the child
- * was a `<fieldset>` of chips or a picker with its own `<label>` — and it had
- * teeth: tapping the word "카테고리" activated the first labelable descendant,
- * so it silently selected 반팔티. Tapping "사진" opened the file picker.
+ * 실제 `<label>`은 폼 컨트롤 하나를 감쌀 때(`htmlFor`)만 쓴다. 전부를 label로 감싸면
+ * 자식이 칩 `<fieldset>`이나 자체 label을 가진 피커일 때 잘못된 HTML이 되고, "카테고리"를
+ * 누르면 첫 번째 labelable 자손이 눌린다.
  */
 export function Field({
   label,
@@ -26,37 +22,33 @@ export function Field({
 }) {
   const caption = (
     <>
-      <span className={css({ color: 'fg' })}>{label}</span>
+      <span className={styles.captionLabel}>{label}</span>
       {required && (
-        <span className={css({ color: 'accent.text', ml: '1' })} aria-hidden="true">
+        <span className={styles.requiredMark} aria-hidden="true">
           *
         </span>
       )}
-      {hint && <span className={css({ ml: '2', color: 'fg.subtle' })}>{hint}</span>}
+      {hint && <span className={styles.hint}>{hint}</span>}
     </>
   )
 
   return (
-    <div className={vstack({ gap: '2.5', alignItems: 'stretch' })}>
+    <div className={styles.block}>
       {htmlFor ? (
-        <label htmlFor={htmlFor} className={fieldCaption}>
+        <label htmlFor={htmlFor} className={styles.caption}>
           {caption}
         </label>
       ) : (
-        <span className={fieldCaption}>{caption}</span>
+        <span className={styles.caption}>{caption}</span>
       )}
       {children}
     </div>
   )
 }
 
-// Local, not exported: a module that exports both a component and a plain value
-// loses React Fast Refresh for the whole file.
-const fieldCaption = css({ textStyle: 'caption', color: 'fg.muted' })
-
 export function FieldError({ children }: { children: React.ReactNode }) {
   return (
-    <span role="alert" className={css({ textStyle: 'caption', color: 'danger' })}>
+    <span role="alert" className={styles.error}>
       {children}
     </span>
   )

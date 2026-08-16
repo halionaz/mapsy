@@ -1,41 +1,21 @@
-import { css } from 'styled-system/css'
-import { hstack } from 'styled-system/patterns'
-
-import { chipLegend, chipStyle } from './chipStyle'
+import { chipLegend, chipRow, chipStyle, fieldset } from './Chip.css'
 import type { ChipOption } from './ChipGroup'
 
 /**
- * A choice among chips that has to end up with exactly one answer — the sort
- * order, an item's category.
+ * 반드시 답이 하나 있어야 하는 선택 — 정렬 순서, 옷의 카테고리.
  *
- * Separate from `ChipGroup` because the shape of the callback is the whole
- * point. `ChipGroup` speaks in arrays, and an array can be empty; every required
- * single choice therefore had to reach into it with `next[0]` and guess what to
- * do about `undefined`. In the sort control that guess was a `?? 'recent'`, and
- * removing it as unreachable was a mistake that took a while to see: the only
- * thing making it unreachable was `clearable={false}` at the call site, and
- * `clearable` defaults to `true`. The safe state was the one someone had
- * remembered to write down.
+ * `ChipGroup`과 나뉜 이유는 콜백의 모양이다. 그쪽은 배열로 말하고 배열은 비어 있을 수
+ * 있어서, 호출부마다 `next[0]`의 undefined를 각자 처리해야 했다. 여기서는 빈 답을
+ * 만들 수 없다 — `onChange`가 값을 돌려주고, 이미 선택된 칩을 눌러도 아무 일이 없다.
  *
- * What that would have cost is worth spelling out, because none of it is loud.
- * `next[0]` on an empty array is `undefined`, and with `noUncheckedIndexedAccess`
- * off the compiler still calls it a `SortId`. `applyFilters`' comparator has no
- * `default` branch, so it returns `undefined`; `Array.prototype.sort` treats that
- * as "leave them alone" and reports nothing. The sort silently stops working and
- * its label goes blank.
- *
- * Here the empty answer cannot be constructed: `onChange` hands back a value,
- * not a list, and a tap on the already-selected chip does nothing at all.
- *
- * The chips carry `aria-pressed` rather than radio semantics, matching the
- * category rail on the home screen. A radiogroup would say "exactly one of
- * these" more precisely, but doing it properly means roving tabindex and arrow
- * keys; that is a change to every chip in the app, not to this file.
+ * 라디오 시맨틱이 아니라 `aria-pressed`인 것은 홈 화면의 카테고리 레일과 맞추기 위해서다.
+ * 제대로 된 radiogroup은 roving tabindex와 방향키까지 따라오고, 그건 이 파일이 아니라
+ * 앱의 모든 칩을 바꾸는 일이다.
  */
 interface ChipSelectProps<T extends string> {
   label: string
   options: readonly ChipOption<T>[]
-  /** `null` only before anything has been picked; it never returns to null. */
+  /** 아무것도 고르기 전에만 `null`이고, 다시 null로 돌아가지 않는다. */
   value: T | null
   onChange: (value: T) => void
 }
@@ -47,19 +27,16 @@ export function ChipSelect<T extends string>({
   onChange,
 }: ChipSelectProps<T>) {
   return (
-    <fieldset className={css({ border: 'none', p: '0', m: '0' })}>
+    <fieldset className={fieldset}>
       <legend className={chipLegend}>{label}</legend>
-      <div className={hstack({ gap: '2', flexWrap: 'wrap' })}>
+      <div className={chipRow}>
         {options.map((option) => (
           <button
             key={option.value}
             type="button"
             aria-pressed={value === option.value}
-            // Guarded, so that re-tapping the current choice really is the
-            // no-op this component promises. Unguarded it fired `onChange` with
-            // the value that was already set, and callers do more than store it:
-            // the item form clears 사이즈 and 핏 when the category changes, so
-            // tapping 반팔티 a second time silently emptied both.
+            // 가드가 있어야 "다시 눌러도 아무 일 없음"이 참이 된다 — 호출부는 값을
+            // 저장만 하지 않는다. 옷 폼은 카테고리가 바뀌면 사이즈·핏을 비운다.
             onClick={() => option.value !== value && onChange(option.value)}
             className={chipStyle({ active: value === option.value })}
           >

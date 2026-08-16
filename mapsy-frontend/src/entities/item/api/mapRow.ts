@@ -6,19 +6,16 @@ import type { PhotoEntry } from '../model/photoEntries'
 import type { Item, ItemDraft, ItemImage, ItemStatus } from '../model/types'
 
 /**
- * Translation between Postgres rows (snake_case, loose) and domain objects
- * (camelCase, narrow).
+ * Postgres 행(snake_case, 느슨함)과 도메인 객체(camelCase, 좁음) 사이의 번역.
  *
- * Kept pure and separate from the network calls so the mapping — the part with
- * actual decisions in it — can be tested without a database.
+ * 네트워크 호출과 떼어 순수하게 두어, 실제 판단이 들어 있는 매핑을 DB 없이 테스트할 수 있게 한다.
  *
- * Reads are defensive. A row may have been written by a different build of the
- * app, so unknown enum members are dropped rather than trusted into a union
- * type that promises they cannot exist.
+ * 읽기는 방어적이다. 다른 빌드가 쓴 행일 수 있으므로, 모르는 열거 값은 "그럴 수 없다"고
+ * 약속하는 유니온에 밀어 넣지 않고 버린다.
  */
 
-// Derived from the live schema (`pnpm types:gen`) rather than hand-written, so a
-// column rename becomes a compile error here instead of a runtime surprise.
+// 손으로 쓰지 않고 실제 스키마에서 파생한다(`pnpm types:gen`) — 컬럼 이름이 바뀌면
+// 런타임 놀람이 아니라 여기서 컴파일 에러가 된다.
 export type ItemRow = Database['public']['Tables']['items']['Row']
 export type ItemImageRow = Database['public']['Tables']['item_images']['Row']
 export type ItemInsert = Database['public']['Tables']['items']['Insert']
@@ -28,10 +25,8 @@ export type ItemImageInsert = Database['public']['Tables']['item_images']['Inser
 const COLOR_SET = new Set<string>(COLOR_IDS)
 const SEASON_SET = new Set<string>(SEASON_IDS)
 
-// The array columns are `not null default '{}'`, which the generated row types
-// carry through — so these take `string[]`, not `string[] | null`. Values are
-// still filtered: the database constrains membership, but a row written by a
-// build with a wider palette must not smuggle an unknown id into ColorId.
+// 배열 컬럼이 `not null default '{}'`이라 생성된 행 타입도 `string[]`이다. 그래도 값을
+// 거른다 — 더 넓은 팔레트를 가진 빌드가 쓴 행이 모르는 id를 ColorId로 밀입국시키면 안 된다.
 function toColors(value: string[]): ColorId[] {
   return value.filter((c): c is ColorId => COLOR_SET.has(c))
 }
@@ -41,15 +36,13 @@ function toSeasons(value: string[]): SeasonId[] {
 }
 
 function toStatus(value: string): ItemStatus {
-  // Anything unrecognised is treated as still owned — hiding a garment the user
-  // still has is a worse failure than showing one they disposed of.
+  // 모르는 값은 보유로 본다 — 가진 옷을 감추는 쪽이 처분한 옷을 보이는 쪽보다 나쁘다.
   return value === 'disposed' ? 'disposed' : 'owned'
 }
 
 function toCategoryId(value: string): SubcategoryId {
-  // The database only validates the group prefix, so a subcategory retired from
-  // the app can still appear. Surfacing it under 기타 keeps the item reachable
-  // instead of dropping it out of every filter.
+  // DB는 대분류 접두사만 검증하므로 앱에서 없앤 소분류가 여전히 올 수 있다. 기타로
+  // 올려두면 모든 필터에서 사라지는 대신 손에 닿는 곳에 남는다.
   return isSubcategoryId(value) ? value : 'etc.etc'
 }
 
@@ -77,15 +70,11 @@ export function toItem(row: ItemRow): Item {
 }
 
 /**
- * What an uploaded photo is, minus where it sits.
+ * 올라간 사진이 무엇인지 — 어디에 놓이는지는 빼고. 위치는 호출부의 몫이다.
  *
- * Position is the caller's business: registration numbers photos by their order
- * in the form, `set_item_images` places them among photos that already exist.
- *
- * A type alias rather than an interface, and snake_case rather than the domain's
- * camelCase, for the same reason: this is spread straight into a row or into the
- * RPC's `jsonb` argument, and only an alias carries the implicit index signature
- * `Json` asks for.
+ * interface가 아니라 타입 별칭이고 camelCase가 아니라 snake_case인 것은 같은 이유다.
+ * 이 값은 행이나 RPC의 `jsonb` 인자로 그대로 펼쳐지고, `Json`이 요구하는 암묵적 인덱스
+ * 시그니처는 별칭만 싣는다.
  */
 export type UploadedImage = {
   id: string
@@ -96,13 +85,11 @@ export type UploadedImage = {
 }
 
 /**
- * The array `set_item_images` takes: the form's order, with every picked entry
- * replaced by the row its upload produced.
+ * `set_item_images`가 받는 배열 — 폼의 순서에, 고른 항목마다 그 업로드가 만든 행을 끼운 것.
  *
- * `uploaded` is in the order the picked entries appear, so walking the two
- * together is what puts each new photo where the form put it. Getting this
- * wrong does not fail — it silently stores the photos in a different order than
- * the one on screen, which is the whole thing the screen was for.
+ * `uploaded`가 고른 항목이 나온 순서대로라 둘을 나란히 걷는 것이 새 사진을 폼이 놓은
+ * 자리에 놓는다. 여기를 틀려도 실패하지 않는다 — 화면과 다른 순서로 조용히 저장될 뿐이고,
+ * 그 순서가 화면의 전부였다.
  */
 export function toImagePayload(
   entries: readonly PhotoEntry[],
@@ -129,11 +116,10 @@ export function toItemImage(row: ItemImageRow): ItemImage {
 }
 
 /**
- * The columns a draft writes, shared by insert and update.
+ * draft가 쓰는 컬럼. insert와 update가 공유한다.
  *
- * Blank optional text becomes null rather than an empty string, so "no brand"
- * has one representation instead of two — otherwise filters and `is null`
- * queries have to check for both.
+ * 비어 있는 선택 텍스트는 빈 문자열이 아니라 null이 된다 — "브랜드 없음"의 표현이
+ * 둘이면 필터와 `is null` 질의가 양쪽을 다 봐야 한다.
  */
 function toItemFields(draft: ItemDraft) {
   return {
@@ -148,8 +134,8 @@ function toItemFields(draft: ItemDraft) {
     purchased_at: blankToNull(draft.purchasedAt),
     purchase_place: blankToNull(draft.purchasePlace),
     memo: blankToNull(draft.memo),
-    // Tags are trimmed and de-duplicated here so the autocomplete derived from
-    // the loaded collection doesn't offer "출근용" twice.
+    // 여기서 다듬고 중복을 없앤다 — 컬렉션에서 파생하는 자동완성이 "출근용"을 두 번
+    // 내놓지 않도록.
     tags: uniqueTags(draft.tags ?? []),
   }
 }
@@ -159,15 +145,13 @@ export function toItemInsert(draft: ItemDraft, userId: string): ItemInsert {
 }
 
 /**
- * Writes only what the edit form owns.
+ * 편집 폼이 소유한 것만 쓴다.
  *
- * `user_id` is absent because ownership is fixed at creation — sending it would
- * at best be a no-op and at worst trip the RLS check, and leaving it out of the
- * type is stronger than deleting the key afterwards.
+ * `user_id`가 없는 것은 소유가 생성 때 정해지기 때문이다 — 보내봐야 잘해야 무효고
+ * 잘못하면 RLS 검사에 걸린다. 타입에서 빼는 쪽이 나중에 키를 지우는 것보다 강하다.
  *
- * `is_favorite` is absent for a different reason: the star lives on the detail
- * screen, not in this form. Including it meant opening the edit screen, starring
- * the item elsewhere, then saving — and silently un-starring it.
+ * `is_favorite`가 없는 것은 다른 이유다. 별은 이 폼이 아니라 상세 화면에 있다. 넣으면
+ * 편집 화면을 열어둔 채 다른 곳에서 별을 켠 뒤 저장했을 때 조용히 꺼진다.
  */
 export function toItemUpdate(draft: ItemDraft): ItemUpdate {
   return toItemFields(draft)

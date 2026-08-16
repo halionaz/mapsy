@@ -1,22 +1,17 @@
 import { useRef } from 'react'
 import { Dialog, Portal } from '@ark-ui/react'
-import { css } from 'styled-system/css'
-import { vstack } from 'styled-system/patterns'
 
 import { Button } from './Button'
+import * as styles from './ConfirmDialog.css'
 
 /**
- * The replacement for `window.confirm`.
+ * `window.confirm`의 대체.
  *
- * `confirm()` was doing the job on the delete action, and it works — but it is
- * the one surface in the app the product has no say over: the browser's own
- * chrome, in the browser's own type, in whatever language the browser decided,
- * with a button that says "OK" next to an irreversible delete. It also blocks
- * the main thread, so nothing behind it can keep painting.
+ * `confirm()`은 제품이 손댈 수 없는 유일한 표면이다 — 브라우저의 크롬, 브라우저가 정한
+ * 언어, 되돌릴 수 없는 삭제 옆의 "OK". 메인 스레드도 막는다.
  *
- * `role="alertdialog"` rather than `dialog`, and focus lands on the cancel
- * button rather than the destructive one: a dialog that opens with 삭제 already
- * focused turns a reflexive Enter into a deleted garment.
+ * `role="alertdialog"`이고 포커스는 파괴적 버튼이 아니라 취소에 놓는다. 삭제에 포커스가
+ * 잡힌 채 열리면 반사적인 Enter가 옷을 지운다.
  */
 interface ConfirmDialogProps {
   open: boolean
@@ -25,7 +20,7 @@ interface ConfirmDialogProps {
   description?: React.ReactNode
   confirmLabel: string
   cancelLabel?: string
-  /** Paints the confirm button as destructive. */
+  /** 확인 버튼을 파괴적으로 칠한다. */
   destructive?: boolean
   pending?: boolean
   onConfirm: () => void
@@ -54,19 +49,19 @@ export function ConfirmDialog({
       unmountOnExit
     >
       <Portal>
-        <Dialog.Backdrop className={backdrop} />
-        <Dialog.Positioner className={positioner}>
-          <Dialog.Content className={content}>
-            <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
-              <Dialog.Title className={css({ textStyle: 'heading' })}>{title}</Dialog.Title>
+        <Dialog.Backdrop className={styles.backdrop} />
+        <Dialog.Positioner className={styles.positioner}>
+          <Dialog.Content className={styles.content}>
+            <div className={styles.text}>
+              <Dialog.Title className={styles.title}>{title}</Dialog.Title>
               {description && (
-                <Dialog.Description className={css({ textStyle: 'body', color: 'fg.muted' })}>
+                <Dialog.Description className={styles.description}>
                   {description}
                 </Dialog.Description>
               )}
             </div>
 
-            <div className={css({ display: 'flex', gap: '2' })}>
+            <div className={styles.actions}>
               <Dialog.CloseTrigger asChild>
                 <Button variant="outline" full disabled={pending} ref={cancelRef}>
                   {cancelLabel}
@@ -87,41 +82,3 @@ export function ConfirmDialog({
     </Dialog.Root>
   )
 }
-
-const backdrop = css({
-  position: 'fixed',
-  inset: '0',
-  zIndex: 'overlay',
-  bg: 'overlay.backdrop',
-  backdropFilter: 'blur(3px)',
-  '&[data-state=open]': { animation: 'fadeIn' },
-  '&[data-state=closed]': { animation: 'fadeOut' },
-})
-
-const positioner = css({
-  position: 'fixed',
-  inset: '0',
-  zIndex: 'overlay',
-  display: 'grid',
-  placeItems: 'center',
-  p: '6',
-})
-
-const content = css({
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '5',
-  width: 'full',
-  maxWidth: '80',
-  p: '6',
-  bg: 'bg.elevated',
-  color: 'fg',
-  rounded: 'sheet',
-  boxShadow: 'raised',
-  '&[data-state=open]': { animation: 'dialogIn' },
-  '&[data-state=closed]': { animation: 'dialogOut' },
-  _motionReduce: {
-    '&[data-state=open]': { animation: 'fadeIn' },
-    '&[data-state=closed]': { animation: 'fadeOut' },
-  },
-})

@@ -7,45 +7,35 @@ import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { photoSlots, type PhotoSlot } from '../lib/photoSlots'
 
 /**
- * An item's photos, in cover order, paired with signed full-size URLs.
+ * 옷의 사진을 커버 순서로, 서명된 원본 URL과 짝지어 돌려준다.
  *
- * Only the thumbnail is signed by the wardrobe query; the originals are signed
- * here so the grid isn't paying for URLs nobody opens.
+ * 옷장 쿼리가 서명하는 것은 썸네일뿐이다. 원본은 여기서 서명하므로 격자가 아무도 열지
+ * 않는 URL의 값을 치르지 않는다.
  *
- * Both jobs live in one hook because they are one invariant: the URLs are
- * matched to the photos **by position**, so deriving the order in one place and
- * the URLs in another is how a tile ends up showing its neighbour's photo. The
- * caller gets slots, which cannot be misaligned.
+ * 두 일이 한 훅에 있는 것은 그것이 하나의 불변식이기 때문이다. URL은 사진과 **위치로**
+ * 짝지어지므로, 순서를 한 곳에서 URL을 다른 곳에서 만들면 타일이 이웃의 사진을 보여준다.
+ * 호출부는 어긋날 수 없는 슬롯을 받는다.
  */
 
 const NOTHING_UNLOADABLE: ReadonlySet<string> = new Set()
 
 /**
- * How long a signed URL is worth reading, which is not how long it exists.
+ * 서명 URL을 읽을 가치가 있는 시간. 그것이 존재하는 시간과는 다르다.
  *
- * **The hour that is subtracted is the floor on what a viewer gets handed.**
- * Nothing re-signs on a timer — a refetch needs a trigger (mount, window focus,
- * reconnect) *and* a stale entry — so an entry may legitimately be served at the
- * last moment before it goes stale, and what the `<img>` then holds is exactly
- * this margin. Someone who opens a garment at that moment and keeps looking at
- * it, without ever backgrounding the app, watches the photos break an hour
- * later. Half an hour was the first guess and made that half an hour.
+ * **빼는 여유가 뷰어가 건네받는 URL 잔여 수명의 하한이다.** 타이머로 재서명하는 것이
+ * 없고 갱신에는 계기와 낡은 엔트리가 둘 다 필요하므로, 엔트리는 낡기 직전에 정당하게
+ * 제공될 수 있다. 그때 `<img>`가 든 것이 정확히 이 여유다.
  *
- * That floor comes from `staleTime` alone; `gcTime` cannot raise it. The two
- * measure from different moments — `staleTime` from when the URLs were signed,
- * `gcTime` from when the last observer left — so one number does not buy one
- * guarantee. It is used for both because the question each answers happens to
- * have the same answer here: an entry is worth refetching, and worth keeping,
- * for exactly as long as its URLs are worth reading. Shortening `gcTime` would
- * only make a revisit re-sign more often; it would not change the floor.
+ * 그 하한은 `staleTime`에서만 나온다 — `gcTime`은 마지막 관찰자가 떠난 때부터 재므로
+ * 올리지 못한다. 같은 값을 쓰는 것은 두 질문의 답이 여기서 우연히 같기 때문이다.
  */
 const SIGNED_URL_USEFUL_MS = (SIGNED_URL_TTL_SECONDS - 60 * 60) * 1000
 
 export interface ItemPhotos {
-  /** Cover first. The strip, the dots and the viewer all read this order. */
+  /** 커버가 먼저. 스트립·점·뷰어가 모두 이 순서를 읽는다. */
   photos: ItemImage[]
   slots: PhotoSlot[]
-  /** A photo whose URL was signed but which the browser would not load. */
+  /** URL은 서명됐는데 브라우저가 로드하지 못한 사진. */
   markUnloadable: (photoId: string) => void
 }
 
@@ -57,49 +47,36 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
   const paths = useMemo(() => photos.map((photo) => photo.path), [photos])
 
   const query = useQuery({
-    // A fresh array every render is fine: react-query hashes keys by value, so
-    // the same paths address the same entry. It is also what removes the old
-    // effect-based version's join-the-paths-into-a-string dance — `useEffect`
-    // compared them by identity, and every cache patch (starring the item, say)
-    // produced a new array, re-signing every URL and remounting every <img>.
+    // 매 렌더 새 배열이어도 된다. react-query는 키를 값으로 해싱하므로 같은 경로가 같은
+    // 엔트리를 가리킨다. effect 기반 판본이 경로를 문자열로 잇던 춤도 이것으로 사라진다 —
+    // `useEffect`는 identity로 비교해서, 캐시를 기울 때마다(별을 켜는 것만으로도) 새
+    // 배열이 생겨 모든 URL을 재서명하고 모든 `<img>`를 다시 마운트했다.
     queryKey: storageKeys.signedUrls(paths),
     queryFn: async () => {
       const signed = await signPaths(paths)
-      // One entry per photo, in order — `null` for a path that could not be
-      // signed. Keeping the slots aligned with the photos is what lets a tile
-      // tell "still coming" from "did not arrive".
+      // 사진마다 하나씩 순서대로 — 서명하지 못한 경로는 `null`. 슬롯을 사진과 나란히
+      // 두는 것이 타일에게 "오는 중"과 "안 왔다"를 구분하게 한다.
       return paths.map((path) => signed.get(path) ?? null)
     },
     enabled: isSupabaseConfigured && paths.length > 0,
-    // Tied to how long the URLs actually live, not to the 30 minutes the
-    // wardrobe list uses. These URLs are what an `<img src>` is built from, and
-    // re-signing changes every one of them: the browser caches by full URL
-    // including the token, so a refetch re-downloads up to five 1280px
-    // originals over the phone's connection. At the default staleTime that
-    // happened every half hour — seven times more often than the URLs need it.
+    // 옷장 목록의 30분이 아니라 URL이 실제로 사는 시간에 맞춘다. 이 URL이 `<img src>`가
+    // 지어지는 재료이고 재서명은 그것을 전부 바꾼다 — 브라우저는 토큰까지 포함한 전체
+    // URL로 캐시하므로, 갱신 한 번이 1280px 원본 다섯 장을 폰 연결로 다시 받는다.
     staleTime: SIGNED_URL_USEFUL_MS,
-    // Held for as long as it is worth reading rather than inheriting the hour
-    // the list query uses. gcTime only starts once nothing observes the entry,
-    // so this is what a *second* visit to the same garment finds: URLs that are
-    // still valid, reused without a signing round trip and without changing any
-    // `<img src>`. What is kept is five strings per garment opened — the list
-    // query holds an array of up to 2,000 rows, which is why the global default
-    // stays where it is rather than following this one up.
+    // 목록 쿼리의 한 시간을 물려받지 않고 읽을 가치가 있는 만큼 붙든다. gcTime은
+    // 관찰자가 없어진 뒤에야 시작하므로, 이것이 같은 옷을 *두 번째* 열었을 때 만나는
+    // 것이다 — 아직 유효한 URL을, 서명 왕복 없이 그리고 어떤 `<img src>`도 바꾸지 않고
+    // 재사용한다. 남는 것은 연 옷마다 문자열 다섯 개다.
     //
-    // This is a cost, not a guarantee: it widens which paths reach the floor
-    // above (a revisit now can, where an eviction used to force a fresh signing)
-    // without lowering it. The floor is the margin, and it is the margin that
-    // was raised.
+    // 이것은 보장이 아니라 비용이다. 위 하한에 닿는 경로를 넓힐 뿐 하한 자체를 낮추지 않는다.
     gcTime: SIGNED_URL_USEFUL_MS,
   })
 
   /**
-   * Settled with nothing to show.
+   * 끝났는데 보여줄 것이 없다.
    *
-   * Without this the tiles would sit on a skeleton for good, which reads as a
-   * slow network rather than as a failure the user could retry by reloading.
-   * (`retry` is on by default, so this is reached only after the attempts are
-   * exhausted.)
+   * 이것이 없으면 타일이 영영 스켈레톤 위에 앉아, 새로고침으로 다시 해볼 수 있는 실패가
+   * 아니라 느린 네트워크로 읽힌다. (`retry`가 기본이라 시도를 다 쓴 뒤에만 닿는다.)
    */
   const allFailed = useMemo(() => photos.map(() => null), [photos])
   const urls = query.data ?? (query.isError ? allFailed : null)
@@ -107,30 +84,26 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
   const [unloadable, setUnloadable] = useState<ReadonlySet<string>>(NOTHING_UNLOADABLE)
   const [signedFor, setSignedFor] = useState(query.data)
 
-  // Whatever would not load did so at a URL that no longer exists, so a fresh
-  // signing — a different item, or a refetch when the app is foregrounded —
-  // deserves another attempt. Adjusted during render rather than in an effect so
-  // the stale set is never rendered once first.
+  // 로드되지 않은 것은 이제 없는 URL에서 그랬으므로, 새 서명은 — 다른 옷이든, 앱이
+  // 앞으로 나올 때의 갱신이든 — 다시 시도할 자격이 있다. effect가 아니라 렌더 중에
+  // 맞추므로 낡은 집합이 한 번 그려지는 일이 없다.
   // https://react.dev/reference/react/useState#storing-information-from-previous-renders
   if (signedFor !== query.data) {
     setSignedFor(query.data)
     setUnloadable(NOTHING_UNLOADABLE)
   }
 
-  // Memoised, and not only to save the work. `PhotoViewer` takes this as a prop
-  // and builds its paging callback from it, so a fresh array every render is a
-  // fresh callback every render — and the key handler bound to that callback
-  // would be detached and reattached on each one. Swiping in the viewer scrolls
-  // the strip behind it, which re-renders the screen, so "every render" is every
-  // frame of a swipe.
+  // 일을 아끼려고만 memo하는 것이 아니다. `PhotoViewer`가 이것을 prop으로 받아 페이징
+  // 콜백을 짓는다. 매 렌더 새 배열은 매 렌더 새 콜백이고, 거기 묶인 키 핸들러가 매번
+  // 떼였다 붙는다. 뷰어에서 스와이프하면 뒤 스트립이 스크롤되어 화면이 다시 그려지므로
+  // "매 렌더"는 스와이프의 매 프레임이다.
   const slots = useMemo(() => photoSlots(photos, urls, unloadable), [photos, urls, unloadable])
 
   return {
     photos,
     slots,
-    // Returns the same set when the id is already in it: a new one every time
-    // would be a new state value every time, and this is called from an <img>
-    // error handler that can fire on a re-render.
+    // 이미 들어 있는 id면 같은 집합을 돌려준다. 매번 새 집합은 매번 새 상태값이고,
+    // 이것은 리렌더에도 울릴 수 있는 `<img>` 에러 핸들러에서 불린다.
     markUnloadable: (photoId) =>
       setUnloadable((failed) => (failed.has(photoId) ? failed : new Set(failed).add(photoId))),
   }

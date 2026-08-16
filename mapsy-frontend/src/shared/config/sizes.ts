@@ -1,22 +1,19 @@
 /**
- * Size presets — PRD §5.4.
+ * 사이즈 프리셋 — PRD §5.4.
  *
- * Sizing systems differ per category: a top is M, trousers are 30 inches, shoes
- * are 270mm. Collapsing those into one free-text field makes the size filter
- * useless, so the form offers the presets for the chosen category and falls back
- * to free input for anything unusual (brand-specific runs, imported labels).
+ * 체계가 카테고리마다 다르다. 상의는 M, 바지는 30인치, 신발은 270mm. 하나의 자유 입력
+ * 필드로 뭉치면 사이즈 필터가 쓸모없어지므로, 폼은 고른 카테고리의 프리셋을 내주고
+ * 예외적인 것(브랜드 고유 표기, 수입 라벨)은 자유 입력으로 받는다.
  *
- * The stored value is always a plain string — preset or typed — so the schema
- * stays a single `size` column.
+ * 저장되는 값은 프리셋이든 직접 입력이든 늘 평범한 문자열이라 스키마는 `size` 한 컬럼이다.
  */
 
 import type { CategoryGroupId } from './categories'
 
 const APPAREL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'FREE']
 
-// 26–38 inches inclusive, per PRD §5.4. Every step is listed rather than
-// thinning out the odd sizes above 34 — the rare ones are exactly the ones a
-// user would otherwise have to type by hand.
+// 26–38인치. 34 위의 홀수를 솎아내지 않고 전부 적는다 — 드문 쪽이야말로 없으면
+// 손으로 쳐야 하는 값이다.
 const BOTTOM_SIZES = [
   ...Array.from({ length: 13 }, (_, i) => String(26 + i)),
   'S',
@@ -26,7 +23,7 @@ const BOTTOM_SIZES = [
   'FREE',
 ]
 
-// 220–300mm in 5mm steps, matching how Korean shoe sizes are labelled.
+// 220–300mm, 5mm 간격.
 const SHOE_SIZES = Array.from({ length: 17 }, (_, i) => String(220 + i * 5))
 
 const FREE_ONLY = ['FREE']

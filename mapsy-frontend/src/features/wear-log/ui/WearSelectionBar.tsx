@@ -1,38 +1,27 @@
 import { Check, X } from 'lucide-react'
-import { css } from 'styled-system/css'
 
 import { formatMonthDay } from '@/shared/lib/format'
 import { Button, IconButton } from '@/shared/ui/Button'
+import * as styles from './WearSelectionBar.css'
 
 /**
- * The bottom row while garments are being picked — it replaces 옷 등록 and the
- * wear button rather than sitting above them.
+ * 옷을 고르는 동안의 아래 행 — 옷 등록과 착용 버튼 위에 얹히는 게 아니라 그것들을 대신한다.
  *
  * ```
  * [ 8.15 (오늘) ] [    3벌 기록    ] [ ✕ ]
  * ```
  *
- * Down here rather than in a strip above the grid, which is where the day and
- * the cancel used to live. Both of them are things the thumb reaches for while
- * scrolling a wardrobe, and the top of the screen is the one place a thumb is
- * not — the same reason the button that opens this mode is at the bottom.
+ * 격자 위가 아니라 아래인 것은, 날짜와 취소 둘 다 스크롤하는 엄지가 찾는 것이기 때문이다.
  *
- * The date is a **label, not a control**. Only today is writable, so there is
- * nothing to switch to; a pill that looks pressable and answers nothing is worse
- * than a plain one. It still carries the actual date as well as the word,
- * because `오늘` alone is a relative claim on a screen that may have been open
- * since before midnight, and `8.15` is what makes it checkable.
- *
- * Picking any other day is a date picker, and that is its own issue. Until then
- * `wearDraft.isUsable` is what keeps the word true — a draft whose day is no
- * longer today is not returned at all, so this never renders `(오늘)` over a
- * date that is not.
+ * 날짜는 **컨트롤이 아니라 라벨**이다. 쓸 수 있는 날이 오늘뿐이라 옮겨갈 곳이 없다.
+ * 그래도 말과 함께 실제 날짜를 싣는다 — `오늘`만으로는 자정 전부터 열려 있었을 화면에서
+ * 확인할 수 없는 주장이다.
  */
 interface WearSelectionBarProps {
-  /** The day being written. Always today; see above. */
+  /** 기록되는 날. 늘 오늘이다. */
   wornOn: string
   selectedCount: number
-  /** What the day held before this selection started. */
+  /** 이 선택이 시작되기 전에 그날이 담고 있던 수. */
   recordedCount: number
   submitting: boolean
   onSubmit: () => void
@@ -48,38 +37,31 @@ export function WearSelectionBar({
   onCancel,
 }: WearSelectionBarProps) {
   /**
-   * Submitting nothing is two different things, and only one of them is a
-   * mistake.
+   * 아무것도 없이 제출하는 것은 두 가지 다른 일이고, 그중 하나만 실수다.
    *
-   * Clearing every garment off a day that has some is a real edit — "I did not
-   * wear any of that after all" — and the database function accepts an empty set
-   * for exactly that. Pressing submit on a day that was already empty does
-   * nothing at all, and a button that does nothing should not be pressable.
+   * 옷이 있던 날을 비우는 것은 진짜 편집이고("결국 그중 아무것도 안 입었다") DB 함수도
+   * 빈 집합을 그래서 받는다. 원래 비어 있던 날에 제출을 누르는 것은 아무 일도 아니다.
    */
   const clearing = selectedCount === 0 && recordedCount > 0
 
-  /** Written once so the printed date and the spoken one cannot drift apart. */
+  /** 한 번만 써서 인쇄된 날짜와 읽히는 날짜가 어긋나지 않게 한다. */
   const day = `${formatMonthDay(wornOn) ?? wornOn} (오늘)`
 
   return (
-    /* The date rides in the group's name, and it has to: the paragraph below is
-       not focusable and carries no role, so nothing in tab order says which day
-       is being written. Labelling the paragraph itself would not carry either —
-       `aria-label` on an element with no role is ignored by most screen readers.
-       Putting it on the group is what keeps the reason the date is printed at
-       all — a screen open since before midnight — true for everyone. */
-    <div className={bar} role="group" aria-label={`${day} 입은 옷 고르기`}>
-      <p className={dateLabel}>{day}</p>
+    /* 날짜가 그룹의 이름에 실린다. 실려야 한다 — 아래 문단은 포커스를 받지 않고 role도
+       없어서 탭 순서 안에 어느 날인지 말하는 것이 없다. 문단 자체에 `aria-label`을
+       붙여도 실리지 않는다. role 없는 요소의 aria-label은 대부분의 스크린리더가 무시한다. */
+    <div className={styles.bar} role="group" aria-label={`${day} 입은 옷 고르기`}>
+      <p className={styles.dateLabel}>{day}</p>
 
-      {/* `full` so this takes whatever the other two leave, and shrinks first
-          when a two-digit count arrives. */}
+      {/* `full`이라 나머지 둘이 남긴 폭을 가져가고, 두 자릿수가 오면 먼저 줄어든다. */}
       <Button
         full
         icon={<Check />}
         loading={submitting}
         disabled={selectedCount === 0 && recordedCount === 0}
         onClick={onSubmit}
-        className={floating}
+        className={styles.floating}
       >
         {selectedCount > 0
           ? `${selectedCount}벌 기록`
@@ -88,57 +70,13 @@ export function WearSelectionBar({
             : '옷을 골라주세요'}
       </Button>
 
-      {/* A glyph rather than the word: three labelled pills do not fit across a
-          phone, and this is the one of the three whose meaning a bare ✕ already
-          carries. With nothing picked the submit button is disabled, so this is
-          the only way out of the mode — which is why it is never the control
-          that gives up its width. */}
-      <IconButton label="고르기 취소" filled onClick={onCancel} className={floating}>
+      {/* 말이 아니라 글리프인 것은 라벨 붙은 알약 셋이 폰 가로폭에 들어가지 않기
+          때문이고, 셋 중 맨 ✕가 이미 뜻을 가진 것은 이것뿐이다. 아무것도 안 골랐을 때
+          제출이 잠기므로 이것이 모드에서 나가는 유일한 길이다 — 그래서 폭을 내주는
+          컨트롤이 결코 되지 않는다. */}
+      <IconButton label="고르기 취소" filled onClick={onCancel} className={styles.floating}>
         <X size={18} />
       </IconButton>
     </div>
   )
 }
-
-const floating = css({ boxShadow: 'raised' })
-
-/**
- * The day, drawn as what it is.
- *
- * Same height and radius as the two buttons beside it so the row sits on one
- * line, and deliberately none of the things that say "press me" — no border, no
- * hover, no pointer, and `fg.muted` rather than `fg`. It reads as the caption on
- * the row, which is what it is until there is a picker behind it.
- */
-const dateLabel = css({
-  display: 'inline-flex',
-  alignItems: 'center',
-  flexShrink: 0,
-  minHeight: 'tap',
-  px: '4',
-  rounded: 'full',
-  bg: 'bg.elevated',
-  color: 'fg.muted',
-  textStyle: 'label',
-  whiteSpace: 'nowrap',
-  boxShadow: 'raised',
-})
-
-/**
- * Pinned above the home indicator and held to the app column, not the window —
- * the shell centres a 480px column and a full-width row would put the cancel
- * button somewhere off in the page margin on a tablet.
- */
-const bar = css({
-  position: 'fixed',
-  bottom: 'calc({spacing.6} + var(--safe-b))',
-  left: '50%',
-  translate: 'auto',
-  translateX: '-1/2',
-  zIndex: 'fab',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '2',
-  width: 'calc(100vw - {spacing.10})',
-  maxWidth: 'calc({sizes.app} - {spacing.10})',
-})
