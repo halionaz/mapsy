@@ -16,7 +16,12 @@ export type {
   WardrobeItem,
 } from './model/types'
 
-export { photoEntryKey, storedPhotoEntries, type PhotoEntry } from './model/photoEntries'
+export {
+  photoEntryKey,
+  samePhotoList,
+  storedPhotoEntries,
+  type PhotoEntry,
+} from './model/photoEntries'
 
 export {
   useCreateItem,

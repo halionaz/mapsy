@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { clamp } from '@/shared/lib/clamp'
 import {
   readGridGeometry,
+  readTransitionMs,
   slotAt,
   slotOffset,
   displaySlot,
@@ -40,8 +41,15 @@ const HOLD_MS = 220
 const HOLD_SLOP_PX = 8
 /** Movement that starts a mouse drag. */
 const MOUSE_SLOP_PX = 4
-/** Matches the tile's transition, so the commit lands the frame the tile stops moving. */
-const SETTLE_MS = 200
+/**
+ * Only when the tile's own transition cannot be read.
+ *
+ * The commit has to outlast the animation — clearing the transform while the
+ * tile is still travelling is the jump this whole settle exists to avoid — so
+ * the real number comes from the same token the transition uses. This is the
+ * floor for an environment that has no computed style to ask.
+ */
+const SETTLE_FALLBACK_MS = 200
 
 interface Held {
   /** Where the photo sits in the committed list. */
@@ -85,6 +93,16 @@ export interface DragReorder {
   heldIndex: number | null
   /** True while a finger or mouse is dragging it, which is when it must not animate. */
   following: boolean
+  /** The slot the tile at `index` is drawn in — where it *looks* like it is. */
+  slotOf: (index: number) => number
+  /**
+   * Drops a rearrange on the floor, mid-drag or mid-settle.
+   *
+   * For a caller that is about to change the list underneath one: the held
+   * numbers are positions in a list that is about to stop existing, and the
+   * pending commit would put a photo back that was just removed.
+   */
+  abandon: () => void
   /** For the live region — what just happened, in a sentence. */
   announcement: string
 }
@@ -98,8 +116,10 @@ export function useDragReorder({
 }): DragReorder {
   const gridRef = useRef<HTMLDivElement>(null)
   const geometry = useRef<GridGeometry | null>(null)
+  const settleMs = useRef(SETTLE_FALLBACK_MS)
   const gesture = useRef<Gesture | null>(null)
   const settleTimer = useRef<number | null>(null)
+  const unblockScroll = useRef<(() => void) | null>(null)
   const [held, setHeld] = useState<Held | null>(null)
   const [announcement, setAnnouncement] = useState('')
 
@@ -107,21 +127,10 @@ export function useDragReorder({
     () => () => {
       if (gesture.current?.holdTimer != null) clearTimeout(gesture.current.holdTimer)
       if (settleTimer.current != null) clearTimeout(settleTimer.current)
+      unblockScroll.current?.()
     },
     [],
   )
-
-  // Non-passive, so the page underneath stops scrolling while a tile is up. See
-  // the header — React's own handler cannot do this.
-  const dragging = held !== null
-  useEffect(() => {
-    const grid = gridRef.current
-    if (!dragging || !grid) return
-
-    const hold = (event: TouchEvent) => event.preventDefault()
-    grid.addEventListener('touchmove', hold, { passive: false })
-    return () => grid.removeEventListener('touchmove', hold)
-  }, [dragging])
 
   /** A short tap where the phone supports it. Silently absent on iOS. */
   function tick(pattern: number) {
@@ -129,13 +138,34 @@ export function useDragReorder({
   }
 
   function measure() {
-    geometry.current = gridRef.current ? readGridGeometry(gridRef.current) : null
+    const grid = gridRef.current
+    geometry.current = grid ? readGridGeometry(grid) : null
+    settleMs.current = (grid && readTransitionMs(grid)) || SETTLE_FALLBACK_MS
+  }
+
+  /**
+   * Stops the page scrolling under the tile that just lifted.
+   *
+   * Attached here rather than from an effect, and that is the whole point:
+   * an effect runs a frame after the state that triggers it, and the first
+   * touchmove of the drag can land in that gap. One unprevented touchmove is
+   * enough — the browser starts scrolling, and every touchmove after it arrives
+   * `cancelable: false`, so the page and the tile then move together for the
+   * rest of the gesture.
+   */
+  function blockScroll() {
+    const grid = gridRef.current
+    if (!grid) return
+    const hold = (event: TouchEvent) => event.preventDefault()
+    grid.addEventListener('touchmove', hold, { passive: false })
+    unblockScroll.current = () => grid.removeEventListener('touchmove', hold)
   }
 
   function lift(current: Gesture) {
     current.lifted = true
     current.holdTimer = null
     measure()
+    blockScroll()
     // So a finger that wanders off the tile — which is the entire point — keeps
     // reporting to it.
     current.element.setPointerCapture?.(current.pointerId)
@@ -148,11 +178,20 @@ export function useDragReorder({
     const current = gesture.current
     if (current?.holdTimer != null) clearTimeout(current.holdTimer)
     gesture.current = null
+    unblockScroll.current?.()
+    unblockScroll.current = null
   }
 
   function commit(from: number, to: number) {
     setHeld(null)
     if (from !== to) onMove(from, to)
+  }
+
+  function abandon() {
+    if (settleTimer.current != null) clearTimeout(settleTimer.current)
+    settleTimer.current = null
+    forget()
+    setHeld(null)
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLElement>, index: number) {
@@ -200,8 +239,13 @@ export function useDragReorder({
     }
 
     const grid = geometry.current
+    // Page coordinates, because the geometry is in page coordinates — see there.
     const to = grid
-      ? slotAt({ x: event.clientX, y: event.clientY }, grid, count)
+      ? slotAt(
+          { x: event.clientX + window.scrollX, y: event.clientY + window.scrollY },
+          grid,
+          count,
+        )
       : current.index
     if (to !== current.to) tick(4)
     current.to = to
@@ -227,7 +271,7 @@ export function useDragReorder({
       settleTimer.current = null
       commit(from, to)
       setAnnouncement(`${to + 1}번째에 놓았어요.`)
-    }, SETTLE_MS)
+    }, settleMs.current)
   }
 
   /**
@@ -287,6 +331,8 @@ export function useDragReorder({
     rearranging: held !== null,
     heldIndex: held?.from ?? null,
     following: held?.follow != null,
+    slotOf: (index) => (held ? displaySlot(index, held.from, held.to) : index),
+    abandon,
     announcement,
     tileProps: (index) => ({
       onPointerDown: (event) => handlePointerDown(event, index),

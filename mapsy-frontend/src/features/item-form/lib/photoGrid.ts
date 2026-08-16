@@ -20,7 +20,13 @@ export interface GridGeometry {
   /** Distance between neighbouring slots — one tile plus one gap. */
   pitch: number
   columns: number
-  /** Top-left of the grid in client coordinates. */
+  /**
+   * Top-left of the grid in **page** coordinates.
+   *
+   * Not viewport coordinates: this is measured once when the tile lifts, and a
+   * mouse drag can scroll the page under it — the wheel is never blocked, only
+   * touch panning is. Held in page space, the measurement survives that.
+   */
   left: number
   top: number
 }
@@ -29,18 +35,40 @@ export interface GridGeometry {
 export function readGridGeometry(element: HTMLElement): GridGeometry | null {
   const style = getComputedStyle(element)
   // The *used* track list — `repeat(auto-fill, 84px)` resolves to "84px 84px …",
-  // so this is both the column count and the tile size.
+  // so this is both the column count and the tile size. An element with no
+  // layout answers `none` or an empty string, and both fall out as NaN below.
   const tracks = style.gridTemplateColumns.split(' ').filter(Boolean)
   const tile = Number.parseFloat(tracks[0] ?? '')
   const gap = Number.parseFloat(style.columnGap)
 
-  if (tracks.length === 0 || !Number.isFinite(tile) || !Number.isFinite(gap)) return null
+  if (!Number.isFinite(tile) || !Number.isFinite(gap)) return null
 
   const rect = element.getBoundingClientRect()
-  return { pitch: tile + gap, columns: tracks.length, left: rect.left, top: rect.top }
+  return {
+    pitch: tile + gap,
+    columns: tracks.length,
+    left: rect.left + window.scrollX,
+    top: rect.top + window.scrollY,
+  }
 }
 
-/** The slot under a point, clamped to the slots that hold a photo. */
+/**
+ * How long the tiles take to move, read back from the token that moves them.
+ *
+ * The drop commits on a timer, and the timer has to outlast the transition or
+ * the transform is cleared mid-flight and the tile jumps. Reading the duration
+ * off `--durations-normal` is the same refusal as the pitch above: the
+ * stylesheet owns the number, and a copy of `200` in here is a copy that goes
+ * quietly wrong the day the token changes.
+ */
+export function readTransitionMs(element: HTMLElement): number | null {
+  const raw = getComputedStyle(element).getPropertyValue('--durations-normal').trim()
+  const amount = Number.parseFloat(raw)
+  if (!Number.isFinite(amount)) return null
+  return raw.endsWith('ms') ? amount : amount * 1000
+}
+
+/** The slot under a point — in page coordinates, like the grid — clamped to the slots that hold a photo. */
 export function slotAt(
   point: { x: number; y: number },
   grid: GridGeometry,

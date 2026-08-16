@@ -12,7 +12,7 @@ import {
   removePending,
   type PendingUpload,
 } from './pendingUploads'
-import { hasPhotoChanges, type PhotoEntry } from './photoEntries'
+import type { PhotoEntry } from './photoEntries'
 import type { ItemDraft, ItemStatus, ItemWithImages, WardrobeItem } from './types'
 
 /**
@@ -163,6 +163,12 @@ export function useDiscardUpload() {
  * idempotent, and `set_item_images` is given the whole list rather than a delta,
  * so a second attempt states the same result again — including over rows a first
  * attempt landed but never got to report.
+ *
+ * The photo write is skipped entirely unless the form says its list changed.
+ * That question cannot be answered from here: this sees the cache, which
+ * refetches on window focus, and a photo another device added while the screen
+ * was open would look like a difference the user made. `samePhotoList` carries
+ * the argument.
  */
 export function useUpdateItem() {
   const { queryClient, before, after } = useCachePatch()
@@ -173,11 +179,11 @@ export function useUpdateItem() {
       draft: ItemDraft
       /** The form's photo list, cover first. */
       photos: PhotoEntry[]
+      /** Whether that list differs from the one the form opened with. */
+      photosChanged: boolean
     }) => {
       const updated = await api.updateItem(vars.item.id, vars.draft)
-      const photos = hasPhotoChanges(vars.item.images, vars.photos)
-        ? await api.setItemPhotos(vars.item, vars.photos)
-        : null
+      const photos = vars.photosChanged ? await api.setItemPhotos(vars.item, vars.photos) : null
       return { updated, photos }
     },
     onSuccess: async ({ updated, photos }) => {

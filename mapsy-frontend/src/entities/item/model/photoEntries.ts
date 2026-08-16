@@ -35,22 +35,31 @@ export function photoEntryKey(entry: PhotoEntry): string {
 }
 
 /**
- * Whether `entries` say anything the item does not already hold.
+ * Whether two photo lists say the same thing — same photos, same order.
  *
- * Asked before the save touches photos at all, and not as an optimisation.
- * `set_item_images` writes exactly the list it is given, so a screen opened
- * before another device added a photo would delete that photo on a save that was
- * only ever about the memo field. Skipping the call when the photos are
- * untouched keeps a text edit to the text.
+ * The save asks this of the list the form was opened with against the list it is
+ * handing back, and the comparison has to be against **that** rather than
+ * against whatever the wardrobe cache holds now. `set_item_images` writes
+ * exactly the list it is given, so anything it is not told about is deleted; the
+ * question worth asking is therefore "did the person touch the photos", and only
+ * the form knows.
+ *
+ * Comparing against the cache instead looked equivalent and was not. The cache
+ * refetches on window focus, so a screen left open while another device added a
+ * sixth photo comes back with six in the cache and five in the form — and a save
+ * that was only ever about the memo field then reads as a change and deletes the
+ * photo the user never saw.
+ *
+ * What this cannot answer is the same edit when the photos *were* touched: the
+ * list is a whole answer, so the sixth photo goes. Refusing that needs the
+ * server to compare versions, which is a different piece of work.
  */
-export function hasPhotoChanges(
-  images: readonly ItemImage[],
-  entries: readonly PhotoEntry[],
+export function samePhotoList(
+  a: readonly PhotoEntry[],
+  b: readonly PhotoEntry[],
 ): boolean {
-  if (entries.length !== images.length) return true
-
-  const inOrder = [...images].sort((a, b) => a.sortOrder - b.sortOrder)
-  return entries.some(
-    (entry, index) => entry.kind !== 'stored' || entry.image.id !== inOrder[index].id,
+  return (
+    a.length === b.length &&
+    a.every((entry, index) => photoEntryKey(entry) === photoEntryKey(b[index]))
   )
 }

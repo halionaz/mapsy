@@ -13,10 +13,12 @@ import type { Item, ItemImage, WardrobeItem } from './types'
  *
  * `set_item_images` is handed the whole list rather than a delta, so calling it
  * is never free: it deletes every photo of the item that the list does not
- * mention. A form opened before another device added a sixth photo would take
- * that photo away on a save that was only ever about the memo field — so the
- * fields and the photos are two separate writes, and the second one is skipped
- * unless the list on screen actually says something new.
+ * mention. So the fields and the photos are two separate writes and the second
+ * one is skipped unless the form says its list changed.
+ *
+ * The flag comes from the form rather than from a comparison here, and these
+ * tests take it as given — `photoEntries.test.ts` holds down the comparison
+ * itself, and `ItemForm.test.tsx` that the form reports it honestly.
  */
 
 const { setItemPhotosMock, updateItemMock } = vi.hoisted(() => ({
@@ -91,7 +93,7 @@ function cached(client: QueryClient): WardrobeItem {
 }
 
 describe('useUpdateItem', () => {
-  it('leaves the photos alone when the form gives back the same list', async () => {
+  it('leaves the photos alone when the form says it did not touch them', async () => {
     updateItemMock.mockResolvedValue({ ...item, title: draft.title } satisfies Item)
     const { client, result } = renderUpdate()
 
@@ -99,6 +101,7 @@ describe('useUpdateItem', () => {
       item,
       draft,
       photos: storedPhotoEntries(item.images),
+      photosChanged: false,
     })
 
     expect(setItemPhotosMock).not.toHaveBeenCalled()
@@ -118,7 +121,12 @@ describe('useUpdateItem', () => {
     const { client, result } = renderUpdate()
 
     const entries = storedPhotoEntries(item.images)
-    await result.current.mutateAsync({ item, draft, photos: [entries[1], entries[0]] })
+    await result.current.mutateAsync({
+      item,
+      draft,
+      photos: [entries[1], entries[0]],
+      photosChanged: true,
+    })
 
     expect(setItemPhotosMock).toHaveBeenCalledTimes(1)
     // The cover moved, so the grid's thumbnail has to move with it — patching

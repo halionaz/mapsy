@@ -23,7 +23,9 @@ export function ItemNewPage() {
   const userId = useCurrentUserId()
   const create = useCreateItem()
 
-  function handleSubmit({ photos, ...draft }: ItemFormValues) {
+  // `photosChanged` is the edit screen's question — there is nothing here for a
+  // photo to have changed against.
+  function handleSubmit({ photos, photosChanged: _changed, ...draft }: ItemFormValues) {
     if (!userId) return
     create.mutate({
       pending: {

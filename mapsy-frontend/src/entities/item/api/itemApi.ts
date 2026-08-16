@@ -291,15 +291,21 @@ export async function setItemPhotos(
   })
 
   if (error) {
-    // Only when the database answered. A rejected call rolls back whole, so
-    // nothing refers to these objects and they are pure waste. A request that
-    // never got an answer is the other case: it may have committed with the
-    // response lost on the way back, and removing the objects then leaves rows
-    // rendering broken images — which is the direction `deleteItem` orders
-    // itself to avoid. Orphans are recoverable; missing files are not.
-    // Measured against supabase-js 2.111.0: a fetch that never answered
-    // resolves with `status: 0`, an answered rejection with the real HTTP code.
-    if (status !== 0) await removeObjects(paths)
+    // Only when the *database* refused. A rejected statement rolls the function
+    // back whole, so nothing refers to these objects and they are pure waste.
+    //
+    // Anything else is a maybe, and a maybe has to be left alone: the write may
+    // have committed with the answer lost on the way back, and removing the
+    // objects then leaves rows rendering broken images — the direction
+    // `deleteItem` orders itself to avoid. Orphans are recoverable; missing
+    // files are not.
+    //
+    // That is why this is a 4xx window rather than `status !== 0`. A dead
+    // connection does resolve with `status: 0` (measured against supabase-js
+    // 2.111.0), but a 5xx does not: the gateway in front of PostgREST answers
+    // 502/504 for a request that may well have committed, and reading "it
+    // answered" as "it rolled back" is exactly wrong there.
+    if (status >= 400 && status < 500) await removeObjects(paths)
     throw error
   }
 

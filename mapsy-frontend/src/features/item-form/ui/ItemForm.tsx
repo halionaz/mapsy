@@ -14,7 +14,7 @@ import { ChipGroup } from '@/shared/ui/ChipGroup'
 import { ChipSelect } from '@/shared/ui/ChipSelect'
 import { Field, FieldError } from '@/shared/ui/Field'
 import { inputStyle } from '@/shared/ui/fieldStyle'
-import type { ItemDraft, PhotoEntry } from '@/entities/item'
+import { samePhotoList, type ItemDraft, type PhotoEntry } from '@/entities/item'
 import { LIMITS, MAX_PHOTOS } from '../model/limits'
 import { PhotoPicker } from './PhotoPicker'
 
@@ -30,6 +30,15 @@ import { PhotoPicker } from './PhotoPicker'
 export interface ItemFormValues extends ItemDraft {
   /** Cover first — the order is the answer, not a detail of it. */
   photos: PhotoEntry[]
+  /**
+   * Whether the person changed the photos, against the list this form opened
+   * with.
+   *
+   * Reported from here because here is the only place that knows. Writing the
+   * photos deletes everything the written list omits, so the caller has to be
+   * able to tell "left alone" from "left looking the same" — see `samePhotoList`.
+   */
+  photosChanged: boolean
 }
 
 interface ItemFormProps {
@@ -53,6 +62,9 @@ export function ItemForm({
   onCancel,
 }: ItemFormProps) {
   const [photos, setPhotos] = useState<PhotoEntry[]>(initial?.photos ?? [])
+  // What the photos looked like when this form opened, frozen at the same moment
+  // the state above was seeded from it.
+  const openedWith = useRef(initial?.photos ?? [])
   const [title, setTitle] = useState(initial?.title ?? '')
   const [categoryId, setCategoryId] = useState<SubcategoryId | null>(initial?.categoryId ?? null)
   const [colors, setColors] = useState<ColorId[]>(initial?.colors ?? [])
@@ -171,6 +183,7 @@ export function ItemForm({
 
     onSubmit({
       photos,
+      photosChanged: !samePhotoList(openedWith.current, photos),
       title,
       categoryId,
       colors,

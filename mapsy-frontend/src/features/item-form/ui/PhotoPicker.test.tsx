@@ -18,11 +18,16 @@ import { PhotoPicker } from './PhotoPicker'
  * cold open reads as five broken photos.
  */
 
-const { releasePreviewMock } = vi.hoisted(() => ({ releasePreviewMock: vi.fn() }))
+const { releasePreviewMock, processPhotoMock } = vi.hoisted(() => ({
+  releasePreviewMock: vi.fn(),
+  processPhotoMock: vi.fn(),
+}))
 
 vi.mock('@/shared/lib/image', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/shared/lib/image')>()),
   releasePreview: releasePreviewMock,
+  // jsdom has no canvas, and what these tests need from it is timing anyway.
+  processPhoto: processPhotoMock,
 }))
 
 /**
@@ -129,6 +134,25 @@ describe('PhotoPicker', () => {
     fireEvent.click(screen.getByLabelText('사진 1 삭제'))
     expect(releasePreviewMock).toHaveBeenCalledTimes(1)
     expect(onChange).toHaveBeenLastCalledWith([])
+  })
+
+  it('moves the 대표 badge with the tile, not with the list', () => {
+    // Dragging a photo to the front *is* how the cover changes, so a badge that
+    // waits for the drop sits on the wrong tile for the whole gesture.
+    render(
+      <PhotoPicker
+        photos={[stored('a'), stored('b'), stored('c')]}
+        onChange={vi.fn()}
+        storedUrls={new Map()}
+      />,
+    )
+
+    const third = screen.getByLabelText('사진 3')
+    fireEvent.keyDown(third, { key: ' ' })
+    fireEvent.keyDown(third, { key: 'ArrowLeft' })
+    fireEvent.keyDown(third, { key: 'ArrowLeft' })
+
+    expect(screen.getByText('대표').parentElement?.contains(third)).toBe(true)
   })
 
   it('rearranges from the keyboard, since dragging is the only other way in', () => {
@@ -247,6 +271,80 @@ describe('PhotoPicker', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  /**
+   * Two things that answer after the list has moved on.
+   *
+   * Both used to close over the list from the render that started them, so a
+   * photo removed while one was in flight came back when it landed — and if it
+   * was a picked one, `removeAt` had already revoked its preview, so what came
+   * back was a tile pointing at a URL that no longer resolves.
+   */
+  it('keeps a removal that happens while a drop is still settling', () => {
+    vi.useFakeTimers()
+    try {
+      const onChange = vi.fn()
+      const entries = [stored('a'), stored('b'), stored('c')]
+      render(<PhotoPicker photos={entries} onChange={onChange} storedUrls={new Map()} />)
+      const tile = screen.getByLabelText('사진 1')
+
+      fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 40 })
+      act(() => void vi.advanceTimersByTime(300))
+      fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 232, clientY: 40 })
+      fireEvent.pointerUp(tile, { pointerId: 1, pointerType: 'touch', clientX: 232, clientY: 40 })
+
+      // Inside the settle, before the reorder has been committed.
+      fireEvent.click(screen.getByLabelText('사진 2 삭제'))
+      act(() => void vi.advanceTimersByTime(500))
+
+      // The removal, and nothing after it: the pending drop held positions in a
+      // list that no longer exists, so it was dropped rather than replayed.
+      expect(onChange).toHaveBeenCalledTimes(1)
+      expect(onChange).toHaveBeenCalledWith([entries[0], entries[2]])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('adds newly picked photos to the list as it is when they finish, not as it was', async () => {
+    const onChange = vi.fn()
+    const entries = [stored('a'), stored('b')]
+    let finish: ((photo: ProcessedPhoto) => void) | undefined
+    processPhotoMock.mockReturnValue(
+      new Promise<ProcessedPhoto>((resolve) => {
+        finish = resolve
+      }),
+    )
+
+    const { container, rerender } = render(
+      <PhotoPicker photos={entries} onChange={onChange} storedUrls={new Map()} />,
+    )
+
+    const input = container.querySelector('input[type=file]')
+    if (!input) throw new Error('파일 입력을 찾지 못함')
+    fireEvent.change(input, { target: { files: [new File([], 'a.jpg', { type: 'image/jpeg' })] } })
+
+    // Decoding takes hundreds of milliseconds, and the delete button stays live
+    // through all of it.
+    fireEvent.click(screen.getByLabelText('사진 1 삭제'))
+    expect(onChange).toHaveBeenLastCalledWith([entries[1]])
+    rerender(<PhotoPicker photos={[entries[1]]} onChange={onChange} storedUrls={new Map()} />)
+
+    const blob = new Blob()
+    const decoded: ProcessedPhoto = {
+      full: blob,
+      thumb: blob,
+      width: 1,
+      height: 1,
+      ext: 'webp',
+      previewUrl: 'blob:decoded',
+    }
+    await act(async () => {
+      finish?.(decoded)
+    })
+
+    expect(onChange).toHaveBeenLastCalledWith([entries[1], { kind: 'picked', photo: decoded }])
   })
 
   it('puts a photo back where it was when the move is abandoned', () => {

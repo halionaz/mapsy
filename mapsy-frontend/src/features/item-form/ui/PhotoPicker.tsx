@@ -15,12 +15,13 @@ interface PhotoPickerProps {
   photos: PhotoEntry[]
   onChange: (photos: PhotoEntry[]) => void
   /**
-   * Signed thumbnail URLs for the photos the item already has, by image id:
-   * absent while one is still being signed, `null` when it could not be.
+   * Signed URLs for the photos the item already has, by image id: absent while
+   * one is still being signed, `null` when it could not be.
    *
    * Registration has none of these and does not pass it. Editing gets them from
-   * the screen rather than signing here, because that screen has already asked
-   * for the same photos to draw them elsewhere.
+   * the screen rather than signing here — and what that screen has to hand is
+   * the *full-size* originals it already signed for the detail view, not
+   * thumbnails. See `ItemEditPage` for why that trade is the cheap one.
    */
   storedUrls?: ReadonlyMap<string, string | null>
 }
@@ -45,9 +46,22 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
   const [error, setError] = useState<string | null>(null)
 
   const remaining = MAX_PHOTOS - photos.length
+
+  /**
+   * The list as it is *now*, for the two paths that answer late.
+   *
+   * `handleFiles` returns after a decode and an encode — hundreds of
+   * milliseconds — and the drop below commits on a timer. Both used to close
+   * over the list from the render that started them, so a photo removed while
+   * one was in flight came back when it landed. Its preview URL had already been
+   * revoked by then, so what came back was a tile pointing at nothing.
+   */
+  const photosRef = useRef(photos)
+  photosRef.current = photos
+
   const drag = useDragReorder({
     count: photos.length,
-    onMove: (from, to) => onChange(moveItem(photos, from, to)),
+    onMove: (from, to) => onChange(moveItem(photosRef.current, from, to)),
   })
 
   async function handleFiles(fileList: FileList | null) {
@@ -67,7 +81,7 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
       )
       const failed = results.length - picked.length
 
-      if (picked.length > 0) onChange([...photos, ...picked])
+      if (picked.length > 0) onChange([...photosRef.current, ...picked])
 
       const notes: string[] = []
       if (overflow > 0) notes.push(`사진은 최대 ${MAX_PHOTOS}장이라 ${overflow}장은 제외했어요.`)
@@ -84,6 +98,12 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
   }
 
   function removeAt(index: number) {
+    // A rearrange still on its way down holds positions in the list that is
+    // about to lose an entry, and its pending commit would put the removed photo
+    // back. Removing wins: a rearrange can be repeated, a photo that reappears
+    // with its preview already revoked cannot be explained.
+    drag.abandon()
+
     const entry = photos[index]
     // Only a picked photo owns an object URL. A stored one is dropped from the
     // list here and deleted for real when the form is saved.
@@ -98,6 +118,7 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
           const thumb = thumbOf(entry, storedUrls)
           const held = drag.heldIndex === index
           const offset = drag.offsetOf(index)
+          const missing = thumb.src === null && thumb.fallback === 'failed'
 
           return (
             <div
@@ -116,7 +137,7 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
               <button
                 type="button"
                 className={grip}
-                aria-label={`사진 ${index + 1}${thumb.missing ? ', 불러오지 못함' : ''}`}
+                aria-label={`사진 ${index + 1}${missing ? ', 불러오지 못함' : ''}`}
                 aria-describedby={`${uid}-help`}
                 {...drag.tileProps(index)}
               >
@@ -138,7 +159,11 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
                 <X size={13} />
               </IconButton>
 
-              {index === 0 && <span className={coverTag}>대표</span>}
+              {/* Follows where the tile is drawn, not where the list still says
+                  it is. Dragging a photo to the front is the way the cover
+                  changes, so a badge that waits for the drop leaves it on the
+                  tile being pushed aside for the whole gesture. */}
+              {drag.slotOf(index) === 0 && <span className={coverTag}>대표</span>}
             </div>
           )
         })}
@@ -159,8 +184,11 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
         )}
       </div>
 
+      {/* Every tile points at this one sentence, so a screen reader repeats it
+          per tile — which is the cost of describing the operation where it is
+          performed. Kept to one short clause for that reason. */}
       <p id={`${uid}-help`} className={css({ srOnly: true })}>
-        스페이스를 눌러 사진을 집고, 왼쪽·오른쪽 방향키로 옮긴 뒤, 다시 스페이스를 눌러 놓아요.
+        스페이스로 집고, 방향키로 옮기고, 스페이스로 놓아요.
       </p>
       <p role="status" aria-live="polite" className={css({ srOnly: true })}>
         {drag.announcement}
@@ -197,14 +225,12 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
 function thumbOf(
   entry: PhotoEntry,
   storedUrls: ReadonlyMap<string, string | null> | undefined,
-): { src: string | null; fallback: PhotoFallback; missing: boolean } {
-  if (entry.kind === 'picked') {
-    return { src: entry.photo.previewUrl, fallback: 'pending', missing: false }
-  }
+): { src: string | null; fallback: PhotoFallback } {
+  if (entry.kind === 'picked') return { src: entry.photo.previewUrl, fallback: 'pending' }
 
   const url = storedUrls?.get(entry.image.id)
-  if (url === undefined) return { src: null, fallback: 'pending', missing: false }
-  return { src: url, fallback: 'failed', missing: url === null }
+  if (url === undefined) return { src: null, fallback: 'pending' }
+  return { src: url, fallback: 'failed' }
 }
 
 const grid = css({
@@ -222,13 +248,20 @@ const tile = css({
   width: '84px',
   position: 'relative',
   rounded: 'card',
+  // The lift's shadow eases out on its own after the drop, when the transform
+  // rule below is no longer in force. It does not ease *in* — picking a tile up
+  // should feel like it happened, not like it is happening.
+  transitionProperty: 'box-shadow',
+  transitionDuration: 'normal',
+  transitionTimingFunction: 'out',
   /**
-   * Only while a rearrange is in progress.
+   * Only while a rearrange is in progress, and it replaces the rule above rather
+   * than joining it.
    *
-   * Outside one, a transform has to clear instantaneously: the list has just
-   * been rewritten underneath and every tile is already sitting where its
+   * Outside a rearrange the transform has to clear instantaneously: the list has
+   * just been rewritten underneath and every tile is already sitting where its
    * transform was carrying it, so animating the transform away would show it
-   * sliding back from a position it already left.
+   * sliding back from a position it had already reached.
    */
   '[data-rearranging] &': {
     transitionProperty: 'transform',
@@ -236,6 +269,7 @@ const tile = css({
     transitionTimingFunction: 'out',
     _motionReduce: { transitionDuration: '1ms' },
   },
+  _motionReduce: { transitionDuration: '1ms' },
   '&[data-held]': { shadow: 'raised' },
 })
 

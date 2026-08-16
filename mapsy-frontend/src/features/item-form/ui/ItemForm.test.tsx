@@ -28,6 +28,23 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+function stored(id: string): PhotoEntry {
+  return {
+    kind: 'stored',
+    image: {
+      id,
+      itemId: 'i1',
+      userId: 'u1',
+      path: `${id}.webp`,
+      thumbPath: `${id}_thumb.webp`,
+      sortOrder: 0,
+      width: 1280,
+      height: 960,
+      createdAt: '2026-08-01T00:00:00Z',
+    },
+  }
+}
+
 function picked(previewUrl: string): PhotoEntry {
   const blob = new Blob()
   const photo: ProcessedPhoto = {
@@ -59,6 +76,51 @@ describe('ItemForm', () => {
     // card on the grid. This is the half that says so before anything uploads.
     expect(onSubmit).not.toHaveBeenCalled()
     expect(screen.queryByText('사진을 한 장 이상 추가해주세요.')).not.toBeNull()
+  })
+
+  /**
+   * Whether the save is allowed to rewrite the photo list.
+   *
+   * Reported from the form because the form is what the person actually touched.
+   * The obvious alternative — comparing the submitted list against the wardrobe
+   * cache — reads a photo *another device* added while this screen sat open as
+   * an edit made here, and the rewrite then deletes it. The user never saw it
+   * and the toast says 저장했어요.
+   */
+  it('reports that a text-only edit left the photos alone', () => {
+    const onSubmit = vi.fn()
+    render(
+      <ItemForm
+        initial={{ title: '마산 플리스', categoryId: 'top.knit', photos: [stored('a'), stored('b')] }}
+        submitLabel="저장"
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ photosChanged: false }))
+  })
+
+  it('reports a rearrange as a change', () => {
+    const onSubmit = vi.fn()
+    render(
+      <ItemForm
+        initial={{ title: '마산 플리스', categoryId: 'top.knit', photos: [stored('a'), stored('b')] }}
+        submitLabel="저장"
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    const tile = screen.getByLabelText('사진 2')
+    fireEvent.keyDown(tile, { key: ' ' })
+    fireEvent.keyDown(tile, { key: 'ArrowLeft' })
+    fireEvent.keyDown(tile, { key: ' ' })
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ photosChanged: true }))
   })
 
   it('takes its previews back when the save is refused, and frees them on the way out', () => {

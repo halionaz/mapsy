@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { SearchX } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { css } from 'styled-system/css'
@@ -42,14 +41,12 @@ export function ItemEditPage() {
    * into 84px tiles.
    */
   const { slots } = useItemPhotos(item?.images)
-  const storedUrls = useMemo(
-    () =>
-      new Map(
-        // A pending slot is left out entirely: absent means "still coming",
-        // which is what the picker draws a skeleton for.
-        slots.flatMap((slot) => (slot.state === 'pending' ? [] : [[slot.id, slot.url] as const])),
-      ),
-    [slots],
+  // A pending slot is left out entirely: absent means "still coming", which is
+  // what the picker draws a skeleton for. Built inline — nothing downstream
+  // compares this by identity, so memoising it would buy a hook and a dependency
+  // array and no measured saving.
+  const storedUrls = new Map(
+    slots.flatMap((slot) => (slot.state === 'pending' ? [] : [[slot.id, slot.url] as const])),
   )
 
   // The wardrobe is normally already in cache by the time anyone reaches this
@@ -82,10 +79,10 @@ export function ItemEditPage() {
     )
   }
 
-  function handleSubmit({ photos, ...draft }: ItemFormValues) {
+  function handleSubmit({ photos, photosChanged, ...draft }: ItemFormValues) {
     if (!item) return
     update.mutate(
-      { item, draft, photos },
+      { item, draft, photos, photosChanged },
       {
         onSuccess: () => {
           navigate(`/items/${item.id}`, { replace: true })
