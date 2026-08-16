@@ -125,24 +125,12 @@ export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) 
               key={photoEntryKey(entry)}
               className={tile}
               data-held={held || undefined}
+              // The tile under the finger tracks it exactly, so its transition
+              // is off while that lasts. Said as an attribute rather than as an
+              // inline style — see `tile`.
+              data-following={(held && drag.following) || undefined}
               style={{
                 transform: `translate3d(${offset.x}px, ${offset.y}px, 0)${held ? ' scale(1.06)' : ''}`,
-                /**
-                 * The tile under the finger has to track it exactly; anything
-                 * else here reads as lag. Inline so it beats the class rule
-                 * rather than racing it on specificity.
-                 *
-                 * The longhand, and that is not a style preference. `transition`
-                 * is a shorthand, so writing it here resets every longhand it
-                 * omits — including `transition-duration`, back to 0s. The drop
-                 * reads that duration off this very element to know how long to
-                 * wait before rewriting the list, and it reads it while this is
-                 * still applied: through the shorthand it read 0 every time, so
-                 * the drop animation was cut on its first frame at every drop.
-                 * Turning the *property* off leaves the duration where the
-                 * stylesheet put it.
-                 */
-                transitionProperty: held && drag.following ? 'none' : undefined,
                 zIndex: held ? 1 : undefined,
               }}
             >
@@ -280,6 +268,24 @@ const tile = css({
     transitionDuration: 'normal',
     transitionTimingFunction: 'out',
     _motionReduce: { transitionDuration: '1ms' },
+    /**
+     * The tile under the finger, which must not animate at all — it is being
+     * placed a frame at a time, and a transition on top of that reads as lag.
+     *
+     * A rule rather than an inline style, and that is the whole point of the
+     * attribute it hangs off. The drop reads this element's computed
+     * `transition-duration` to size its wait, so anything the component writes
+     * onto the element it also reads from can answer its own question. Written
+     * inline as the `transition` shorthand it did exactly that: a shorthand
+     * resets the longhands it omits, so the duration read back was 0s and every
+     * drop animation was cut on its first frame.
+     *
+     * Nested rather than spelled out as one selector because it has to win on
+     * specificity rather than on source order — `.tile[data-following]` inside
+     * `[data-rearranging]` is (0,3,0) against the (0,2,0) around it — and Panda
+     * only types a selector that starts or ends with `&`.
+     */
+    '&[data-following]': { transitionProperty: 'none' },
   },
   _motionReduce: { transitionDuration: '1ms' },
   '&[data-held]': { shadow: 'raised' },

@@ -316,21 +316,20 @@ describe('PhotoPicker', () => {
   })
 
   /**
-   * The drag turns the tile's transition off through the longhand.
+   * The half of "the dragged tile does not animate" that lives in this file.
    *
-   * `transition: none` would do it too, and would also reset every longhand it
-   * omits — `transition-duration` back to 0s. The drop reads that duration off
-   * this element, while this is still applied, to know how long to wait; through
-   * the shorthand it read 0 at every drop and the settle animation never ran.
+   * The other half is a stylesheet rule keyed on this attribute, which nothing
+   * here can evaluate — jsdom carries no CSS. What this pins is the contract
+   * between them: drop the attribute and the rule never matches, and the tile
+   * animates its way after a finger that has already moved on.
    *
-   * Asserted as a shape rather than as an outcome, because the outcome is not
-   * observable here: jsdom does not expand shorthands (measured — after
-   * `style.transition = 'none'` the duration is still there), so the failure
-   * this pins is invisible to every test in this file. What jsdom *can* see is
-   * that the shorthand leaves `style.transitionProperty` empty, which is what
-   * makes this assertion fail if anyone writes it back.
+   * The rule is *not* an inline style, deliberately. The drop reads this
+   * element's computed transition-duration to size its wait, so anything the
+   * component writes onto the element can answer its own question — which is
+   * what the `transition` shorthand did, resetting the duration it omitted to
+   * 0s and cutting every drop animation on its first frame.
    */
-  it('turns the tile transition off without blanking the duration the drop reads', () => {
+  it('marks the tile the finger is on, which is what turns its transition off', () => {
     vi.useFakeTimers()
     try {
       render(
@@ -345,8 +344,19 @@ describe('PhotoPicker', () => {
       fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 40 })
       act(() => void vi.advanceTimersByTime(300))
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 120, clientY: 40 })
+      expect(tile.parentElement?.dataset.following).toBe('true')
 
-      expect(tile.parentElement?.style.transitionProperty).toBe('none')
+      // Asserted *here*, mid-drag, because this is the moment the drop takes its
+      // measurement: nothing about the transition may be inline while the finger
+      // is down, or the component is answering its own question. After the drop
+      // these are empty either way, so asserting them there would prove nothing.
+      expect(tile.parentElement?.style.transition).toBe('')
+      expect(tile.parentElement?.style.transitionProperty).toBe('')
+
+      // Let go and it animates again — that is the settle, and it is the same
+      // attribute stepping out of the way.
+      fireEvent.pointerUp(tile, { pointerId: 1, pointerType: 'touch', clientX: 120, clientY: 40 })
+      expect(tile.parentElement?.dataset.following).toBeUndefined()
     } finally {
       vi.useRealTimers()
     }

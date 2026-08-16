@@ -39,6 +39,12 @@ export function readGridGeometry(element: HTMLElement): GridGeometry | null {
   // layout answers `none` or an empty string, and both fall out as NaN below.
   const tracks = style.gridTemplateColumns.split(' ').filter(Boolean)
   const tile = Number.parseFloat(tracks[0] ?? '')
+  // The longhand, while the stylesheet writes the `gap` shorthand. A browser
+  // resolves one into the other; jsdom does not expand shorthands at all, which
+  // is why the test beside this plants `column-gap` directly and so never walks
+  // that half. Safe as long as nothing sets the grid's gap inline — nothing
+  // does, and the tile above is the standing reminder of what happens when a
+  // component writes to an element something else reads computed values from.
   const gap = Number.parseFloat(style.columnGap)
 
   if (!Number.isFinite(tile) || !Number.isFinite(gap)) return null
