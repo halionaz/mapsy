@@ -20,9 +20,18 @@
 -- 규칙은 폼을 고치면 사라지므로 데이터베이스가 들고 있기로 한 것이었고, 뚫렸을 때 남는
 -- 상태가 정확히 막으려던 그 상태(사진 0장 = 그리드의 빈 카드)다.
 --
--- 함수 전체를 다시 쓴다. 20260816000001은 이미 적용된 파일이라 고치지 않는다 — 004와
--- 005가 reorder_item_images에 대해 한 것과 같은 방식이다. 본문에서 달라진 것은
--- 첫 줄의 `p_images is null or` 하나뿐이다.
+-- 함수 전체를 다시 쓴다. 본문에서 달라진 것은 첫 줄의 `p_images is null or` 하나다.
+--
+-- 20260816000001을 직접 고치지 않는 이유는 **그 파일이 이미 linked 프로젝트에 push됐기
+-- 때문**이다. main에는 아직 없다 — 이 브랜치에서 처음 생긴 파일이고, 그 점에서 003이
+-- main에 있던 상태로 고쳐 쓴 004·005와는 상황이 다르다. 그럼에도 나누는 쪽인 것은 원격
+-- supabase_migrations 테이블에 20260816000001 행이 이미 있어서다: 파일만 고치면 원격은
+-- 낡은 본문을 든 채 다시 적용되지 않고, 그 어긋남은 아무 데서도 보이지 않는다.
+--
+-- 값은 함수 본문이 두 벌이 된 것이다. 이 브랜치가 방금 reorder_item_images를 지우며 적은
+-- 이유(같은 규칙을 여러 곳이 각자 구현하면 갈라진다)가 여기에도 그대로 걸린다 — 이 함수의
+-- 규칙을 고치는 사람은 두 파일 중 나중 것을 고쳐야 한다. 아직 push하지 않은 브랜치였다면
+-- 001에 한 조각을 넣고 이 파일을 지우는 쪽이 맞다.
 
 create or replace function public.set_item_images(
   p_item_id uuid,
@@ -140,7 +149,7 @@ begin
 end;
 $$;
 
--- `create or replace`는 ACL을 보존하므로 grant를 다시 적을 필요는 없다. 그래도 적는다 —
--- 시그니처를 바꾸는 날 이 파일을 복사해 갈 사람에게는 보존되지 않기 때문이다(README).
-revoke all on function public.set_item_images(uuid, jsonb) from public, anon;
-grant execute on function public.set_item_images(uuid, jsonb) to authenticated;
+-- grant를 다시 적지 않는다. `create or replace`는 ACL을 보존한다 — 시그니처가 그대로일
+-- 때의 이야기이고, 바뀌는 날은 함수가 새로 만들어지므로 그때 그 마이그레이션이 적으면 된다.
+-- 있으나 마나 한 두 줄을 "언젠가 복사해 갈 사람"을 위해 남기면, 진짜로 필요한 자리에서도
+-- 의례로 읽힌다.

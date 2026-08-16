@@ -1,6 +1,14 @@
+/** @vitest-environment jsdom */
 import { describe, expect, it } from 'vitest'
 
-import { displaySlot, moveItem, slotAt, slotOffset, type GridGeometry } from './photoGrid'
+import {
+  displaySlot,
+  moveItem,
+  readTransitionMs,
+  slotAt,
+  slotOffset,
+  type GridGeometry,
+} from './photoGrid'
 
 /**
  * The arithmetic a drag is made of.
@@ -59,6 +67,37 @@ describe('slotAt', () => {
 
   it('never lands before the cover either', () => {
     expect(slotAt({ x: -400, y: -400 }, grid, 5)).toBe(0)
+  })
+})
+
+describe('readTransitionMs', () => {
+  function tile(duration: string): HTMLElement {
+    const element = document.createElement('div')
+    element.style.transitionDuration = duration
+    document.body.append(element)
+    return element
+  }
+
+  /**
+   * Both spellings, because production only ever sends one of them and it is not
+   * the one the config file shows. `panda.config.ts` authors `200ms`; the built
+   * stylesheet emits `.2s` (checked in `dist`). With only the `ms` case covered,
+   * dropping the seconds branch — which reads like dead code next to the config
+   * — would make every drop commit in 0.2ms and every tile jump, with the whole
+   * suite still green.
+   */
+  it('reads milliseconds', () => {
+    expect(readTransitionMs(tile('200ms'))).toBe(200)
+  })
+
+  it('reads the seconds the stylesheet actually ships', () => {
+    expect(readTransitionMs(tile('.2s'))).toBe(200)
+  })
+
+  it('answers zero for a tile with nothing to wait for', () => {
+    // No stylesheet, no transition, nothing to outlast — which is a real answer
+    // and not a failure: the drop can rewrite the list immediately.
+    expect(readTransitionMs(document.createElement('div'))).toBe(0)
   })
 })
 

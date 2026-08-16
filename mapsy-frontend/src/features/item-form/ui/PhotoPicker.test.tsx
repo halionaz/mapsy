@@ -246,6 +246,39 @@ describe('PhotoPicker', () => {
     }
   })
 
+  it('keeps the tile under the cursor when the page scrolls mid-drag', () => {
+    // A mouse drag never blocks the wheel — only touch panning is prevented — so
+    // the page can move under a lifted tile. Everything the drag measures is in
+    // page coordinates for that reason, and the tile's own offset has to be too:
+    // from client deltas alone it drifts by however far the page scrolled, while
+    // the drop still lands where the cursor is. You then aim with the tile and
+    // miss by exactly that much.
+    vi.useFakeTimers()
+    const scrolled = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(0)
+    try {
+      render(
+        <PhotoPicker
+          photos={[stored('a'), stored('b')]}
+          onChange={vi.fn()}
+          storedUrls={new Map()}
+        />,
+      )
+      const tile = screen.getByLabelText('사진 1')
+
+      fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 40 })
+      fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 50 })
+
+      // The wheel turns: the cursor has not moved on screen, the page has.
+      scrolled.mockReturnValue(100)
+      fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 50 })
+
+      expect(tile.parentElement?.style.transform).toContain('110px')
+    } finally {
+      scrolled.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it('gives an interrupted drag back rather than guessing at it', () => {
     vi.useFakeTimers()
     try {

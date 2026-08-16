@@ -41,15 +41,6 @@ const HOLD_MS = 220
 const HOLD_SLOP_PX = 8
 /** Movement that starts a mouse drag. */
 const MOUSE_SLOP_PX = 4
-/**
- * Only when the tile's own transition cannot be read.
- *
- * The commit has to outlast the animation — clearing the transform while the
- * tile is still travelling is the jump this whole settle exists to avoid — so
- * the real number comes from the same token the transition uses. This is the
- * floor for an environment that has no computed style to ask.
- */
-const SETTLE_FALLBACK_MS = 200
 
 interface Held {
   /** Where the photo sits in the committed list. */
@@ -60,6 +51,20 @@ interface Held {
   follow: { x: number; y: number } | null
   /** Picked up by keyboard, which is the only way a hold can outlive the focus that made it. */
   keyboard: boolean
+}
+
+/**
+ * Where a pointer is, in page coordinates.
+ *
+ * The grid is measured in page coordinates because a mouse drag can scroll the
+ * page under it — the wheel is never blocked, only touch panning is. The tile's
+ * own offset has to be measured in the same space: from client deltas alone it
+ * drifts away from the cursor by however far the page moved, while the drop
+ * still lands where the cursor is, so the tile you are aiming with and the slot
+ * you are aiming at stop agreeing.
+ */
+function pagePoint(event: React.PointerEvent<HTMLElement>): { x: number; y: number } {
+  return { x: event.clientX + window.scrollX, y: event.clientY + window.scrollY }
 }
 
 interface Gesture {
@@ -116,7 +121,8 @@ export function useDragReorder({
 }): DragReorder {
   const gridRef = useRef<HTMLDivElement>(null)
   const geometry = useRef<GridGeometry | null>(null)
-  const settleMs = useRef(SETTLE_FALLBACK_MS)
+  /** How long the drop waits before rewriting the list — read off the tile when it lifts. */
+  const settleMs = useRef(0)
   const gesture = useRef<Gesture | null>(null)
   const settleTimer = useRef<number | null>(null)
   const unblockScroll = useRef<(() => void) | null>(null)
@@ -140,7 +146,6 @@ export function useDragReorder({
   function measure() {
     const grid = gridRef.current
     geometry.current = grid ? readGridGeometry(grid) : null
-    settleMs.current = (grid && readTransitionMs(grid)) || SETTLE_FALLBACK_MS
   }
 
   /**
@@ -165,6 +170,12 @@ export function useDragReorder({
     current.lifted = true
     current.holdTimer = null
     measure()
+    // From the tile itself, not the grid: the transition being waited on is the
+    // tile's, and asking the element is what makes `prefers-reduced-motion`
+    // answer for itself — the token alone says 200ms to someone whose tiles move
+    // in one. Only the pointer path needs it; a keyboard drop commits where the
+    // tile already is, with nothing to wait for.
+    settleMs.current = readTransitionMs(current.element.parentElement ?? current.element)
     blockScroll()
     // So a finger that wanders off the tile — which is the entire point — keeps
     // reporting to it.
@@ -198,12 +209,14 @@ export function useDragReorder({
     if (held || gesture.current) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
 
+    const start = pagePoint(event)
     const current: Gesture = {
       pointerId: event.pointerId,
       index,
       element: event.currentTarget,
-      startX: event.clientX,
-      startY: event.clientY,
+      // Page coordinates, like the grid geometry — see `pagePoint`.
+      startX: start.x,
+      startY: start.y,
       holdTimer: null,
       lifted: false,
       to: index,
@@ -223,8 +236,9 @@ export function useDragReorder({
     const current = gesture.current
     if (!current || event.pointerId !== current.pointerId) return
 
-    const x = event.clientX - current.startX
-    const y = event.clientY - current.startY
+    const point = pagePoint(event)
+    const x = point.x - current.startX
+    const y = point.y - current.startY
 
     if (!current.lifted) {
       const travelled = Math.hypot(x, y)
@@ -239,14 +253,7 @@ export function useDragReorder({
     }
 
     const grid = geometry.current
-    // Page coordinates, because the geometry is in page coordinates — see there.
-    const to = grid
-      ? slotAt(
-          { x: event.clientX + window.scrollX, y: event.clientY + window.scrollY },
-          grid,
-          count,
-        )
-      : current.index
+    const to = grid ? slotAt(point, grid, count) : current.index
     if (to !== current.to) tick(4)
     current.to = to
     setHeld({ from: current.index, to, follow: { x, y }, keyboard: false })
@@ -326,12 +333,17 @@ export function useDragReorder({
     setAnnouncement(`${to + 1}번째로 옮겼어요.`)
   }
 
+  /** Where the tile at `index` is drawn — the one rule both the badge and the offset read. */
+  function slotOf(index: number): number {
+    return held ? displaySlot(index, held.from, held.to) : index
+  }
+
   return {
     gridRef,
     rearranging: held !== null,
     heldIndex: held?.from ?? null,
     following: held?.follow != null,
-    slotOf: (index) => (held ? displaySlot(index, held.from, held.to) : index),
+    slotOf,
     abandon,
     announcement,
     tileProps: (index) => ({
@@ -353,7 +365,7 @@ export function useDragReorder({
     offsetOf: (index) => {
       if (!held) return { x: 0, y: 0 }
       if (index === held.from && held.follow) return held.follow
-      return slotOffset(index, displaySlot(index, held.from, held.to), geometry.current)
+      return slotOffset(index, slotOf(index), geometry.current)
     },
   }
 }

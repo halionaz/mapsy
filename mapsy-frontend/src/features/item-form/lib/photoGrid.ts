@@ -53,18 +53,30 @@ export function readGridGeometry(element: HTMLElement): GridGeometry | null {
 }
 
 /**
- * How long the tiles take to move, read back from the token that moves them.
+ * How long this tile takes to move, in milliseconds.
  *
  * The drop commits on a timer, and the timer has to outlast the transition or
- * the transform is cleared mid-flight and the tile jumps. Reading the duration
- * off `--durations-normal` is the same refusal as the pitch above: the
- * stylesheet owns the number, and a copy of `200` in here is a copy that goes
- * quietly wrong the day the token changes.
+ * the transform is cleared mid-flight and the tile jumps. Reading it back off
+ * the element is the same refusal as the pitch above — the stylesheet owns the
+ * number — and it is read from the *element* rather than from the
+ * `--durations-normal` token so that `prefers-reduced-motion` is included:
+ * under that setting the tiles move in 1ms, and a settle still waiting 200ms
+ * would be a fifth of a second in which the drop appears to have done nothing.
+ *
+ * Units are both spellings on purpose. The token is authored as `200ms` and the
+ * built stylesheet emits `.2s` — measured in `dist` — so an implementation that
+ * only handled one of them would be wrong in exactly the environment that is
+ * hardest to notice it in.
+ *
+ * Zero is an answer rather than a failure: a tile with no transition has nothing
+ * to wait for, and committing immediately is what that means. Nothing to read at
+ * all says the same thing — there is no stylesheet, so there is no animation to
+ * outlast.
  */
-export function readTransitionMs(element: HTMLElement): number | null {
-  const raw = getComputedStyle(element).getPropertyValue('--durations-normal').trim()
+export function readTransitionMs(element: HTMLElement): number {
+  const raw = getComputedStyle(element).transitionDuration.trim()
   const amount = Number.parseFloat(raw)
-  if (!Number.isFinite(amount)) return null
+  if (!Number.isFinite(amount)) return 0
   return raw.endsWith('ms') ? amount : amount * 1000
 }
 

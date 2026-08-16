@@ -24,7 +24,13 @@ export function storedPhotoEntries(images: readonly ItemImage[]): PhotoEntry[] {
 }
 
 /**
- * React key, and the identity the picker reorders by.
+ * What identifies a photo in the form: the React key, the thing the picker
+ * reorders by, and — through `samePhotoList` — what a save compares to decide
+ * whether to rewrite the photo list at all.
+ *
+ * That third use is the one to remember before changing this. A key made unique
+ * per render (a fresh uuid, say) would look right in the list and quietly make
+ * every save a rewrite, because no two lists would ever compare equal.
  *
  * A picked photo has no id until it is uploaded, so its preview URL stands in:
  * `URL.createObjectURL` hands out a distinct one per blob, and it lives exactly
