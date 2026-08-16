@@ -279,13 +279,14 @@ const tile = css({
      * inline as the `transition` shorthand it did exactly that. Measured in
      * Chrome, on these four tiles:
      *
+     *   no [data-following]              property transform  duration 0.2s
      *   [data-following]                 property none       duration 0.2s
      *   inline `transition: none`        property none       duration 0s
      *   inline `transition-property`     property none       duration 0.2s
      *
      * — so through the shorthand the drop read 0 and every drop animation was
-     * cut on its first frame. The rule below turns the property off and leaves
-     * the duration to the stylesheet.
+     * cut on its first frame. The first two rows are the rule below doing its
+     * work: it takes the property and leaves the duration to the rule around it.
      *
      * Nested rather than spelled out as one selector because it has to win on
      * specificity rather than on source order — `.tile[data-following]` inside
