@@ -17,6 +17,11 @@
  * 보는 것은 "패키지가 선언했는가"까지다. 그 스크립트를 CI가 도는지는 안 본다 — 퍼뜨리는
  * 명령이 전부 검사인 것은 아니라서(`pnpm -r dev`를 CI가 돌 이유는 없다), 그 규칙을 여기
  * 넣으면 예외 주석이 늘고 그 예외를 다시 손으로 관리하게 된다.
+ *
+ * 패키지 하나를 지키는 데 이 길이인 것은 감수한 비용이다. 무음 스킵이 무는 순간은 두 번째
+ * 패키지가 붙을 때인데, 글롭이 `mapsy-*`라 그건 "생기기만 하면" 일어나고 그때 아무도 이
+ * 파일을 보지 않는다. 셸 문자열을 정규식으로 읽는 표면은 새 pnpm 표기가 나올 때마다 늘지만,
+ * 늘어나는 방식이 "조용히 새는" 게 아니라 "시끄럽게 멈추는" 것이다.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -27,8 +32,12 @@ import { fileURLToPath } from 'node:url'
 // 셸 접두 — 여는 괄호 · `env` · 인라인 환경변수. 벗기지 않으면 `CI=1 pnpm -r test` 같은
 // 흔한 관용구에서 진짜 퍼뜨리기가 판정 앞에서 빠진다.
 const PREFIX = /^\(*\s*(?:env\s+)?(?:[A-Za-z_]\w*=\S*\s+)*/
-// pnpm 호출로 "보이는" 것. 파일 이름 안의 pnpm(`node scripts/only-pnpm.mjs`)은 빼야 한다.
-const MENTIONS_PNPM = /(?<![\w.-])pnpm(?=\s|$)/
+// pnpm 호출로 "보이는" 것. 파일 이름 안의 pnpm(`node scripts/only-pnpm.mjs`)은 빼야 한다 —
+// `\bpnpm\b`로 하면 그게 걸려 preinstall이 죽는다.
+//
+// **fail-closed는 파싱이지 탐지가 아니다.** 여기 안 걸린 세그먼트는 지금도 조용히 넘어간다.
+// 걸리는 형태를 늘려도 "pnpm이라고 안 보이는 pnpm 호출"은 남는다.
+const MENTIONS_PNPM = /(?<![\w.-])pnpm(?=[\s)]|$)/
 // 퍼뜨리는 호출. 이름을 뽑아 온다.
 const FANOUT = /^pnpm\s+(?:-r|--recursive)\s+(?:run\s+)?([\w:-]+)$/
 // 패키지 하나만 지정하는 호출. 글롭 문자가 없어야 한다 — 여럿에 걸리면 그것도 퍼뜨리기다.
