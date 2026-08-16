@@ -149,6 +149,12 @@ git worktree add ../mapsy-feature -b feat/something
 
 ## 알려진 것
 
+- **`scripts/`의 `.mjs` 둘은 포맷은 걸리지만 린트는 안 걸린다.** oxlint 설정과 의존성이
+  `mapsy-frontend`에 있고, oxlint가 `..`가 든 경로를 거부해서(`PATH must not contain ".."`)
+  패키지 안에서 바깥을 가리킬 수도 없다. 루트에 oxlint를 하나 더 두면 버전이 두 곳이 되므로
+  같이 두지 않았다 — 포맷과 달리 린트 규칙은 패키지마다 달라야 해서 설정을 루트로 올리는
+  것도 답이 아니다. 지금은 검사 없이 두고, `mapsy-server`가 생겨 규칙이 둘로 갈릴 때 다시 본다.
+
 - **Node 하한은 22.22.2다.** 가장 높은 걸 요구하는 건 `jsdom@30`
   (`^22.22.2 || ^24.15.0 || >=26.0.0`)이고, `react-router@8.3`이 `>=22.22.0`으로 그다음이다.
   `engines.node`에 이 숫자가 있고 [`scripts/only-pnpm.mjs`](scripts/only-pnpm.mjs)가 설치할 때
