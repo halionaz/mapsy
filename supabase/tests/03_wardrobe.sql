@@ -148,6 +148,25 @@ select tests.fails(
        'aaaa0000-0000-0000-0000-000000000001', '[]'::jsonb)$f$,
   '한 장도 남지 않음', '빈 목록 거부 — 사진 없는 아이템은 빈 카드가 됨');
 
+-- NULL은 빈 배열과 같은 자리에서 막혀야 한다. 처음 판에서는 세 가드가 전부 3값 논리에
+-- 무너져 통과했고, 삭제문의 not exists가 모든 행에 참이 되어 사진이 전부 지워졌다.
+-- 예외가 아니라 빈 셋을 돌려주는 정상 종료였다.
+select tests.fails(
+  $f$select * from public.set_item_images(
+       'aaaa0000-0000-0000-0000-000000000001', null::jsonb)$f$,
+  '배열이 아님', 'NULL 목록 거부 — PostgREST가 JSON null을 SQL NULL로 넘김');
+
+-- JSON null은 같은 문장의 다른 가지다. 위와 함께 두는 이유는 둘이 다른 값이라서다.
+select tests.fails(
+  $f$select * from public.set_item_images(
+       'aaaa0000-0000-0000-0000-000000000001', 'null'::jsonb)$f$,
+  '배열이 아님', 'JSON null도 거부');
+
+select tests.eq(
+  (select count(*)::text from public.item_images
+   where item_id = 'aaaa0000-0000-0000-0000-000000000001'),
+  '3', '거부된 세 호출 뒤에도 사진이 그대로임');
+
 select tests.fails(
   $f$select * from public.set_item_images('aaaa0000-0000-0000-0000-000000000001', $j$[
        {"id": "bbbb0000-0000-0000-0000-000000000003"},

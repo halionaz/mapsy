@@ -14,7 +14,8 @@ migrations/
 ├── 20260801000007_price_ceiling.sql       가격 상한 · 트리거 함수 권한
 ├── 20260801000008_private_helper_grants.sql private 헬퍼 EXECUTE 정리
 ├── 20260815000001_item_wears.sql          착용 기록 · 미래 날짜 트리거 · set_item_wears RPC
-└── 20260816000001_set_item_images.sql     사진 목록 재작성 RPC · 003의 두 함수 제거
+├── 20260816000001_set_item_images.sql     사진 목록 재작성 RPC · 003의 두 함수 제거
+└── 20260816000002_set_item_images_null_guard.sql  NULL 목록이 전부 지우던 것 수정
 tests/
 ├── run.sh                                 컨테이너에 마이그레이션 적용 + 회귀 검사
 └── 03_wardrobe.sql                        단언 본체
@@ -200,9 +201,14 @@ select * from set_item_images(<item_id>, '[
 같은 모양이다. 위치가 곧 `sort_order`라 대표(0번) 승격도 저절로 따라오고, 반영된 목록을
 `sort_order` 순으로 돌려주므로 호출자는 자기 예상값이 아니라 서버가 쓴 행을 캐시에 넣는다.
 
-거부하는 것: 사진이 0장이 되는 목록(그리드에 빈 카드가 남는다), 중복 id, `id` 없는 원소,
-다른 아이템의 사진, 없는 아이템. 여섯 장은 함수가 세지 않고 `sort_order` CHECK가 막는다 —
-개수 상한을 두 곳에 적지 않기 위해서다.
+거부하는 것: 배열이 아닌 인자, 사진이 0장이 되는 목록(그리드에 빈 카드가 남는다), 중복 id,
+`id` 없는 원소, 다른 아이템의 사진, 없는 아이템. 여섯 장은 함수가 세지 않고 `sort_order`
+CHECK가 막는다 — 개수 상한을 두 곳에 적지 않기 위해서다.
+
+> **NULL은 배열 검사에서 명시적으로 막는다.** 처음 판은 `jsonb_typeof(p_images) <> 'array'`
+> 하나였고, `jsonb_typeof(NULL)`이 NULL이라 그냥 열렸다. 뒤따르는 개수·중복 검사도 NULL
+> 앞에서 나란히 참을 잃어서(`if <NULL>`은 거짓), 결국 사진을 전부 지우고 성공으로 보고했다.
+> PostgREST는 `{"p_images": null}`을 SQL NULL로 넘기므로 REST 경로로도 닿았다.
 
 `user_id`는 인자로 받지 않고 아이템 행에서 읽는다. 복합 외래키가 `(item_id, user_id)` 쌍을
 요구하므로 둘은 따로 놀 수 없고, RLS가 남의 아이템을 숨기므로 못 찾은 것이 곧 권한 없음이다.
