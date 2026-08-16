@@ -59,7 +59,7 @@ src/
 │       └── ui/       ItemCard
 ├── features/       엔티티 하나로 안 떨어지는 사용자 동작
 │   ├── auth/           세션 상태 · 구글 로그인
-│   ├── item-form/      등록·편집 폼과 사진 선택
+│   ├── item-form/      등록·편집 폼 · 사진 선택과 끌어서 순서 변경
 │   ├── item-photos/    원본 사진 서명(useItemPhotos) · 뷰어 · 팬/줌 기하
 │   └── wardrobe-filter/  필터 모델 + applyFilters (순수)
 └── shared/
@@ -159,15 +159,17 @@ lint는 통과한다.
 장을 이미 올린 사용자였다. 마이그레이션에 새 상한이 생기면 그 테스트가 **미러를 만들든지
 이유를 적든지** 하라고 막는다.
 
-**예외가 하나 있다: `useItemPhotos`.** 순수 함수로 안 떨어지는데(캐시·리렌더가 곧 동작이다)
-`photoSlots`가 자기 주석에서 "이 규칙을 양방향으로 두 번 틀렸다"고 적고 있고, 틀렸던 그 URL을
-만드는 쪽이 이 훅이다. 그래서 여기만 `@testing-library/react` + jsdom으로 테스트한다 — 파일
-맨 위 `@vitest-environment jsdom` 주석으로 그 파일만 jsdom을 쓰고, 나머지는 node 그대로다.
+**순수 함수로 안 떨어지는 것은 jsdom으로 테스트한다.** 캐시·리렌더·클릭이 곧 동작인 쪽 —
+`useItemPhotos`(`photoSlots`가 자기 주석에서 "이 규칙을 양방향으로 두 번 틀렸다"고 적고 있고,
+틀렸던 그 URL을 만드는 쪽이 이 훅이다), `PhotoPicker`, `WardrobePage` 같은 것들. 파일 맨 위
+`@vitest-environment jsdom` 주석으로 그 파일만 jsdom을 쓰고, 나머지는 node 그대로다.
 
-**네트워크 경로(`entities/item/api`, `entities/item/model/queries.ts`)와 화면은 자동 테스트가
-없다.** 다만 행/삽입 타입은 `src/shared/api/database.types.ts`(실제 스키마에서 생성)에서 오므로
-컬럼 이름과 nullability는 컴파일 타임에 검증된다. 나머지는 손으로 밟아봐야 한다 —
-등록 → 조회 → 편집 → 삭제.
+**Supabase를 실제로 부르는 부분(`entities/item/api`)은 자동 테스트가 없다.** 뮤테이션이 캐시를
+어떻게 고치는지는 API를 mock해서 잡고(`queries.test.tsx`, `queries.photos.test.tsx`), RPC의
+계약은 `pnpm test:db`가 실물 Postgres로 잡지만, 그 둘을 잇는 요청 자체는 손으로 밟아봐야
+한다 — 등록 → 조회 → 편집(사진 포함) → 삭제. 다만 행/삽입 타입은
+`src/shared/api/database.types.ts`(실제 스키마에서 생성)에서 오므로 컬럼 이름과 nullability는
+컴파일 타임에 검증된다.
 
 스키마를 바꾸면 `pnpm types:gen`으로 타입을 다시 생성한다. `src/shared/api/database.types.ts`는
 생성물이니 직접 고치지 않는다.
@@ -190,12 +192,6 @@ Panda CSS를 쓴다. **`styled-system/`은 생성물이라 커밋하지 않고 �
 
 - **필터 바텀시트.** 검색·카테고리 칩·정렬은 붙었지만 색상·사이즈·계절·브랜드·태그를 고르는
   시트가 없다. `applyFilters`는 이미 모든 축을 처리하므로 UI만 얹으면 된다.
-- **편집 화면에서 사진 교체·순서 변경 불가 — UI만 없다.** DB 함수
-  (`reorder_item_images`, `delete_item_image`)와 클라이언트 래퍼
-  (`reorderItemImages`, `deleteItemImage` — `@/entities/item`에서 export)는 있고
-  `pnpm test:db`가 검증한다. 화면에서 아직 호출하지 않을 뿐이라 그 두 export는 의도적으로
-  미사용 상태다. 업로드·삭제·`sort_order`를 조정해야 해서 등록 흐름의 변형이 아니라 별도
-  작업이다.
 - **그리드 커버 썸네일이 30분마다 다시 내려온다.** `fetchWardrobe`가 실행될 때마다 커버를 전부
   새로 서명하는데, `useWardrobe`는 전역 기본값(staleTime 30분 + `refetchOnWindowFocus`)을
   쓴다. 상세 화면 원본에서 고친 것과 같은 낭비지만, 같은 방법으로는 못 고친다 — 이 쿼리의

@@ -26,7 +26,15 @@ export function ItemNewPage() {
   function handleSubmit({ photos, ...draft }: ItemFormValues) {
     if (!userId) return
     create.mutate({
-      pending: { tempId: newId(), draft, photos, userId, state: 'uploading' },
+      pending: {
+        tempId: newId(),
+        draft,
+        // Every entry is a picked one here — there is no item yet for a stored
+        // photo to have belonged to.
+        photos: photos.flatMap((entry) => (entry.kind === 'picked' ? [entry.photo] : [])),
+        userId,
+        state: 'uploading',
+      },
     })
     navigate('/', { replace: true })
   }

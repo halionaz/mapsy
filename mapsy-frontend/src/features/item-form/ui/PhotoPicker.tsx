@@ -1,31 +1,54 @@
 import { useId, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, ImagePlus, X } from 'lucide-react'
+import { ImagePlus, X } from 'lucide-react'
 import { css } from 'styled-system/css'
-import { hstack, vstack } from 'styled-system/patterns'
+import { vstack } from 'styled-system/patterns'
 
-import { processPhoto, releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
+import { photoEntryKey, type PhotoEntry } from '@/entities/item'
+import { processPhoto, releasePreview } from '@/shared/lib/image'
 import { IconButton, Spinner } from '@/shared/ui/Button'
+import { SquarePhoto, type PhotoFallback } from '@/shared/ui/SquarePhoto'
+import { moveItem } from '../lib/photoGrid'
 import { MAX_PHOTOS } from '../model/limits'
+import { useDragReorder } from '../model/useDragReorder'
 
 interface PhotoPickerProps {
-  photos: ProcessedPhoto[]
-  onChange: (photos: ProcessedPhoto[]) => void
+  photos: PhotoEntry[]
+  onChange: (photos: PhotoEntry[]) => void
+  /**
+   * Signed thumbnail URLs for the photos the item already has, by image id:
+   * absent while one is still being signed, `null` when it could not be.
+   *
+   * Registration has none of these and does not pass it. Editing gets them from
+   * the screen rather than signing here, because that screen has already asked
+   * for the same photos to draw them elsewhere.
+   */
+  storedUrls?: ReadonlyMap<string, string | null>
 }
 
 /**
  * Photo selection, ordering and removal for the item form.
  *
- * Reordering is buttons rather than drag-and-drop: dragging inside a scrolling
- * form on a touch screen fights the scroll, and with at most five photos the
- * only move that matters is promoting one to the cover.
+ * The photos are a wrapping grid rather than a scrolling row, and reordering is
+ * press-and-hold-then-drag. Both follow from the same thing: with at most five
+ * photos everything fits on one screen, and a strip that scrolls sideways would
+ * put a second competing gesture inside the one place a drag has to work.
+ * `useDragReorder` holds the interaction; `photoGrid` holds its arithmetic.
+ *
+ * A tile is a tile whether its photo is already in storage or was picked a
+ * second ago — the list is one ordered thing, and which half of it is which only
+ * becomes a distinction when the form is saved.
  */
-export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
+export function PhotoPicker({ photos, onChange, storedUrls }: PhotoPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const inputId = useId()
+  const uid = useId()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const remaining = MAX_PHOTOS - photos.length
+  const drag = useDragReorder({
+    count: photos.length,
+    onMove: (from, to) => onChange(moveItem(photos, from, to)),
+  })
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
@@ -39,12 +62,12 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
       // picked alongside it — and the successful ones had already allocated
       // preview object URLs that nobody then revoked.
       const results = await Promise.allSettled(accepted.map(processPhoto))
-      const processed = results
-        .filter((r): r is PromiseFulfilledResult<ProcessedPhoto> => r.status === 'fulfilled')
-        .map((r) => r.value)
-      const failed = results.length - processed.length
+      const picked = results.flatMap((result): PhotoEntry[] =>
+        result.status === 'fulfilled' ? [{ kind: 'picked', photo: result.value }] : [],
+      )
+      const failed = results.length - picked.length
 
-      if (processed.length > 0) onChange([...photos, ...processed])
+      if (picked.length > 0) onChange([...photos, ...picked])
 
       const notes: string[] = []
       if (overflow > 0) notes.push(`사진은 최대 ${MAX_PHOTOS}장이라 ${overflow}장은 제외했어요.`)
@@ -61,29 +84,50 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
   }
 
   function removeAt(index: number) {
-    releasePreview(photos[index])
+    const entry = photos[index]
+    // Only a picked photo owns an object URL. A stored one is dropped from the
+    // list here and deleted for real when the form is saved.
+    if (entry.kind === 'picked') releasePreview(entry.photo)
     onChange(photos.filter((_, i) => i !== index))
-  }
-
-  function move(index: number, delta: number) {
-    const target = index + delta
-    if (target < 0 || target >= photos.length) return
-    const next = [...photos]
-    ;[next[index], next[target]] = [next[target], next[index]]
-    onChange(next)
   }
 
   return (
     <div className={vstack({ gap: '2', alignItems: 'stretch' })}>
-      <div className={hstack({ gap: '3', overflowX: 'auto', py: '1', alignItems: 'flex-start' })}>
-        {photos.map((photo, index) => (
-          <div key={photo.previewUrl} className={vstack({ gap: '1.5', flexShrink: 0 })}>
-            <div className={css({ position: 'relative' })}>
-              <img src={photo.previewUrl} alt={`사진 ${index + 1}`} className={thumb} />
+      <div ref={drag.gridRef} className={grid} data-rearranging={drag.rearranging || undefined}>
+        {photos.map((entry, index) => {
+          const thumb = thumbOf(entry, storedUrls)
+          const held = drag.heldIndex === index
+          const offset = drag.offsetOf(index)
 
-              {/* The remove control sits on the photo rather than under it: it
-                  is the one action whose target should be the thing it acts on,
-                  and it keeps the row of reorder buttons down to two. */}
+          return (
+            <div
+              key={photoEntryKey(entry)}
+              className={tile}
+              data-held={held || undefined}
+              style={{
+                transform: `translate3d(${offset.x}px, ${offset.y}px, 0)${held ? ' scale(1.06)' : ''}`,
+                // The tile under the finger has to track it exactly; anything
+                // else here reads as lag. Inline so it beats the class rule
+                // rather than racing it on specificity.
+                transition: held && drag.following ? 'none' : undefined,
+                zIndex: held ? 1 : undefined,
+              }}
+            >
+              <button
+                type="button"
+                className={grip}
+                aria-label={`사진 ${index + 1}${thumb.missing ? ', 불러오지 못함' : ''}`}
+                aria-describedby={`${uid}-help`}
+                {...drag.tileProps(index)}
+              >
+                {/* Named by the button, so the photo itself is decorative. */}
+                <SquarePhoto src={thumb.src} alt="" fallback={thumb.fallback} />
+              </button>
+
+              {/* The remove control sits on the photo rather than under it: it is
+                  the one action whose target should be the thing it acts on. A
+                  sibling of the tile button rather than a child, because a button
+                  inside a button is neither valid nor reachable. */}
               <IconButton
                 label={`사진 ${index + 1} 삭제`}
                 size="sm"
@@ -96,30 +140,11 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
 
               {index === 0 && <span className={coverTag}>대표</span>}
             </div>
-
-            <div className={hstack({ gap: '0.5', justify: 'center' })}>
-              <IconButton
-                label={`사진 ${index + 1} 앞으로`}
-                size="sm"
-                onClick={() => move(index, -1)}
-                disabled={index === 0}
-              >
-                <ChevronLeft size={15} />
-              </IconButton>
-              <IconButton
-                label={`사진 ${index + 1} 뒤로`}
-                size="sm"
-                onClick={() => move(index, 1)}
-                disabled={index === photos.length - 1}
-              >
-                <ChevronRight size={15} />
-              </IconButton>
-            </div>
-          </div>
-        ))}
+          )
+        })}
 
         {remaining > 0 && (
-          <label htmlFor={inputId} className={addTile}>
+          <label htmlFor={`${uid}-file`} className={addTile}>
             {busy ? (
               <Spinner size={18} />
             ) : (
@@ -134,8 +159,15 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
         )}
       </div>
 
+      <p id={`${uid}-help`} className={css({ srOnly: true })}>
+        스페이스를 눌러 사진을 집고, 왼쪽·오른쪽 방향키로 옮긴 뒤, 다시 스페이스를 눌러 놓아요.
+      </p>
+      <p role="status" aria-live="polite" className={css({ srOnly: true })}>
+        {drag.announcement}
+      </p>
+
       <input
-        id={inputId}
+        id={`${uid}-file`}
         ref={inputRef}
         type="file"
         accept="image/*"
@@ -154,16 +186,70 @@ export function PhotoPicker({ photos, onChange }: PhotoPickerProps) {
   )
 }
 
-const thumb = css({
-  // Literal, not a shared constant: Panda extracts styles by reading the
-  // source, and a value it has to resolve through a variable is a value it may
-  // silently emit nothing for.
+/**
+ * What the tile draws for one entry.
+ *
+ * A picked photo is its own preview and is always there. A stored one is a
+ * signed URL that may still be coming or may never arrive, which is exactly the
+ * distinction `SquarePhoto` already draws — so this translates into its
+ * vocabulary rather than inventing a second one.
+ */
+function thumbOf(
+  entry: PhotoEntry,
+  storedUrls: ReadonlyMap<string, string | null> | undefined,
+): { src: string | null; fallback: PhotoFallback; missing: boolean } {
+  if (entry.kind === 'picked') {
+    return { src: entry.photo.previewUrl, fallback: 'pending', missing: false }
+  }
+
+  const url = storedUrls?.get(entry.image.id)
+  if (url === undefined) return { src: null, fallback: 'pending', missing: false }
+  return { src: url, fallback: 'failed', missing: url === null }
+}
+
+const grid = css({
+  display: 'grid',
+  // Literal, not a shared constant: Panda extracts styles by reading the source,
+  // and a value it has to resolve through a variable is a value it may silently
+  // emit nothing for. `useDragReorder` reads the used track size back off the
+  // computed style rather than keeping a second copy of it.
+  gridTemplateColumns: 'repeat(auto-fill, 84px)',
+  gap: '3',
+  justifyContent: 'start',
+})
+
+const tile = css({
   width: '84px',
-  height: '84px',
-  objectFit: 'cover',
+  position: 'relative',
   rounded: 'card',
-  bg: 'bg.subtle',
+  /**
+   * Only while a rearrange is in progress.
+   *
+   * Outside one, a transform has to clear instantaneously: the list has just
+   * been rewritten underneath and every tile is already sitting where its
+   * transform was carrying it, so animating the transform away would show it
+   * sliding back from a position it already left.
+   */
+  '[data-rearranging] &': {
+    transitionProperty: 'transform',
+    transitionDuration: 'normal',
+    transitionTimingFunction: 'out',
+    _motionReduce: { transitionDuration: '1ms' },
+  },
+  '&[data-held]': { shadow: 'raised' },
+})
+
+const grip = css({
   display: 'block',
+  width: 'full',
+  rounded: 'card',
+  cursor: 'grab',
+  // Keeps panning available — the hold is what decides between scrolling and
+  // rearranging — while dropping the browser's 300ms double-tap wait, which
+  // would otherwise sit on top of a 220ms hold.
+  touchAction: 'manipulation',
+  layerStyle: 'focusable',
+  '&[aria-pressed=true]': { cursor: 'grabbing' },
 })
 
 const removeButton = css({
@@ -184,13 +270,14 @@ const coverTag = css({
   fontSize: '2xs',
   fontWeight: 'bold',
   lineHeight: 'tight',
+  // The badge belongs to the photo under it, not to the finger dragging it.
+  pointerEvents: 'none',
 })
 
 const addTile = css({
-  // Same literal as `thumb`, for the same reason.
+  // Same literal as `tile`, for the same reason.
   width: '84px',
   height: '84px',
-  flexShrink: 0,
   display: 'grid',
   placeItems: 'center',
   gap: '1',

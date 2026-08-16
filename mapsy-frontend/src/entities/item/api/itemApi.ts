@@ -3,8 +3,23 @@ import { getSupabase, STORAGE_BUCKET } from '@/shared/api/supabase'
 import { warnIfTruncated } from '@/shared/api/warnIfTruncated'
 import { newId } from '@/shared/lib/id'
 import type { ProcessedPhoto } from '@/shared/lib/image'
-import type { Item, ItemDraft, ItemStatus, WardrobeItem } from '../model/types'
-import { toItem, toItemImage, toItemInsert, toItemUpdate, type ItemImageInsert } from './mapRow'
+import type { PhotoEntry } from '../model/photoEntries'
+import type {
+  Item,
+  ItemDraft,
+  ItemImage,
+  ItemStatus,
+  ItemWithImages,
+  WardrobeItem,
+} from '../model/types'
+import {
+  toImagePayload,
+  toItem,
+  toItemImage,
+  toItemInsert,
+  toItemUpdate,
+  type UploadedImage,
+} from './mapRow'
 
 /**
  * Supabase access for the wardrobe.
@@ -86,9 +101,9 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
 /**
  * The cover is the lowest sort_order, not literally 0.
  *
- * `delete_item_image` renumbers to a contiguous range so the two are normally
- * the same, but reading it as "position 0 or nothing" turns any gap — an older
- * row, a half-applied change — into a card with photos and a blank thumbnail.
+ * `set_item_images` numbers by position so the two are normally the same, but
+ * reading it as "position 0 or nothing" turns any gap — an older row, a
+ * half-applied change — into a card with photos and a blank thumbnail.
  */
 function coverOf<T extends { sortOrder: number }>(images: T[]): T | undefined {
   return images.reduce<T | undefined>(
@@ -126,7 +141,7 @@ export async function createItem(
   const supabase = getSupabase()
   const itemId = newId()
 
-  const pending = await uploadPhotos(itemId, userId, photos)
+  const { uploaded, paths } = await uploadPhotos(itemId, userId, photos)
 
   try {
     const { data, error } = await supabase
@@ -141,7 +156,14 @@ export async function createItem(
     try {
       const { data: imageRows, error: imageError } = await supabase
         .from('item_images')
-        .insert(pending.rows)
+        .insert(
+          uploaded.map((image, index) => ({
+            ...image,
+            item_id: itemId,
+            user_id: userId,
+            sort_order: index,
+          })),
+        )
         .select(IMAGE_COLUMNS)
       if (imageError) throw imageError
 
@@ -171,29 +193,29 @@ export async function createItem(
       throw imageError
     }
   } catch (insertError) {
-    await removeObjects(pending.paths)
+    await removeObjects(paths)
     throw insertError
   }
 }
 
 /**
- * Uploads every photo and returns the rows that will describe them.
+ * Uploads every photo and returns what will describe them.
  *
- * Writes nothing to the database — the caller inserts, so that a failure here
+ * Writes nothing to the database — the caller does, so that a failure here
  * leaves no trace at all. Objects are tracked as they land, and a failure
  * part-way through removes the ones already written rather than orphaning them.
  */
 async function uploadPhotos(
   itemId: string,
   userId: string,
-  photos: ProcessedPhoto[],
-): Promise<{ rows: ItemImageInsert[]; paths: string[] }> {
+  photos: readonly ProcessedPhoto[],
+): Promise<{ uploaded: UploadedImage[]; paths: string[] }> {
   const storage = getSupabase().storage.from(STORAGE_BUCKET)
-  const rows: ItemImageInsert[] = []
+  const uploaded: UploadedImage[] = []
   const paths: string[] = []
 
   try {
-    for (const [index, photo] of photos.entries()) {
+    for (const photo of photos) {
       const imageId = newId()
       const base = `${userId}/${itemId}/${imageId}`
       const path = `${base}.${photo.ext}`
@@ -223,19 +245,16 @@ async function uploadPhotos(
       if (fullError !== null) throw fullError
       if (thumbError !== null) throw thumbError
 
-      rows.push({
+      uploaded.push({
         id: imageId,
-        item_id: itemId,
-        user_id: userId,
         path,
         thumb_path: thumbPath,
-        sort_order: index,
         width: photo.width,
         height: photo.height,
       })
     }
 
-    return { rows, paths }
+    return { uploaded, paths }
   } catch (uploadError) {
     await removeObjects(paths)
     throw uploadError
@@ -243,39 +262,68 @@ async function uploadPhotos(
 }
 
 /**
- * Rewrites photo order. `imageIds` must list every photo of the item, cover
- * first.
+ * Rewrites an item's photos to match `entries`: uploads the ones picked in the
+ * form, drops the stored ones the form let go of, and puts what is left in the
+ * order given.
  *
- * Goes through a database function rather than a series of updates: each
- * PostgREST request is its own transaction, so two updates would commit
- * separately and the first one would violate the unique constraint on
- * (item_id, sort_order). Parking a row at a sentinel value is no escape either —
- * the sort_order CHECK is immediate and cannot be deferred.
+ * All three land in one database call because they cannot be separated. Each
+ * PostgREST request is its own transaction, and the `sort_order` CHECK is
+ * immediate, so a five-photo item has no free position to insert into until
+ * something has been deleted — split across requests, the deletion commits on
+ * its own and a save that then fails has taken photos away without adding any.
+ * `supabase/migrations/20260816000001_set_item_images.sql` carries the argument.
+ *
+ * Storage is the part that cannot be in the transaction, so it is ordered around
+ * it: uploads go first (an unreferenced object is waste, a missing one is a
+ * broken image), and the objects the rewrite orphaned are removed only once it
+ * has committed.
  */
-export async function reorderItemImages(itemId: string, imageIds: string[]): Promise<void> {
-  const { error } = await getSupabase().rpc('reorder_item_images', {
-    p_item_id: itemId,
-    p_image_ids: imageIds,
+export async function setItemPhotos(
+  item: ItemWithImages,
+  entries: readonly PhotoEntry[],
+): Promise<{ images: ItemImage[]; coverUrl: string | null }> {
+  const picked = entries.flatMap((entry) => (entry.kind === 'picked' ? [entry.photo] : []))
+  const { uploaded, paths } = await uploadPhotos(item.id, item.userId, picked)
+
+  const { data, error, status } = await getSupabase().rpc('set_item_images', {
+    p_item_id: item.id,
+    p_images: toImagePayload(entries, uploaded),
   })
-  if (error) throw error
-}
 
-/**
- * Deletes one photo and closes the gap in sort_order.
- *
- * The row goes first, then the objects — the opposite of `deleteItem`, and for
- * the opposite reason. Here the caller already holds the paths, so nothing is
- * lost by removing the row first, and a row that outlived its file would render
- * as a broken image.
- */
-export async function deleteItemImage(
-  imageId: string,
-  paths: { path: string; thumbPath: string },
-): Promise<void> {
-  const { error } = await getSupabase().rpc('delete_item_image', { p_image_id: imageId })
-  if (error) throw error
+  if (error) {
+    // Only when the database answered. A rejected call rolls back whole, so
+    // nothing refers to these objects and they are pure waste. A request that
+    // never got an answer is the other case: it may have committed with the
+    // response lost on the way back, and removing the objects then leaves rows
+    // rendering broken images — which is the direction `deleteItem` orders
+    // itself to avoid. Orphans are recoverable; missing files are not.
+    // Measured against supabase-js 2.111.0: a fetch that never answered
+    // resolves with `status: 0`, an answered rejection with the real HTTP code.
+    if (status !== 0) await removeObjects(paths)
+    throw error
+  }
 
-  await removeObjects([paths.path, paths.thumbPath])
+  const images = (data ?? []).map(toItemImage)
+
+  // What to clean up comes from what came back, not from what the form asked
+  // for: the form says what to keep, the server says what is left. A photo added
+  // on another device since this screen loaded is deleted by the rewrite and its
+  // paths were never ours to name — that leaves an orphan, which is the
+  // recoverable side of the same trade.
+  const kept = new Set(images.map((image) => image.id))
+  const dropped = item.images.filter((image) => !kept.has(image.id))
+  await removeObjects(dropped.flatMap((image) => [image.path, image.thumbPath]))
+
+  // Signing can fail on its own, and it throws — by then the rewrite has
+  // committed, so the screen would report a failure for a save that landed.
+  // Left as the other two signing call sites have it: a retry is convergent
+  // here (the next attempt states the whole list again, over whatever the last
+  // one wrote), and the alternative is patching the grid with a cover URL that
+  // could not be signed, which is a blank card for a garment that has photos.
+  const cover = coverOf(images)
+  const signed = await signPaths(cover ? [cover.thumbPath] : [])
+
+  return { images, coverUrl: cover ? (signed.get(cover.thumbPath) ?? null) : null }
 }
 
 export async function updateItem(id: string, draft: ItemDraft): Promise<Item> {

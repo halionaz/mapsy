@@ -7,7 +7,16 @@
  * `coverOf`: reachable only through the hooks below).
  */
 
-export type { Item, ItemDraft, ItemImage, ItemStatus, WardrobeItem } from './model/types'
+export type {
+  Item,
+  ItemDraft,
+  ItemImage,
+  ItemStatus,
+  ItemWithImages,
+  WardrobeItem,
+} from './model/types'
+
+export { photoEntryKey, storedPhotoEntries, type PhotoEntry } from './model/photoEntries'
 
 export {
   useCreateItem,
@@ -21,13 +30,5 @@ export {
 } from './model/queries'
 
 export { usePendingUploads, type PendingUpload } from './model/pendingUploads'
-
-/**
- * Photo editing, with no screen calling it yet — the database functions and
- * `pnpm test:db` cover both, and the edit screen is where they will be used.
- * Exported so the pair stays part of the entity's surface rather than looking
- * like dead code inside it.
- */
-export { deleteItemImage, reorderItemImages } from './api/itemApi'
 
 export { CardSkeleton, ItemCard, PendingCard, SelectableItemCard } from './ui/ItemCard'

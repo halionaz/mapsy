@@ -158,10 +158,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      delete_item_image: { Args: { p_image_id: string }; Returns: undefined }
-      reorder_item_images: {
-        Args: { p_image_ids: string[]; p_item_id: string }
-        Returns: undefined
+      set_item_images: {
+        Args: { p_images: Json; p_item_id: string }
+        Returns: {
+          created_at: string
+          height: number | null
+          id: string
+          item_id: string
+          path: string
+          sort_order: number
+          thumb_path: string
+          user_id: string
+          width: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "item_images"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       set_item_wears: {
         Args: { p_item_ids: string[]; p_worn_on: string }

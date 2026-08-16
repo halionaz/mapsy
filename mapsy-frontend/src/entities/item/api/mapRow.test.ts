@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { toItem, toItemInsert, toItemUpdate, uniqueTags, type ItemRow } from './mapRow'
+import type { ProcessedPhoto } from '@/shared/lib/image'
+import type { PhotoEntry } from '../model/photoEntries'
+import type { ItemImage } from '../model/types'
+import {
+  toImagePayload,
+  toItem,
+  toItemInsert,
+  toItemUpdate,
+  uniqueTags,
+  type ItemRow,
+} from './mapRow'
 
 const baseRow: ItemRow = {
   id: 'i1',
@@ -111,6 +121,37 @@ describe('toItemUpdate', () => {
     })
     expect(payload.brand).toBe('무신사')
     expect(payload.price).toBe(39000)
+  })
+})
+
+describe('toImagePayload', () => {
+  const uploaded = [
+    { id: 'new1', path: 'p/new1.webp', thumb_path: 'p/new1_thumb.webp', width: 1, height: 1 },
+    { id: 'new2', path: 'p/new2.webp', thumb_path: 'p/new2_thumb.webp', width: 2, height: 2 },
+  ]
+
+  function stored(id: string): PhotoEntry {
+    return { kind: 'stored', image: { id } as ItemImage }
+  }
+
+  function picked(previewUrl: string): PhotoEntry {
+    return { kind: 'picked', photo: { previewUrl } as ProcessedPhoto }
+  }
+
+  it('keeps the form order and hands each picked entry the upload it belongs to', () => {
+    // The position in this array *is* the sort_order the function writes, so a
+    // payload that carries the right rows in the wrong order stores the photos
+    // in an order nobody chose — and nothing fails.
+    const payload = toImagePayload(
+      [picked('blob:a'), stored('old1'), picked('blob:b'), stored('old2')],
+      uploaded,
+    )
+
+    expect(payload).toEqual([uploaded[0], { id: 'old1' }, uploaded[1], { id: 'old2' }])
+  })
+
+  it('sends a stored photo as its id alone — nothing that could rewrite the row', () => {
+    expect(toImagePayload([stored('old1')], [])).toEqual([{ id: 'old1' }])
   })
 })
 
