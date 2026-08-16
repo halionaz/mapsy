@@ -93,9 +93,12 @@ export default defineConfig({
           field: { value: '320px' },
           swatchSm: { value: '10px' },
           swatchMd: { value: '16px' },
-          // Every tappable target clears this. 44px is the smallest thing iOS
-          // Human Interface Guidelines will call a control, and the icon buttons
-          // in the headers are exactly the ones that drift under it.
+          // 44px is the smallest thing iOS Human Interface Guidelines will call
+          // a control, and what anything a thumb has to find on its own is sized
+          // to — the icon buttons in the bars, the sheet's handle. Not a line the
+          // whole app clears: chips are 36px on purpose and take their 44px band
+          // from the rail around them (`chipStyle`, and the rail in
+          // `WardrobePage`). This is the floor for what names it.
           tap: { value: '44px' },
         },
 

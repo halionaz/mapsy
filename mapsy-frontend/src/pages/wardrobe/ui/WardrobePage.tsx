@@ -1071,9 +1071,10 @@ const listMeta = css({
  *
  * Centred rather than in a corner: this is a one-handed screen and the middle of
  * the bottom edge is the part of a phone both thumbs reach. `fixed` positions it
- * against the viewport — nothing between here and the root has a transform, and
- * a transform is what would capture it — and the app column is centred too,
- * which is what keeps the two agreeing.
+ * against the viewport — checked: nothing between here and the root establishes
+ * a containing block for it, which a transform, a filter, `contain` and several
+ * other properties would — and the app column is centred too, which is what
+ * keeps the two agreeing.
  *
  * The glow is its alone. The wear button beside it is drawn on a surface rather
  * than in the accent, and an accent-tinted shadow under a neutral pill reads as

@@ -9,20 +9,37 @@ import { css } from 'styled-system/css'
  * per screen it drifted: the wardrobe carried twice the vertical padding of the
  * rest.
  *
- * Padding and nothing else: each of these bars holds exactly one 44px target, so
- * the padding is the whole of the height. A `minHeight` floor saying the same
- * 60px a second way stood here for a while and never bound at any of the three.
+ * Padding and nothing else: nothing in these bars is taller than the 44px
+ * targets they carry, so the padding is the whole of the height. A `minHeight`
+ * floor saying the same 60px a second way stood here for a while and never bound
+ * at any of the three.
  *
- * The inset is padding rather than a margin so the content clears the status bar
- * while the bar's box still starts at the top edge of the screen — which is also
- * what lets the two bars that paint a surface reach under it.
+ * The inset is padding rather than a margin so the box — and any surface it
+ * paints — starts where the bar starts instead of below the inset, which is what
+ * lets the two bars that have a background reach under the status bar.
  *
- * **A style object merged by `css()`, not a class joined by `cx()`.** Panda's
- * `cx` is a string join (`styled-system/css/cx.mjs`), so when a call site sets a
- * property this one also sets, the winner is whichever rule Panda wrote later —
- * in this app's own stylesheet `.pt_3` lands before these rules and `.pt_4`
- * after, which would make the same override lose or win by its value. Merging
- * the objects gives the last word to the call site, always.
+ * **`css.raw` here, `css(appBarBox, …)` at the call sites.** Both halves carry
+ * weight:
+ *
+ * - `css.raw` is what makes these rules exist at all. Panda emits from the calls
+ *   it can see at build time, and this is the only one — written as a plain
+ *   object the declaration emits nothing while every call site still asks the
+ *   runtime for the same class names. Both rules go, this file holding the app's
+ *   only `pb: '2'` as well, so the three bars fall to the height of what is in
+ *   them and sit up under the notch — with typecheck, lint, tests and build all
+ *   passing. Measured.
+ * - merging rather than `cx`, because Panda's `cx` is a string join
+ *   (`styled-system/css/cx.mjs`): two classes setting one property are settled by
+ *   whichever rule Panda wrote later, which is not something a call site can
+ *   reason about — both orders occur in this app's stylesheet today. Merging
+ *   hands the last word to the caller, but only across keys that resolve to the
+ *   same property. Override on the axis this file uses, `pt`/`pb`. `py`, `p`,
+ *   `paddingBlockStart` and anything else naming the same edge under another key
+ *   come through the merge intact, and are then back to being decided by
+ *   emission order — where the two the app actually uses, `py` and `p`, both land
+ *   ahead of these rules, so a call site writing either does not race, it loses.
+ *   `p` is the worst of them: its horizontal half lands, so the padding that went
+ *   missing reads as a wrong value rather than an override that never took.
  *
  * It does not equalise everything: `ScreenHeader`'s bar carries a 1px rule along
  * its bottom edge, and a border counts in an auto-height box, so that bar is a

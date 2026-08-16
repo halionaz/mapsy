@@ -166,8 +166,8 @@ const content = css({
  * The drag target, sized well past the bar it contains.
  *
  * The visible handle is 36×4 and it is the only place the sheet can be dragged
- * from, so the box around it is held to the same 44px floor as every other
- * control in the app. `minHeight` is the whole of that — the padding it replaced
+ * from, so the box around it is held to `sizes.tap`, like the icon buttons in
+ * the screens' bars. `minHeight` is the whole of that: the padding it replaced
  * changed neither the height nor where the bar sits once the floor is there.
  */
 const grabber = css({
