@@ -24,12 +24,15 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// 루트 스크립트가 부르는 pnpm 호출만 본다. `-r`이 보이는지로 판단하면 양쪽으로 틀린다 —
-// `rm -r dist`가 걸리고, `pnpm recursive run lint`와 `pnpm --filter './mapsy-*' lint`는
-// 빠진다. 뒤의 둘은 실제로 퍼뜨린다(직접 돌려 확인).
+// 셸 접두 — 여는 괄호 · `env` · 인라인 환경변수. 벗기지 않으면 `CI=1 pnpm -r test` 같은
+// 흔한 관용구에서 진짜 퍼뜨리기가 판정 앞에서 빠진다.
+const PREFIX = /^\(*\s*(?:env\s+)?(?:[A-Za-z_]\w*=\S*\s+)*/
+// pnpm 호출로 "보이는" 것. 파일 이름 안의 pnpm(`node scripts/only-pnpm.mjs`)은 빼야 한다.
+const MENTIONS_PNPM = /(?<![\w.-])pnpm(?=\s|$)/
+// 퍼뜨리는 호출. 이름을 뽑아 온다.
 const FANOUT = /^pnpm\s+(?:-r|--recursive)\s+(?:run\s+)?([\w:-]+)$/
 // 패키지 하나만 지정하는 호출. 글롭 문자가 없어야 한다 — 여럿에 걸리면 그것도 퍼뜨리기다.
-const SINGLE = /^pnpm\s+--filter\s+[\w@/.-]+\s+(?:run\s+)?[\w:-]+$/
+const SINGLE = /^pnpm\s+(?:--filter|-F)\s+([\w@/.-]+)\s+(?:run\s+)?[\w:-]+$/
 
 const RED = '\x1b[31m'
 const BOLD = '\x1b[1m'
@@ -46,21 +49,28 @@ const { scripts: rootScripts = {} } = JSON.parse(readFileSync(join(root, 'packag
 
 const fanned = new Set()
 for (const [name, command] of Object.entries(rootScripts)) {
-  for (const segment of command.split(/&&|\|\||;/).map((s) => s.trim())) {
-    if (!/^pnpm\s/.test(segment)) continue
+  for (const raw of command.split(/&&|\|\||;/)) {
+    const segment = raw
+      .trim()
+      .replace(PREFIX, '')
+      .replace(/\s*\)*$/, '')
+    if (!MENTIONS_PNPM.test(segment)) continue
 
-    const match = FANOUT.exec(segment)
-    if (match) {
-      fanned.add(match[1])
+    const fanout = FANOUT.exec(segment)
+    if (fanout) {
+      fanned.add(fanout[1])
       continue
     }
-    if (SINGLE.test(segment)) continue
+
+    // `...mapsy-frontend`처럼 의존까지 끌어오는 셀렉터는 하나만 고르는 게 아니다.
+    const single = SINGLE.exec(segment)
+    if (single && !single[1].includes('...')) continue
 
     fail(
       `루트 스크립트 "${name}" — pnpm 호출의 형태를 읽지 못했습니다: ${segment}\n\n` +
         `  퍼뜨리는 명령이면(-r · --recursive · 글롭 --filter) 그 스크립트를 모든 패키지가\n` +
-        `  선언해야 합니다. 형태를 늘렸다면 scripts/check-package-scripts.mjs의\n` +
-        `  FANOUT·SINGLE도 같이 고쳐야 합니다.`,
+        `  선언해야 합니다. 퍼뜨리지 않는 pnpm 명령이면 아직 읽을 수 있는 형태가 없습니다.\n` +
+        `  어느 쪽이든 scripts/check-package-scripts.mjs의 FANOUT·SINGLE을 늘려야 합니다.`,
     )
   }
 }
@@ -69,7 +79,9 @@ const required = [...fanned]
 
 // 하나도 없다면 루트 스크립트를 잘못 읽은 것이다. 그대로 두면 "검사할 게 없어서 통과"가 된다.
 if (required.length === 0) {
-  fail(`루트에 "pnpm -r"로 퍼뜨리는 스크립트가 하나도 없습니다.\n\n  package.json을 확인하세요.`)
+  fail(
+    `루트에 퍼뜨리는 스크립트(-r · --recursive)가 하나도 없습니다.\n\n  package.json을 확인하세요.`,
+  )
 }
 
 const listed = JSON.parse(
