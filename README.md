@@ -23,6 +23,10 @@ mapsy/
 
 ## 시작하기
 
+**Node 버전은 [`.tool-versions`](.tool-versions)가 정한다.** asdf와 mise가 둘 다 읽는
+형식이라 어느 쪽을 쓰든 레포에 들어오면 그 버전으로 바뀐다 — `asdf install` 또는
+`mise install`로 깔면 된다. 버전 관리자를 안 쓴다면 그 숫자에 직접 맞춘다.
+
 **pnpm이 필요하다.** npm이나 yarn으로 설치하면 `preinstall` 훅이 막는다.
 
 ```bash
@@ -34,6 +38,9 @@ cp mapsy-frontend/.env.example mapsy-frontend/.env.local
 
 pnpm dev
 ```
+
+> **asdf라면 `corepack enable` 뒤에 `asdf reshim nodejs`를 한 번 더 돌린다.** corepack이 만든
+> `pnpm`은 Node 설치 디렉토리에 생기고, 셰임을 다시 만들기 전까지 PATH에 잡히지 않는다.
 
 `.env.local` 없이도 앱은 뜬다. 인증 게이트가 **미리보기 모드**로 취급해 로그인을 요구하지
 않으므로, Supabase 프로젝트를 만들기 전에도 UI를 만들 수 있다.
@@ -165,3 +172,7 @@ git worktree add ../mapsy-feature -b feat/something
   형식이면 이제 설치가 멈춘다(예전엔 조용히 통과했다). 그래서 jsdom이 빼는 구간(23.x,
   24.0–24.14, 25.x 전체)은 `engines.node`가 표현하지 못한다 — **Node 24를 쓸 거면 24.15
   이상.** 걸리는 건 테스트뿐이라 빌드와 배포에는 영향이 없다.
+
+  `.tool-versions`의 `22.23.2`는 이 하한과 같은 숫자가 아니다. 하한은 "이 아래로는 안 된다"고,
+  저건 "로컬에서 실제로 쓰는 버전"이다 — CI가 `node-version: 22`로 22 계열 최신을 깔기 때문에
+  같은 계열의 최신을 적었다. 둘이 어긋나면 `pnpm install`이 위 가드에서 멈춘다.
