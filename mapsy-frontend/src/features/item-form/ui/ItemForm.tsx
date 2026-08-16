@@ -8,13 +8,13 @@ import { CLOTHING_COLORS, MAX_COLORS_PER_ITEM, type ColorId } from '@/shared/con
 import { fitPresetsFor, hasFitField } from '@/shared/config/fits'
 import { MAX_SEASONS_PER_ITEM, SEASONS, type SeasonId } from '@/shared/config/seasons'
 import { sizePresetsFor } from '@/shared/config/sizes'
-import { releasePreview, type ProcessedPhoto } from '@/shared/lib/image'
+import { releasePreview } from '@/shared/lib/image'
 import { Button } from '@/shared/ui/Button'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
 import { ChipSelect } from '@/shared/ui/ChipSelect'
 import { Field, FieldError } from '@/shared/ui/Field'
 import { inputStyle } from '@/shared/ui/fieldStyle'
-import type { ItemDraft } from '@/entities/item'
+import { samePhotoList, type ItemDraft, type PhotoEntry } from '@/entities/item'
 import { LIMITS, MAX_PHOTOS } from '../model/limits'
 import { PhotoPicker } from './PhotoPicker'
 
@@ -28,13 +28,23 @@ import { PhotoPicker } from './PhotoPicker'
  */
 
 export interface ItemFormValues extends ItemDraft {
-  photos: ProcessedPhoto[]
+  /** Cover first — the order is the answer, not a detail of it. */
+  photos: PhotoEntry[]
+  /**
+   * Whether the person changed the photos, against the list this form opened
+   * with.
+   *
+   * Reported from here because here is the only place that knows. Writing the
+   * photos deletes everything the written list omits, so the caller has to be
+   * able to tell "left alone" from "left looking the same" — see `samePhotoList`.
+   */
+  photosChanged: boolean
 }
 
 interface ItemFormProps {
   initial?: Partial<ItemFormValues>
-  /** Edit reuses existing photos, so the picker is hidden and not required. */
-  showPhotos?: boolean
+  /** Signed thumbnails for `initial.photos` that are already stored. */
+  storedUrls?: ReadonlyMap<string, string | null>
   submitLabel: string
   pending?: boolean
   error?: string | null
@@ -44,14 +54,17 @@ interface ItemFormProps {
 
 export function ItemForm({
   initial,
-  showPhotos = true,
+  storedUrls,
   submitLabel,
   pending = false,
   error,
   onSubmit,
   onCancel,
 }: ItemFormProps) {
-  const [photos, setPhotos] = useState<ProcessedPhoto[]>(initial?.photos ?? [])
+  const [photos, setPhotos] = useState<PhotoEntry[]>(initial?.photos ?? [])
+  // What the photos looked like when this form opened, frozen at the same moment
+  // the state above was seeded from it.
+  const openedWith = useRef(initial?.photos ?? [])
   const [title, setTitle] = useState(initial?.title ?? '')
   const [categoryId, setCategoryId] = useState<SubcategoryId | null>(initial?.categoryId ?? null)
   const [colors, setColors] = useState<ColorId[]>(initial?.colors ?? [])
@@ -71,16 +84,25 @@ export function ItemForm({
   const [touched, setTouched] = useState(false)
   const uid = useId()
 
-  // Photos handed to a successful submit belong to the upload store, which
-  // revokes them when it is done. Anything still here on unmount was abandoned
-  // — cancelling, or navigating away — and would otherwise leak for the life of
-  // the tab.
+  // Photos handed to a successful submit belong to whoever took them — the
+  // upload store on registration, the edit screen after its save lands — and
+  // they revoke the previews when done. Anything still here on unmount was
+  // abandoned (cancelling, or navigating away) and would otherwise leak for the
+  // life of the tab. Stored photos have no object URL to give back.
   const photosRef = useRef(photos)
   photosRef.current = photos
   const submitted = useRef(false)
+  // A rejected submit hands them back. The form is still standing and these
+  // blobs are what a retry re-uploads, so the latch has to come off — otherwise
+  // 취소 after a failed save unmounts a form that believes it gave its photos
+  // away, and every preview it holds leaks for the life of the tab.
+  if (error) submitted.current = false
   useEffect(
     () => () => {
-      if (!submitted.current) photosRef.current.forEach(releasePreview)
+      if (submitted.current) return
+      for (const entry of photosRef.current) {
+        if (entry.kind === 'picked') releasePreview(entry.photo)
+      }
     },
     [],
   )
@@ -97,7 +119,7 @@ export function ItemForm({
     [groupId],
   )
 
-  const missingPhoto = showPhotos && photos.length === 0
+  const missingPhoto = photos.length === 0
   const missingTitle = title.trim().length === 0
   const missingCategory = categoryId === null
   // "abc" strips to "" and Number("") is 0 — which would store a typo as a free
@@ -161,6 +183,7 @@ export function ItemForm({
 
     onSubmit({
       photos,
+      photosChanged: !samePhotoList(openedWith.current, photos),
       title,
       categoryId,
       colors,
@@ -195,12 +218,14 @@ export function ItemForm({
       // `<main>`, which is a flex column for this reason.
       className={vstack({ gap: '6', alignItems: 'stretch', flex: '1' })}
     >
-      {showPhotos && (
-        <Field label="사진" required hint={`최대 ${MAX_PHOTOS}장 · 첫 번째가 대표 사진`}>
-          <PhotoPicker photos={photos} onChange={setPhotos} />
-          {touched && missingPhoto && <FieldError>사진을 한 장 이상 추가해주세요.</FieldError>}
-        </Field>
-      )}
+      <Field
+        label="사진"
+        required
+        hint={`최대 ${MAX_PHOTOS}장 · 첫 번째가 대표 · 길게 눌러 순서 변경`}
+      >
+        <PhotoPicker photos={photos} onChange={setPhotos} storedUrls={storedUrls} />
+        {touched && missingPhoto && <FieldError>사진을 한 장 이상 추가해주세요.</FieldError>}
+      </Field>
 
       <Field
         label="이름"

@@ -101,74 +101,119 @@ select tests.fails(
             values ('aaaa0000-0000-0000-0000-000000000001', %L, 'x', 'x', 3)$f$, :'B'),
   'row-level security', '남의 user_id로 사진 첨부 불가');
 
-\echo '── 순서 변경 RPC ──'
--- The point of the function: two separate UPDATEs would each be their own
--- transaction and the first would trip the unique constraint on commit.
-select public.reorder_item_images(
-  'aaaa0000-0000-0000-0000-000000000001',
-  array[
-    'bbbb0000-0000-0000-0000-000000000002',
-    'bbbb0000-0000-0000-0000-000000000000',
-    'bbbb0000-0000-0000-0000-000000000001',
-    'bbbb0000-0000-0000-0000-000000000003',
-    'bbbb0000-0000-0000-0000-000000000004'
-  ]::uuid[]);
+\echo '── 사진 목록 재작성 (set_item_images) ──'
+-- 편집 화면이 부르는 하나뿐인 사진 쓰기 경로. 삭제·추가·순서를 한 번에 받는다.
+-- 시작 상태: p0..p4 (sort_order 0..4), 즉 꽉 찬 다섯 장.
 
-select tests.eq(
-  (select string_agg(path, ',' order by sort_order) from public.item_images),
-  'p2,p0,p1,p3,p4', '전달한 순서대로 재배치됨');
-
--- The path assertion above is the real check. A count of distinct sort_orders
--- would be another tautology — the unique constraint guarantees 5 distinct
--- values for 5 rows of one item no matter what the reorder did.
-
-select tests.fails(
-  $f$select public.reorder_item_images(
-       'aaaa0000-0000-0000-0000-000000000001',
-       array['bbbb0000-0000-0000-0000-000000000000']::uuid[])$f$,
-  '5 개 중 1 개만 전달됨', '일부만 전달하면 거부 — 구멍이 생김');
-
--- The count check alone let these through: FOUND is true as soon as one row
--- updates, so a subset was silently applied and reported as success.
-select tests.fails(
-  $f$select public.reorder_item_images(
-       'aaaa0000-0000-0000-0000-000000000001',
-       array['bbbb0000-0000-0000-0000-000000000000',
-             'bbbb0000-0000-0000-0000-000000000000',
-             'bbbb0000-0000-0000-0000-000000000001',
-             'bbbb0000-0000-0000-0000-000000000003',
-             'bbbb0000-0000-0000-0000-000000000004']::uuid[])$f$,
-  '중복된 이미지 id', '중복 id는 개수가 맞아도 거부');
-
+-- 아래 "다른 아이템의 사진" 케이스용.
 insert into public.items (id, user_id, title, category_id)
-values ('aaaa0000-0000-0000-0000-000000000002', :'A', '다른 아이템', 'top.knit');
+values ('aaaa0000-0000-0000-0000-000000000002', :'A', '옆 아이템', 'top.knit');
 insert into public.item_images (id, item_id, user_id, path, thumb_path, sort_order)
 values ('cccc0000-0000-0000-0000-000000000001',
         'aaaa0000-0000-0000-0000-000000000002', :'A', 'z0', 'z0t', 0);
 
-select tests.fails(
-  $f$select public.reorder_item_images(
-       'aaaa0000-0000-0000-0000-000000000001',
-       array['bbbb0000-0000-0000-0000-000000000000',
-             'bbbb0000-0000-0000-0000-000000000001',
-             'bbbb0000-0000-0000-0000-000000000002',
-             'bbbb0000-0000-0000-0000-000000000003',
-             'cccc0000-0000-0000-0000-000000000001']::uuid[])$f$,
-  '이 아이템의 이미지임', '다른 아이템의 id가 섞이면 거부 — 중복과 다른 메시지');
+-- 한 번의 저장에 세 가지가 다 들어온 모양: p1·p2·p4는 목록에 없어 지워지고, 새 사진이
+-- 가운데로 들어가고, 남은 둘의 순서가 뒤집힌다. **다섯 장에서 시작하는 것이 핵심이다** —
+-- 나눠 불렀다면 자리를 비우기 전에는 새 사진을 넣을 곳이 아예 없다.
+select tests.eq(
+  (select string_agg(path, ',' order by sort_order)
+   from public.set_item_images('aaaa0000-0000-0000-0000-000000000001', $j$[
+     {"id": "bbbb0000-0000-0000-0000-000000000003"},
+     {"id": "dddd0000-0000-0000-0000-000000000001",
+      "path": "p5", "thumb_path": "t5", "width": 1280, "height": 960},
+     {"id": "bbbb0000-0000-0000-0000-000000000000"}
+   ]$j$::jsonb)),
+  'p3,p5,p0', '삭제·추가·순서 변경이 한 번에 반영되고, 반영된 목록이 돌아옴');
 
--- Same tautology trap: a partially applied reorder still yields 0,1,2,3,4.
--- Only the path order shows that the rejected call rolled back.
+-- 돌려준 것과 남은 것이 같은지. 프론트엔드가 이 반환값을 그대로 캐시에 넣으므로,
+-- 둘이 어긋나면 화면과 데이터베이스가 조용히 갈라진다.
+select tests.eq(
+  (select string_agg(path, ',' order by sort_order) || ' / ' || count(*)::text
+   from public.item_images where item_id = 'aaaa0000-0000-0000-0000-000000000001'),
+  'p3,p5,p0 / 3', '테이블에 남은 것도 같은 순서, 목록에 없던 세 장은 삭제됨');
+
+-- 대표를 바꾸는 방법이 순서 변경이라는 규약(PRD §4)의 실물. 옛 대표 p0은 맨 뒤로 갔고,
+-- 0번 자리는 비지 않았다 — 삭제 뒤 재번호를 따로 하지 않아도 위치가 곧 sort_order다.
+select tests.eq(
+  (select path from public.item_images
+   where item_id = 'aaaa0000-0000-0000-0000-000000000001' and sort_order = 0),
+  'p3', '목록의 첫 번째가 곧 대표');
+
+select tests.eq(
+  (select width || 'x' || height from public.item_images where path = 'p5'),
+  '1280x960', '새 사진의 크기가 그대로 저장됨');
+
+select tests.fails(
+  $f$select * from public.set_item_images(
+       'aaaa0000-0000-0000-0000-000000000001', '[]'::jsonb)$f$,
+  '한 장도 남지 않음', '빈 목록 거부 — 사진 없는 아이템은 빈 카드가 됨');
+
+-- NULL은 빈 배열과 같은 자리에서 막혀야 한다. 처음 판에서는 세 가드가 전부 3값 논리에
+-- 무너져 통과했고, 삭제문의 not exists가 모든 행에 참이 되어 사진이 전부 지워졌다.
+-- 예외가 아니라 빈 셋을 돌려주는 정상 종료였다.
+select tests.fails(
+  $f$select * from public.set_item_images(
+       'aaaa0000-0000-0000-0000-000000000001', null::jsonb)$f$,
+  '배열이 아님', 'NULL 목록 거부 — PostgREST가 JSON null을 SQL NULL로 넘김');
+
+-- JSON null은 같은 문장의 다른 가지다. 위와 함께 두는 이유는 둘이 다른 값이라서다.
+select tests.fails(
+  $f$select * from public.set_item_images(
+       'aaaa0000-0000-0000-0000-000000000001', 'null'::jsonb)$f$,
+  '배열이 아님', 'JSON null도 거부');
+
+select tests.eq(
+  (select count(*)::text from public.item_images
+   where item_id = 'aaaa0000-0000-0000-0000-000000000001'),
+  '3', '거부된 세 호출 뒤에도 사진이 그대로임');
+
+select tests.fails(
+  $f$select * from public.set_item_images('aaaa0000-0000-0000-0000-000000000001', $j$[
+       {"id": "bbbb0000-0000-0000-0000-000000000003"},
+       {"id": "cccc0000-0000-0000-0000-000000000001"}
+     ]$j$::jsonb)$f$,
+  '이 아이템의 사진임', '다른 아이템의 사진을 유지 목록에 넣으면 거부');
+
+-- 거부된 호출이 롤백되는지. 위 요청은 p5와 p0을 지우고 나서 마지막 검사에서 걸린다.
 select tests.eq(
   (select string_agg(path, ',' order by sort_order)
    from public.item_images where item_id = 'aaaa0000-0000-0000-0000-000000000001'),
-  'p2,p0,p1,p3,p4', '거부된 재정렬은 아무것도 바꾸지 않음');
+  'p3,p5,p0', '거부된 재작성은 아무것도 바꾸지 않음');
 
--- A photo-less item reordering to nothing is a legitimate no-op; the previous
--- version raised "대상 이미지를 찾지 못함" here.
-insert into public.items (id, user_id, title, category_id)
-values ('aaaa0000-0000-0000-0000-000000000003', :'A', '사진 없는 아이템', 'top.knit');
-select public.reorder_item_images('aaaa0000-0000-0000-0000-000000000003', array[]::uuid[]);
-\echo '  ok  빈 배열은 오류가 아님 (사진 0장 아이템)'
+select tests.fails(
+  $f$select * from public.set_item_images('aaaa0000-0000-0000-0000-000000000001', $j$[
+       {"id": "bbbb0000-0000-0000-0000-000000000003"},
+       {"id": "bbbb0000-0000-0000-0000-000000000003"}
+     ]$j$::jsonb)$f$,
+  '중복된 이미지 id', '중복 id 거부');
+
+-- 중복 검사가 count(distinct)라 null을 세지 않는다. id를 빠뜨린 요청이 "중복"으로
+-- 보고되면 호출자는 엉뚱한 곳을 고치게 된다.
+select tests.fails(
+  $f$select * from public.set_item_images('aaaa0000-0000-0000-0000-000000000001', $j$[
+       {"path": "x", "thumb_path": "xt"}
+     ]$j$::jsonb)$f$,
+  'id 없는 항목', 'id 없는 원소는 중복과 다른 메시지로 거부');
+
+-- 최대 5장을 강제하는 것은 여전히 CHECK 하나뿐이다. 이 경로에도 걸리는지 —
+-- 함수가 개수를 따로 세지 않는 근거가 이것이다.
+select tests.fails(
+  $f$select * from public.set_item_images('aaaa0000-0000-0000-0000-000000000001', $j$[
+       {"id": "bbbb0000-0000-0000-0000-000000000003"},
+       {"id": "dddd0000-0000-0000-0000-000000000001"},
+       {"id": "bbbb0000-0000-0000-0000-000000000000"},
+       {"id": "dddd0000-0000-0000-0000-000000000002", "path": "p6", "thumb_path": "t6"},
+       {"id": "dddd0000-0000-0000-0000-000000000003", "path": "p7", "thumb_path": "t7"},
+       {"id": "dddd0000-0000-0000-0000-000000000004", "path": "p8", "thumb_path": "t8"}
+     ]$j$::jsonb)$f$,
+  'item_images_sort_order_range', '6장은 CHECK에서 막힘 — 개수 상한은 여전히 거기 하나');
+
+select tests.fails(
+  $f$select * from public.set_item_images('aaaa0000-0000-0000-0000-0000000000ff', $j$[
+       {"id": "dddd0000-0000-0000-0000-00000000000a",
+        "path": "y", "thumb_path": "yt"}
+     ]$j$::jsonb)$f$,
+  '아이템을 찾지 못함', '없는 아이템 거부');
 
 -- RETURNING이 소유자에게 행을 돌려주는지 — 아래 B 케이스의 반대쪽.
 --
@@ -178,30 +223,15 @@ select public.reorder_item_images('aaaa0000-0000-0000-0000-000000000003', array[
 -- `for all` 하나라 DELETE의 RETURNING도 같은 조건으로 SELECT되지만, 나중에
 -- 커맨드별 정책으로 쪼개면서 select를 좁히면 **삭제는 되고 예외는 나는** 상태가
 -- 된다 — 행은 사라졌는데 스토리지 정리를 건너뛰어 고아 객체가 남는다.
+insert into public.items (id, user_id, title, category_id)
+values ('aaaa0000-0000-0000-0000-000000000003', :'A', '사진 없는 아이템', 'top.knit');
+
 with deleted as (
   delete from public.items where id in (
     'aaaa0000-0000-0000-0000-000000000002',
     'aaaa0000-0000-0000-0000-000000000003')
   returning 1)
 select tests.eq((select count(*)::text from deleted), '2', '소유자의 삭제는 지운 행을 돌려줌');
-
-\echo '── 사진 삭제 시 재번호 ──'
-select public.delete_item_image('bbbb0000-0000-0000-0000-000000000002');
-
-select tests.eq(
-  (select count(*)::text from public.item_images), '4', '한 장 삭제됨');
-
-select tests.eq(
-  (select string_agg(sort_order::text, ',' order by sort_order) from public.item_images),
-  '0,1,2,3', '삭제 후에도 sort_order가 연속 — 대표 사진 구멍 없음');
-
-select tests.eq(
-  (select path from public.item_images where sort_order = 0),
-  'p0', '대표를 지우면 다음 사진이 0번으로 승격');
-
-select tests.fails(
-  $f$select public.delete_item_image('cccc0000-0000-0000-0000-000000000099')$f$,
-  '이미지를 찾지 못함', '없는 이미지 삭제는 오류');
 
 \echo '── 격리 (사용자 B) ──'
 reset role;
@@ -214,11 +244,13 @@ select tests.eq((select count(*)::text from public.item_images), '0', 'B는 A의
 with deleted as (delete from public.items returning 1)
 select tests.eq((select count(*)::text from deleted), '0', 'B는 A의 아이템을 못 지움');
 
+-- RPC도 RLS를 우회하지 못한다. set_item_images는 user_id를 인자로 받지 않고 아이템에서
+-- 읽는데, RLS가 그 아이템 자체를 숨기므로 첫 줄에서 걸린다.
 select tests.fails(
-  $f$select public.reorder_item_images(
-       'aaaa0000-0000-0000-0000-000000000001',
-       array['bbbb0000-0000-0000-0000-000000000000']::uuid[])$f$,
-  '0 개 중 1 개만 전달됨', 'RPC도 RLS를 우회하지 못함 — B에게는 사진이 0장');
+  $f$select * from public.set_item_images('aaaa0000-0000-0000-0000-000000000001', $j$[
+       {"id": "bbbb0000-0000-0000-0000-000000000000"}
+     ]$j$::jsonb)$f$,
+  '아이템을 찾지 못함', 'B는 A의 사진 목록을 다시 쓸 수 없음');
 
 \echo '── 스토리지 정책 ──'
 insert into storage.objects (bucket_id, name)
@@ -321,11 +353,19 @@ select tests.eq(
   has_schema_privilege('anon', 'private', 'usage')::text,
   'false', 'anon은 private 스키마 이름을 해석할 수 없음');
 
--- Scoped by condition, not by name. The previous version listed
--- ('reorder_item_images', 'delete_item_image') explicitly, so a third RPC added
--- later would inherit Supabase's default `anon=X` grant and no assertion would
--- notice — the same "test cannot see the regression" shape this suite has now
--- been bitten by three times.
+-- 003과 005가 만든 두 함수는 set_item_images로 대체되고 지워졌다. 마이그레이션은 파일명
+-- 순으로 적용되므로, 여기서 0이 나온다는 것은 그 순서가 실제로 지켜졌다는 뜻이기도 하다.
+select tests.eq(
+  (select count(*)::text from pg_proc p
+   join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('reorder_item_images', 'delete_item_image')),
+  '0', '대체된 두 RPC는 스키마에 남아 있지 않음');
+
+-- Scoped by condition, not by name. The previous version named the RPCs of the
+-- day explicitly, so one added later would inherit Supabase's default `anon=X`
+-- grant and no assertion would notice — the same "test cannot see the
+-- regression" shape this suite has now been bitten by three times.
 --
 -- Deliberately strict: no function in `public` may be anon-executable, trigger
 -- helpers included. If an anon-callable RPC is ever wanted, this line has to be
@@ -337,12 +377,15 @@ select tests.eq(
      and has_function_privilege('anon', p.oid, 'execute')),
   '', 'public의 어떤 함수도 anon이 실행할 수 없음');
 
+-- Counted as well as tested: `bool_and` over no rows is NULL, so a renamed or
+-- dropped RPC would leave this asserting nothing at all rather than failing.
 select tests.eq(
-  (select bool_and(has_function_privilege('authenticated', p.oid, 'execute'))::text
+  (select count(*)::text || ' ' || bool_and(has_function_privilege(
+     'authenticated', p.oid, 'execute'))::text
    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
-     and p.proname in ('reorder_item_images', 'delete_item_image', 'set_item_wears')),
-  'true', 'RPC는 authenticated가 실행할 수 있음');
+     and p.proname in ('set_item_wears', 'set_item_images')),
+  '2 true', 'RPC 둘 다 authenticated가 실행할 수 있음');
 
 -- The assertion that actually matters: what an anonymous session gets back.
 -- Narrowed to "for function" so losing schema USAGE cannot pass this by
@@ -350,14 +393,12 @@ select tests.eq(
 reset role;
 set role anon;
 select tests.fails(
-  $f$select public.reorder_item_images('aaaa0000-0000-0000-0000-000000000001', array[]::uuid[])$f$,
-  'permission denied for function', 'anon은 순서 변경 RPC를 호출할 수 없음');
-select tests.fails(
-  $f$select public.delete_item_image('bbbb0000-0000-0000-0000-000000000000')$f$,
-  'permission denied for function', 'anon은 사진 삭제 RPC를 호출할 수 없음');
-select tests.fails(
   $f$select public.set_item_wears(current_date, array[]::uuid[])$f$,
   'permission denied for function', 'anon은 착용 기록 RPC를 호출할 수 없음');
+select tests.fails(
+  $f$select * from public.set_item_images(
+       'aaaa0000-0000-0000-0000-000000000001', '[]'::jsonb)$f$,
+  'permission denied for function', 'anon은 사진 목록 재작성 RPC를 호출할 수 없음');
 reset role;
 
 set role authenticated;

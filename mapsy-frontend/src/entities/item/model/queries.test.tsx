@@ -29,6 +29,7 @@ vi.mock('@/entities/wear', async (importOriginal) => ({
 vi.mock('../api/itemApi', () => ({
   createItem: vi.fn(),
   updateItem: vi.fn(),
+  setItemPhotos: vi.fn(),
   setFavorite: vi.fn(),
   setStatus: vi.fn(),
   deleteItem: vi.fn().mockResolvedValue(undefined),

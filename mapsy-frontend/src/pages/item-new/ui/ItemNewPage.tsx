@@ -23,10 +23,20 @@ export function ItemNewPage() {
   const userId = useCurrentUserId()
   const create = useCreateItem()
 
-  function handleSubmit({ photos, ...draft }: ItemFormValues) {
+  // `photosChanged` is the edit screen's question — there is nothing here for a
+  // photo to have changed against.
+  function handleSubmit({ photos, photosChanged: _changed, ...draft }: ItemFormValues) {
     if (!userId) return
     create.mutate({
-      pending: { tempId: newId(), draft, photos, userId, state: 'uploading' },
+      pending: {
+        tempId: newId(),
+        draft,
+        // Every entry is a picked one here — there is no item yet for a stored
+        // photo to have belonged to.
+        photos: photos.flatMap((entry) => (entry.kind === 'picked' ? [entry.photo] : [])),
+        userId,
+        state: 'uploading',
+      },
     })
     navigate('/', { replace: true })
   }

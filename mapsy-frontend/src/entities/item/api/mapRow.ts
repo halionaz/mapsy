@@ -2,6 +2,7 @@ import { COLOR_IDS, type ColorId } from '@/shared/config/colors'
 import { SEASON_IDS, type SeasonId } from '@/shared/config/seasons'
 import { isSubcategoryId, type SubcategoryId } from '@/shared/config/categories'
 import type { Database } from '@/shared/api/database.types'
+import type { PhotoEntry } from '../model/photoEntries'
 import type { Item, ItemDraft, ItemImage, ItemStatus } from '../model/types'
 
 /**
@@ -73,6 +74,44 @@ export function toItem(row: ItemRow): Item {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+/**
+ * What an uploaded photo is, minus where it sits.
+ *
+ * Position is the caller's business: registration numbers photos by their order
+ * in the form, `set_item_images` places them among photos that already exist.
+ *
+ * A type alias rather than an interface, and snake_case rather than the domain's
+ * camelCase, for the same reason: this is spread straight into a row or into the
+ * RPC's `jsonb` argument, and only an alias carries the implicit index signature
+ * `Json` asks for.
+ */
+export type UploadedImage = {
+  id: string
+  path: string
+  thumb_path: string
+  width: number
+  height: number
+}
+
+/**
+ * The array `set_item_images` takes: the form's order, with every picked entry
+ * replaced by the row its upload produced.
+ *
+ * `uploaded` is in the order the picked entries appear, so walking the two
+ * together is what puts each new photo where the form put it. Getting this
+ * wrong does not fail — it silently stores the photos in a different order than
+ * the one on screen, which is the whole thing the screen was for.
+ */
+export function toImagePayload(
+  entries: readonly PhotoEntry[],
+  uploaded: readonly UploadedImage[],
+): ({ id: string } | UploadedImage)[] {
+  let next = 0
+  return entries.map((entry) =>
+    entry.kind === 'stored' ? { id: entry.image.id } : uploaded[next++],
+  )
 }
 
 export function toItemImage(row: ItemImageRow): ItemImage {

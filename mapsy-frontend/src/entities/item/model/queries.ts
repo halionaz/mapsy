@@ -12,7 +12,8 @@ import {
   removePending,
   type PendingUpload,
 } from './pendingUploads'
-import type { ItemDraft, ItemStatus, WardrobeItem } from './types'
+import type { PhotoEntry } from './photoEntries'
+import type { ItemDraft, ItemStatus, ItemWithImages, WardrobeItem } from './types'
 
 /**
  * Query layer for the wardrobe.
@@ -149,15 +150,48 @@ export function useDiscardUpload() {
   return (tempId: string) => removePending(tempId)
 }
 
+/**
+ * Saves the edit form: the fields, and the photo list when it changed.
+ *
+ * Two requests rather than one, in this order for one reason — the fields are a
+ * single cheap request that can be repeated, so a violation there (a memo past
+ * its ceiling) fails before anything has been uploaded or deleted. The reverse
+ * order pays for a rejected memo with a photo upload.
+ *
+ * They are not atomic together, and a failure between them leaves the fields
+ * saved and the photos untouched. Retrying converges: the field update is
+ * idempotent, and `set_item_images` is given the whole list rather than a delta,
+ * so a second attempt states the same result again — including over rows a first
+ * attempt landed but never got to report.
+ *
+ * The photo write is skipped entirely unless the form says its list changed.
+ * That question cannot be answered from here: this sees the cache, which
+ * refetches on window focus, and a photo another device added while the screen
+ * was open would look like a difference the user made. `samePhotoList` carries
+ * the argument.
+ */
 export function useUpdateItem() {
   const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
-    mutationFn: (vars: { id: string; draft: ItemDraft }) => api.updateItem(vars.id, vars.draft),
-    onSuccess: async (updated) => {
+    mutationFn: async (vars: {
+      item: ItemWithImages
+      draft: ItemDraft
+      /** The form's photo list, cover first. */
+      photos: PhotoEntry[]
+      /** Whether that list differs from the one the form opened with. */
+      photosChanged: boolean
+    }) => {
+      const updated = await api.updateItem(vars.item.id, vars.draft)
+      const photos = vars.photosChanged ? await api.setItemPhotos(vars.item, vars.photos) : null
+      return { updated, photos }
+    },
+    onSuccess: async ({ updated, photos }) => {
       await before()
       patchCache(queryClient, (entries) =>
-        entries.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)),
+        entries.map((entry) =>
+          entry.id === updated.id ? { ...entry, ...updated, ...(photos ?? {}) } : entry,
+        ),
       )
       after()
     },

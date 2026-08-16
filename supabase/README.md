@@ -7,13 +7,15 @@ mapsy의 데이터베이스 스키마와 스토리지 정책. **이 디렉토리
 migrations/
 ├── 20260801000001_init_wardrobe.sql       items · item_images · 인덱스 · RLS
 ├── 20260801000002_wardrobe_storage.sql    wardrobe 버킷 · 스토리지 정책
-├── 20260801000003_item_image_ordering.sql 사진 순서 변경 · 삭제 RPC
+├── 20260801000003_item_image_ordering.sql 사진 순서 변경 · 삭제 RPC (아래에서 대체됨)
 ├── 20260801000004_tighten_constraints.sql 순서 변경 가드 수정 · 배열/텍스트 제약
 ├── 20260801000005_private_helpers.sql     CHECK 헬퍼 비노출 · 함수 권한
 ├── 20260801000006_revoke_anon_execute.sql RPC에서 anon EXECUTE 회수
 ├── 20260801000007_price_ceiling.sql       가격 상한 · 트리거 함수 권한
 ├── 20260801000008_private_helper_grants.sql private 헬퍼 EXECUTE 정리
-└── 20260815000001_item_wears.sql          착용 기록 · 미래 날짜 트리거 · set_item_wears RPC
+├── 20260815000001_item_wears.sql          착용 기록 · 미래 날짜 트리거 · set_item_wears RPC
+├── 20260816000001_set_item_images.sql     사진 목록 재작성 RPC · 003의 두 함수 제거
+└── 20260816000002_set_item_images_null_guard.sql  NULL 목록이 전부 지우던 것 수정
 tests/
 ├── run.sh                                 컨테이너에 마이그레이션 적용 + 회귀 검사
 └── 03_wardrobe.sql                        단언 본체
@@ -171,7 +173,7 @@ Docker에 Postgres를 띄우고 `auth`/`storage` 스텁을 세운 뒤 **실제 �
 
 ## 설계상 알아둘 것
 
-### 사진 순서 변경은 반드시 RPC로
+### 사진 쓰기는 `set_item_images` 하나로만
 
 `sort_order`는 `between 0 and 4` CHECK로 아이템당 최대 5장을 강제하고,
 `(item_id, sort_order)` UNIQUE는 `deferrable initially deferred`다.
@@ -181,21 +183,43 @@ Docker에 Postgres를 띄우고 `auth`/`storage` 스텁을 세운 뒤 **실제 �
 트랜잭션이 커밋될 때 검사되기 때문이다. 그리고 `99` 같은 임시값을 경유하는 흔한 회피법은
 CHECK가 지연될 수 없어서 막힌다.
 
-그래서 두 함수를 둔다. 둘 다 `security invoker`라 RLS가 그대로 적용된다 —
-남의 사진은 건드릴 수 없다.
+편집 한 번에는 삭제·추가·순서 변경이 섞여 들어오고, 이것을 여러 요청으로 나누면 **순서까지
+강제된다** — CHECK가 즉시라 5장짜리 아이템에는 지우기 전에 넣을 자리가 없다. 그리고 그렇게
+나눈 순간, 요청 사이에서 끊기면 사용자가 지운 사진만 사라지고 새 사진은 올라가지 않는다.
+
+그래서 함수 하나가 **최종 목록을 통째로** 받는다. `security invoker`라 RLS가 그대로 적용된다.
 
 ```sql
-select reorder_item_images(<item_id>, array[<cover_id>, <second>, ...]::uuid[]);
-select delete_item_image(<image_id>);
+select * from set_item_images(<item_id>, '[
+  {"id": "<기존 사진 id>"},
+  {"id": "<새 사진 id>", "path": "...", "thumb_path": "...", "width": 1280, "height": 960}
+]'::jsonb);
 ```
 
-`reorder_item_images`는 **해당 아이템의 모든 이미지 id를 순서대로** 받는다. 개수가 다르거나,
-중복 id가 있거나, 다른 아이템의 id가 섞이면 거부하고 **세 경우가 서로 다른 메시지**를 낸다 —
-갱신된 행 수를 요청 개수와 비교하기 때문이다. 사진이 없는 아이템에 빈 배열을 넘기는 것은
-정상 no-op이다.
+배열은 **최종 순서**다. `path` 키가 있으면 새로 삽입하고, 없으면 기존 사진을 그 자리로
+옮긴다. **목록에 없는 사진은 삭제된다** — 델타가 아니라 결과를 보내는 `set_item_wears`와
+같은 모양이다. 위치가 곧 `sort_order`라 대표(0번) 승격도 저절로 따라오고, 반영된 목록을
+`sort_order` 순으로 돌려주므로 호출자는 자기 예상값이 아니라 서버가 쓴 행을 캐시에 넣는다.
 
-`delete_item_image`는 삭제 후 남은 사진을 0..n-1로 재번호해서, 대표(0번)를 지워도 다음
-사진이 승격되고 카드가 비지 않는다.
+거부하는 것: 배열이 아닌 인자, 사진이 0장이 되는 목록(그리드에 빈 카드가 남는다), 중복 id,
+`id` 없는 원소, 다른 아이템의 사진, 없는 아이템. 여섯 장은 함수가 세지 않고 `sort_order`
+CHECK가 막는다 — 개수 상한을 두 곳에 적지 않기 위해서다.
+
+> **NULL은 배열 검사에서 명시적으로 막는다.** 처음 판은 `jsonb_typeof(p_images) <> 'array'`
+> 하나였고, `jsonb_typeof(NULL)`이 NULL이라 그냥 열렸다. 뒤따르는 개수·중복 검사도 NULL
+> 앞에서 나란히 참을 잃어서(`if <NULL>`은 거짓), 결국 사진을 전부 지우고 성공으로 보고했다.
+> PostgREST는 `{"p_images": null}`을 SQL NULL로 넘기므로 REST 경로로도 닿았다.
+
+`user_id`는 인자로 받지 않고 아이템 행에서 읽는다. 복합 외래키가 `(item_id, user_id)` 쌍을
+요구하므로 둘은 따로 놀 수 없고, RLS가 남의 아이템을 숨기므로 못 찾은 것이 곧 권한 없음이다.
+
+스토리지는 트랜잭션 밖이라 함수가 건드리지 않는다. 업로드는 호출 전에, 삭제된 객체 정리는
+커밋된 뒤에 — 순서가 반대면 행은 있는데 파일이 없는 상태가 남는다.
+
+> **003·005의 `reorder_item_images`와 `delete_item_image`는 지웠다**(20260816000001).
+> 둘 다 이 함수의 특수한 경우다. 중복이라서가 아니라 갈라지기 때문이다 — 셋이 같은 규칙을
+> 각자 구현하고 있어서 상한을 여섯 장으로 올리는 날 세 곳을 같이 고쳐야 한다. 본문은 003과
+> 005에 그대로 남아 있으니 되돌리는 것은 복사 한 번이다.
 
 ### 팔레트에 색을 추가하는 것은 스키마 변경이다
 
@@ -224,8 +248,8 @@ select delete_item_image(<image_id>);
 
 스키마 경계가 노출을 막고, EXECUTE가 권한을 정한다.
 
-RPC 두 개(`reorder_item_images`, `delete_item_image`)는 노출돼야 하는 것이 맞지만
-`authenticated` 전용이어야 한다. 여기에 함정이 두 겹 있다.
+RPC(`set_item_images`, `set_item_wears`)는 노출돼야 하는 것이 맞지만 `authenticated`
+전용이어야 한다. 여기에 함정이 두 겹 있다.
 
 1. Postgres가 기본으로 **PUBLIC**에 EXECUTE를 준다.
 2. Supabase가 프로젝트마다
