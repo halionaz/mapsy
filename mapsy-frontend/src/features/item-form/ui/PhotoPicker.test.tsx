@@ -115,7 +115,11 @@ describe('PhotoPicker', () => {
     const onChange = vi.fn()
     const entries = [stored('a'), picked('blob:new')]
     const { rerender } = render(
-      <PhotoPicker photos={entries} onChange={onChange} storedUrls={new Map([['a', 'signed://a']])} />,
+      <PhotoPicker
+        photos={entries}
+        onChange={onChange}
+        storedUrls={new Map([['a', 'signed://a']])}
+      />,
     )
 
     // A stored photo is only dropped from the list here; it is deleted for real
@@ -186,7 +190,11 @@ describe('PhotoPicker', () => {
     vi.useFakeTimers()
     try {
       render(
-        <PhotoPicker photos={[stored('a'), stored('b')]} onChange={vi.fn()} storedUrls={new Map()} />,
+        <PhotoPicker
+          photos={[stored('a'), stored('b')]}
+          onChange={vi.fn()}
+          storedUrls={new Map()}
+        />,
       )
       const tile = screen.getByLabelText('사진 1')
 
@@ -204,7 +212,11 @@ describe('PhotoPicker', () => {
     vi.useFakeTimers()
     try {
       render(
-        <PhotoPicker photos={[stored('a'), stored('b')]} onChange={vi.fn()} storedUrls={new Map()} />,
+        <PhotoPicker
+          photos={[stored('a'), stored('b')]}
+          onChange={vi.fn()}
+          storedUrls={new Map()}
+        />,
       )
       const tile = screen.getByLabelText('사진 1')
 

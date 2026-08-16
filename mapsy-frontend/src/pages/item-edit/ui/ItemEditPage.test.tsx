@@ -82,7 +82,11 @@ function renderPage() {
   useWardrobeMock.mockReturnValue({ data: [item], isLoading: false })
   useItemPhotosMock.mockReturnValue({
     photos: item.images,
-    slots: item.images.map((entry) => ({ id: entry.id, state: 'ready', url: `signed://${entry.id}` })),
+    slots: item.images.map((entry) => ({
+      id: entry.id,
+      state: 'ready',
+      url: `signed://${entry.id}`,
+    })),
     markUnloadable: vi.fn(),
   })
 

@@ -81,7 +81,9 @@ function renderUpdate() {
   client.setQueryData(wardrobeKeys.list(), [item])
 
   const { result } = renderHook(() => useUpdateItem(), {
-    wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
   })
   return { client, result }
 }

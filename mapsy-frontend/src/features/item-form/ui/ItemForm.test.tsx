@@ -91,7 +91,11 @@ describe('ItemForm', () => {
     const onSubmit = vi.fn()
     render(
       <ItemForm
-        initial={{ title: '마산 플리스', categoryId: 'top.knit', photos: [stored('a'), stored('b')] }}
+        initial={{
+          title: '마산 플리스',
+          categoryId: 'top.knit',
+          photos: [stored('a'), stored('b')],
+        }}
         submitLabel="저장"
         onSubmit={onSubmit}
         onCancel={vi.fn()}
@@ -107,7 +111,11 @@ describe('ItemForm', () => {
     const onSubmit = vi.fn()
     render(
       <ItemForm
-        initial={{ title: '마산 플리스', categoryId: 'top.knit', photos: [stored('a'), stored('b')] }}
+        initial={{
+          title: '마산 플리스',
+          categoryId: 'top.knit',
+          photos: [stored('a'), stored('b')],
+        }}
         submitLabel="저장"
         onSubmit={onSubmit}
         onCancel={vi.fn()}

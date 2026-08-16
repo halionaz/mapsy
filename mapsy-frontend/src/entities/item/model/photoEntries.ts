@@ -60,10 +60,7 @@ export function photoEntryKey(entry: PhotoEntry): string {
  * list is a whole answer, so the sixth photo goes. Refusing that needs the
  * server to compare versions, which is a different piece of work.
  */
-export function samePhotoList(
-  a: readonly PhotoEntry[],
-  b: readonly PhotoEntry[],
-): boolean {
+export function samePhotoList(a: readonly PhotoEntry[], b: readonly PhotoEntry[]): boolean {
   return (
     a.length === b.length &&
     a.every((entry, index) => photoEntryKey(entry) === photoEntryKey(b[index]))

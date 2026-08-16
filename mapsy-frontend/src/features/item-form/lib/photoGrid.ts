@@ -91,11 +91,7 @@ export function readTransitionMs(element: HTMLElement): number {
 }
 
 /** The slot under a point — in page coordinates, like the grid — clamped to the slots that hold a photo. */
-export function slotAt(
-  point: { x: number; y: number },
-  grid: GridGeometry,
-  count: number,
-): number {
+export function slotAt(point: { x: number; y: number }, grid: GridGeometry, count: number): number {
   const column = clamp(Math.floor((point.x - grid.left) / grid.pitch), 0, grid.columns - 1)
   const row = Math.max(0, Math.floor((point.y - grid.top) / grid.pitch))
   return clamp(row * grid.columns + column, 0, count - 1)
