@@ -90,19 +90,31 @@ function isBelow(actual, minimum) {
   return false
 }
 
+// 읽지 못한 것은 전부 fail로 나간다. 못 읽었을 때 조용히 통과하면, 검사가 돈 것과
+// 안 돈 것이 같은 출력(아무것도 없음)을 낸다.
 function check(label, actualVersion, range, howToFix) {
-  const minimum = minimumOf(range)
-  const actual = parse(actualVersion)
+  const field = `engines.${label.toLowerCase()}`
 
-  if (range && !minimum) {
+  if (range === undefined) {
     fail(
-      `engines.${label.toLowerCase()}의 범위를 읽지 못했습니다: ${range}\n\n` +
+      `package.json에 ${field}가 없습니다.\n\n` +
+        `  이 가드는 그 값으로 검사합니다 — 필드가 사라지면 검사도 같이 사라집니다.`,
+    )
+  }
+
+  const minimum = minimumOf(range)
+  if (!minimum) {
+    fail(
+      `${field}의 범위를 읽지 못했습니다: ${range}\n\n` +
         `  이 가드는 ">=x.y.z" 형태만 읽습니다.\n` +
         `  범위 형식을 바꿨다면 scripts/only-pnpm.mjs의 minimumOf도 같이 고쳐야 합니다.`,
     )
   }
 
-  if (!minimum || !actual) return
+  const actual = parse(actualVersion)
+  if (!actual) {
+    fail(`${label} 버전을 읽지 못했습니다: ${actualVersion}`)
+  }
 
   if (isBelow(actual, minimum)) {
     fail(
