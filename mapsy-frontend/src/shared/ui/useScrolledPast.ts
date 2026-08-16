@@ -9,9 +9,11 @@ import type { RefObject } from 'react'
  * own height — passed as `below`, and measured rather than assumed because it
  * contains the top safe-area inset, which is 0 on desktop and ~47px on a notched
  * phone. The wardrobe wants "is the control bar stuck yet", where the line is
- * the viewport's own edge and the answer must not depend on how tall the bar
- * happens to be — it grows a row when filters are applied — so it omits `below`
- * and puts a zero-height sentinel where the bar's top edge rests.
+ * where that bar comes to rest — `top: var(--safe-t)` — so it passes the fixed
+ * strip that covers exactly that inset and puts a zero-height sentinel where the
+ * bar's top edge sits. Reading the line off the strip rather than off the bar
+ * itself is what keeps the answer independent of the bar's height, which grows a
+ * row when filters are applied.
  *
  * An IntersectionObserver rather than a scroll listener. The question — "is this
  * element still below that line" — is exactly what the observer answers, and it

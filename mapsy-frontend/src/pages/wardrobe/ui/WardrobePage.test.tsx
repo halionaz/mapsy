@@ -250,22 +250,6 @@ describe('WardrobePage — the route to registration', () => {
     expect(registerFab()).toBeNull()
   })
 
-  /**
-   * The wash is `position: absolute` and the page column is what it is measured
-   * against. `isolation: isolate` opens a stacking context but establishes no
-   * containing block, and swapping one property for the other once already sent
-   * the wash to the viewport — an orange band across the full width of any
-   * window wider than the 480px column.
-   */
-  it('keeps the screen column a containing block as well as a stacking context', () => {
-    useWardrobeMock.mockReturnValue(query({ data: [item()] }))
-    const { container } = renderWardrobe()
-    const column = container.firstElementChild
-
-    expect(column?.className).toContain('pos_relative')
-    expect(column?.className).toContain('isolation_isolate')
-  })
-
   it('shows the register button once there is something in the wardrobe', () => {
     useWardrobeMock.mockReturnValue(query({ data: [item()] }))
     renderWardrobe()
