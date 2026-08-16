@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { EMPTY_FILTERS, type WardrobeFilters } from '../model/filters'
-import {
-  activeFilterCount,
-  appliedFilters,
-  clearFilters,
-  removeApplied,
-} from './filterSummary'
+import { activeFilterCount, appliedFilters, clearFilters, removeApplied } from './filterSummary'
 
 function filters(overrides: Partial<WardrobeFilters> = {}): WardrobeFilters {
   return { ...EMPTY_FILTERS, ...overrides }

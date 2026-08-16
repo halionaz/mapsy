@@ -46,10 +46,10 @@ export function useScrolledPast(
   useEffect(() => {
     const node = target.current
     if (!node || distance === null) return
-    const observer = new IntersectionObserver(
-      ([entry]) => setPast(!entry.isIntersecting),
-      { rootMargin: `-${distance}px 0px 0px 0px`, threshold: 0 },
-    )
+    const observer = new IntersectionObserver(([entry]) => setPast(!entry.isIntersecting), {
+      rootMargin: `-${distance}px 0px 0px 0px`,
+      threshold: 0,
+    })
     observer.observe(node)
     return () => observer.disconnect()
   }, [target, distance])

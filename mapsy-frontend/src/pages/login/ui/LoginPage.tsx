@@ -50,9 +50,7 @@ export function LoginPage() {
       <div className={vstack({ gap: '10', justify: 'center', flex: '1', width: 'full' })}>
         <div className={vstack({ gap: '3' })}>
           <h1 className={wordmark}>mapsy</h1>
-          <p className={css({ textStyle: 'body', color: 'fg.muted' })}>
-            내가 가진 옷을 한눈에
-          </p>
+          <p className={css({ textStyle: 'body', color: 'fg.muted' })}>내가 가진 옷을 한눈에</p>
         </div>
 
         <div className={vstack({ gap: '4', width: 'full', maxWidth: 'field' })}>
@@ -72,8 +70,8 @@ export function LoginPage() {
             <p className={note}>
               Supabase 환경변수가 아직 없어요.
               <br />
-              <code className={code}>.env.example</code>을{' '}
-              <code className={code}>.env.local</code>로 복사해 채워주세요.
+              <code className={code}>.env.example</code>을 <code className={code}>.env.local</code>
+              로 복사해 채워주세요.
             </p>
           )}
 
@@ -168,8 +166,7 @@ const glow = css({
   width: '150%',
   aspectRatio: '1',
   pointerEvents: 'none',
-  background:
-    'radial-gradient(circle at 50% 50%, {colors.brand.500} 0%, transparent 62%)',
+  background: 'radial-gradient(circle at 50% 50%, {colors.brand.500} 0%, transparent 62%)',
   opacity: { base: 0.1, _dark: 0.16 },
 })
 

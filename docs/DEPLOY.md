@@ -105,8 +105,8 @@ CI가 아닌 스크립트에서는 `CLOUDFLARE_API_TOKEN`(Workers Scripts: Edit)
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` |
 | `PNPM_VERSION` | `10.18.2` (이미지 기본값은 10.11.x) |
 
-Node는 이미지 기본값이 24라 그대로 두면 된다. 22로 고정하려면 **22.22.0 이상** —
-`react-router@8.3.0`이 요구하고 pnpm은 경고하지 않는다.
+Node는 이미지 기본값이 24라 그대로 두면 된다. 고정할 거면 루트 `package.json`의
+`engines.node`를 따른다 — 숫자를 여기에 옮겨 적으면 둘이 어긋난다.
 
 > ⚠️ **`wrangler.jsonc`가 대상 브랜치에 올라가 있어야 한다.** 설정을 못 찾으면 wrangler가
 > 자동 설정 모드로 들어가 `@cloudflare/vite-plugin`을 설치하고 자기 설정을 만든 뒤 빌드를 한 번

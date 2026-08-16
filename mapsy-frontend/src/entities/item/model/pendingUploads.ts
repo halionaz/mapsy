@@ -43,7 +43,11 @@ function subscribe(listener: () => void) {
 }
 
 export function usePendingUploads(): PendingUpload[] {
-  return useSyncExternalStore(subscribe, () => snapshot, () => snapshot)
+  return useSyncExternalStore(
+    subscribe,
+    () => snapshot,
+    () => snapshot,
+  )
 }
 
 export function getPending(tempId: string): PendingUpload | undefined {

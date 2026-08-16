@@ -16,9 +16,15 @@
 set -euo pipefail
 
 CONTAINER="${MAPSY_PG_CONTAINER:-mapsy-pg-test}"
-# Matches the major version Supabase provisions for new projects; see
-# supabase/.temp/postgres-version after `supabase link`.
-IMAGE="${MAPSY_PG_IMAGE:-postgres:17-alpine}"
+# Matches the version Supabase runs; see supabase/.temp/postgres-version after
+# `supabase link`.
+#
+# Pinned rather than the floating `17-alpine` because the drift gate below
+# compares pg_get_constraintdef() output as text: an image upgrade can read as a
+# schema change, and the message it prints then sends you to the constraint map,
+# which is the one place the cause is not. 17.10 turned out byte-identical to
+# 17.6 — the next one may not.
+IMAGE="${MAPSY_PG_IMAGE:-postgres:17.6-alpine}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS="$HERE/../migrations"
 GENERATED="$HERE/../../mapsy-frontend/src/shared/config/dbConstraints.generated.ts"

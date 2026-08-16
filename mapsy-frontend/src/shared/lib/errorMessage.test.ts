@@ -48,9 +48,7 @@ describe('errorMessage — 제약 위반', () => {
   })
 
   it('falls back to the SQLSTATE when the constraint is unknown', () => {
-    expect(errorMessage({ message: 'value out of range', code: '22003' })).toBe(
-      '숫자가 너무 커요.',
-    )
+    expect(errorMessage({ message: 'value out of range', code: '22003' })).toBe('숫자가 너무 커요.')
   })
 
   it('translates a NOT NULL violation, which names no constraint', () => {
@@ -60,8 +58,7 @@ describe('errorMessage — 제약 위반', () => {
     // above can reach it. SQLSTATE is the only handle.
     expect(
       errorMessage({
-        message:
-          'null value in column "title" of relation "items" violates not-null constraint',
+        message: 'null value in column "title" of relation "items" violates not-null constraint',
         code: '23502',
       }),
     ).toBe('필수 항목이 비어 있어요.')

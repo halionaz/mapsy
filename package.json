@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.18.2",
   "engines": {
-    "node": ">=22",
+    "node": ">=22.22.2",
     "pnpm": ">=10"
   },
   "scripts": {
@@ -16,11 +16,17 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "test": "pnpm -r test",
+    "check:workspace": "node scripts/check-package-scripts.mjs",
     "test:db": "bash supabase/tests/run.sh",
     "cf:deploy": "pnpm --filter mapsy-frontend cf:deploy",
     "cf:upload": "pnpm --filter mapsy-frontend cf:upload",
     "cf:dev": "pnpm --filter mapsy-frontend cf:dev",
     "types:gen": "supabase gen types typescript --linked > mapsy-frontend/src/shared/api/database.types.ts.tmp && mv mapsy-frontend/src/shared/api/database.types.ts.tmp mapsy-frontend/src/shared/api/database.types.ts"
+  },
+  "devDependencies": {
+    "oxfmt": "0.63.0"
   }
 }

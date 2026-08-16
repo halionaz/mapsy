@@ -48,12 +48,54 @@ pnpm dev
 | `pnpm build` | 타입 체크 후 프로덕션 빌드 |
 | `pnpm typecheck` | 전체 패키지 `tsc -b` |
 | `pnpm lint` | oxlint |
+| `pnpm format` | oxfmt — 레포 전체 코드 포맷 (아래 참고) |
 | `pnpm test` | vitest — 순수 로직 단위 테스트 |
 | `pnpm test:db` | Docker에 Postgres를 띄워 마이그레이션·RLS 검사 |
+| `pnpm check:workspace` | 패키지가 `pnpm -r`이 부르는 스크립트를 다 선언했는지 (아래 참고) |
 | `pnpm codegen` | Panda CSS 재생성 |
 | `pnpm setup:worktree` | 워크트리에 gitignore된 로컬 파일 채우기 — 아래 참고 |
 | `pnpm cf:dev` | Cloudflare Workers 런타임으로 빌드 결과 확인 |
 | `pnpm cf:deploy` | Cloudflare Workers 배포 |
+
+## 포맷
+
+`oxfmt`이 강제한다 — 세미콜론 없음, 싱글쿼트, 100자([`.oxfmtrc.json`](.oxfmtrc.json)).
+`pnpm format`이 고치고 CI는 `format:check`로 막는다.
+
+**패키지가 아니라 레포 루트에 건다.** 포맷 규칙은 패키지마다 다를 이유가 없고, `pnpm -r`은
+루트 프로젝트를 돌지 않아 `scripts/only-pnpm.mjs`가 규칙 바깥에 있었다. lint·typecheck·
+test·build는 반대다 — 설정이 패키지마다 달라야 해서 패키지에 남고, `pnpm -r`의 건너뛰기는
+아래 `check:workspace`가 막는다.
+
+버전을 `^` 없이 박은 건 `pnpm update`가 패치를 집어올 때 리포맷이 딸려오는 걸 막기 위해서다.
+락파일이 커밋돼 있고 CI가 `--frozen-lockfile`이라, 의존성을 안 건드린 PR은 어차피 같은 oxfmt를
+받는다.
+
+**포맷하지 않는 것이 있다.** `dbConstraints.generated.ts`와 `database.types.ts`는 도구가 다시
+쓰는 파일이라, 포맷을 걸면 `pnpm test:db` 한 번에 되돌려지고 둘이 서로를 덮는 싸움이 된다.
+마크다운·JSON·JSONC·HTML을 뺀 건 코드 스타일 얘기가 아니어서인데, 실제로 확인한 손해도
+있다 — 표를 CJK 폭 계산 없이 정렬해 소스가 어긋나고, `package.json`의 키 순서를 바꾸고,
+`wrangler.jsonc`에 후행 쉼표를 넣는다. 마지막 것은 배포 설정이다.
+
+`.gitignore`에 있는 것(`styled-system/`, `dist/`)은 따로 안 적었다 — oxfmt가 이미 따르고,
+"무엇이 생성물인가"의 출처는 `.gitignore` 하나여야 한다.
+
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)이 PR과 main 푸시에서 위 명령을 그대로
+돌린다. 잡은 둘이다 — `db`는 `pnpm test:db`(Docker만 필요해서 install을 건너뛴다), `web`은
+설치 후 check:workspace·format·lint·typecheck·test·build. `paths` 필터를 두지 않은 이유는
+워크플로 주석에 있다.
+
+`pnpm lint`·`typecheck`·`test`·`build`는 `pnpm -r`이라 **스크립트를 선언하지 않은 패키지를
+exit 0으로 건너뛴다.** 워크스페이스 글롭이 `mapsy-*`라 패키지는 생기기만 하면 붙지만 검사는
+같이 붙지 않는다 — 타입 오류·금지된 import·미포맷 코드를 넣은 프로브 패키지가 그 넷을 전부
+통과하는 걸 확인했다. [`scripts/check-package-scripts.mjs`](scripts/check-package-scripts.mjs)가
+그 상태를 막고, 워크플로에서 넷보다 먼저 돈다.
+
+> **워크플로 파일만으로는 머지를 막지 못한다.** GitHub 저장소 설정에서 `db`·`web`을 required
+> status check으로 등록해야 빨간 CI가 머지를 막는다. 안 하면 "돌리는 걸 기억하기"가 "빨간 걸
+> 보면 안 머지하기를 기억하기"로 이름만 바뀐다.
 
 ## 워크트리
 
@@ -107,6 +149,19 @@ git worktree add ../mapsy-feature -b feat/something
 
 ## 알려진 것
 
-- **react-router 8.3.0이 Node `>=22.22.0`을 요구한다.** pnpm은 기본 설정에서 이를 경고하지
-  않는다. 브라우저 번들이라 런타임에는 문제가 없을 가능성이 높지만, 툴체인을 22.22 이상으로
-  올리면 확실하다.
+- **`scripts/`의 `.mjs` 둘은 포맷은 걸리지만 린트는 안 걸린다.** oxlint 설정과 의존성이
+  `mapsy-frontend`에 있고, oxlint가 `..`가 든 경로를 거부해서(`PATH must not contain ".."`)
+  패키지 안에서 바깥을 가리킬 수도 없다. 루트에 oxlint를 하나 더 두면 버전이 두 곳이 되므로
+  같이 두지 않았다 — 포맷과 달리 린트 규칙은 패키지마다 달라야 해서 설정을 루트로 올리는
+  것도 답이 아니다. 지금은 검사 없이 두고, `mapsy-server`가 생겨 규칙이 둘로 갈릴 때 다시 본다.
+
+- **Node 하한은 22.22.2다.** 가장 높은 걸 요구하는 건 `jsdom@30`
+  (`^22.22.2 || ^24.15.0 || >=26.0.0`)이고, `react-router@8.3`이 `>=22.22.0`으로 그다음이다.
+  `engines.node`에 이 숫자가 있고 [`scripts/only-pnpm.mjs`](scripts/only-pnpm.mjs)가 설치할 때
+  막는다. pnpm은 `WARN Unsupported engine`으로 경고만 하고 설치는 그대로 진행한다 —
+  *의존성*의 engines에 대해서는 그 경고조차 없다.
+
+  **그 숫자를 jsdom의 범위 그대로 옮겨 적지 말 것.** 가드는 `>=x.y.z` 형태만 읽고, 다른
+  형식이면 이제 설치가 멈춘다(예전엔 조용히 통과했다). 그래서 jsdom이 빼는 구간(23.x,
+  24.0–24.14, 25.x 전체)은 `engines.node`가 표현하지 못한다 — **Node 24를 쓸 거면 24.15
+  이상.** 걸리는 건 테스트뿐이라 빌드와 배포에는 영향이 없다.

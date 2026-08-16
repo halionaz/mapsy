@@ -90,10 +90,7 @@ describe('toItemInsert', () => {
 
   it('keeps a zero price instead of nulling it', () => {
     // Free garments are real — a gift or a hand-me-down.
-    const payload = toItemInsert(
-      { title: '선물', categoryId: 'top.knit', price: 0 },
-      'u9',
-    )
+    const payload = toItemInsert({ title: '선물', categoryId: 'top.knit', price: 0 }, 'u9')
     expect(payload.price).toBe(0)
   })
 })

@@ -118,11 +118,7 @@ async function encode(
   throw new Error('이미지를 인코딩하지 못했어요.')
 }
 
-function toBlob(
-  canvas: HTMLCanvasElement,
-  type: string,
-  quality: number,
-): Promise<Blob | null> {
+function toBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality))
 }
 

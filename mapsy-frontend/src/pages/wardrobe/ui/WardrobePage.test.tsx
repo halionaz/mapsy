@@ -269,7 +269,9 @@ describe('WardrobePage — categories', () => {
   const chip = (label: string) => screen.queryByRole('button', { name: label })
 
   it('offers no chip for a category this wardrobe has nothing in', () => {
-    useWardrobeMock.mockReturnValue(query({ data: [item(), item({ id: 'i2', categoryId: 'shoes.boots' })] }))
+    useWardrobeMock.mockReturnValue(
+      query({ data: [item(), item({ id: 'i2', categoryId: 'shoes.boots' })] }),
+    )
     renderWardrobe()
 
     expect(chip('상의')).not.toBeNull()
@@ -327,9 +329,10 @@ describe('WardrobePage — categories', () => {
     )
     renderWardrobe()
 
-    expect(
-      screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent),
-    ).toEqual(['상의1', '신발1'])
+    expect(screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)).toEqual([
+      '상의1',
+      '신발1',
+    ])
   })
 
   /**
@@ -721,9 +724,7 @@ describe('WardrobePage — 착용 기록', () => {
 
       expect(toast).toHaveBeenCalledTimes(1)
       // And the lock comes off, or the mode is stuck for as long as it is open.
-      expect(
-        screen.getByRole('button', { name: '1벌 기록' }).hasAttribute('disabled'),
-      ).toBe(false)
+      expect(screen.getByRole('button', { name: '1벌 기록' }).hasAttribute('disabled')).toBe(false)
       toast.mockRestore()
     })
 

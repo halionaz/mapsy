@@ -625,7 +625,7 @@ export function PhotoViewer({
                         })}
                       />
                     )}
-  
+
                     {/* A page with nothing on it yet says which nothing it is.
                         Words rather than a skeleton: a pale pulsing block is what
                         a photo looks like against a page, and this is a room with

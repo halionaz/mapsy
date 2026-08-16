@@ -79,16 +79,12 @@ export function ItemDetailPage() {
    * same numbers, and two ways of adding them up is how they stop being.
    */
   const wears = useMemo(() => wearData ?? [], [wearData])
-  const item = useMemo(
-    () => (found ? attachWears([found], wears)[0] : undefined),
-    [found, wears],
-  )
+  const item = useMemo(() => (found ? attachWears([found], wears)[0] : undefined), [found, wears])
   // `some`, not `itemIdsWornOn(...).has(...)`: that builds a Set of every
   // garment worn that day to answer a question about one of them.
   const wornToday = useMemo(
     () =>
-      found != null &&
-      wears.some((entry) => entry.itemId === found.id && entry.wornOn === today),
+      found != null && wears.some((entry) => entry.itemId === found.id && entry.wornOn === today),
     [found, wears, today],
   )
   // Sorted, signed and paired in one place — the URLs are matched to the photos
@@ -587,10 +583,7 @@ const valueBar = cx(
  * gives back everything that promises it can be pressed — no cursor, no hover,
  * and `aria-hidden` on the block above keeps it away from assistive technology.
  */
-const inertButton = cx(
-  skeletonSurface,
-  css({ minHeight: 'tap', rounded: 'full' }),
-)
+const inertButton = cx(skeletonSurface, css({ minHeight: 'tap', rounded: 'full' }))
 
 /**
  * The field list, in one place.

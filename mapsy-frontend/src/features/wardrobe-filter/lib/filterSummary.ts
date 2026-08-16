@@ -93,10 +93,7 @@ export function activeFilterCount(filters: WardrobeFilters): number {
   return appliedFilters(filters).length
 }
 
-export function removeApplied(
-  filters: WardrobeFilters,
-  applied: AppliedFilter,
-): WardrobeFilters {
+export function removeApplied(filters: WardrobeFilters, applied: AppliedFilter): WardrobeFilters {
   if (applied.axis === 'favoriteOnly') return { ...filters, favoriteOnly: false }
 
   // The list axes hold different element types (`ColorId[]`, `SeasonId[]`,

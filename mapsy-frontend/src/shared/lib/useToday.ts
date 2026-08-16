@@ -58,10 +58,13 @@ export function useToday(): string {
       // A second past the boundary. A timer that lands a hair early would read
       // the old day and re-arm for a few milliseconds — a spin rather than a
       // wake-up.
-      timer = setTimeout(() => {
-        sync()
-        arm()
-      }, midnight.getTime() - now.getTime() + 1_000)
+      timer = setTimeout(
+        () => {
+          sync()
+          arm()
+        },
+        midnight.getTime() - now.getTime() + 1_000,
+      )
     }
 
     const resync = () => {

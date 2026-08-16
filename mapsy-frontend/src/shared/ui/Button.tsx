@@ -73,8 +73,7 @@ export function Button({
 }
 
 interface IconButtonProps
-  extends Omit<React.ComponentProps<'button'>, 'className'>,
-    IconButtonVariants {
+  extends Omit<React.ComponentProps<'button'>, 'className'>, IconButtonVariants {
   /** Required: the button's only content is a glyph, so this is its name. */
   label: string
   className?: string

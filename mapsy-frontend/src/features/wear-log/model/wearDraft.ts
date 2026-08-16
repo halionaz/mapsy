@@ -125,7 +125,11 @@ function subscribe(listener: () => void) {
  * overwrites it.
  */
 export function useWearDraft(owner: string | null, today: string): WearDraft | null {
-  const draft = useSyncExternalStore(subscribe, () => snapshot, () => snapshot)
+  const draft = useSyncExternalStore(
+    subscribe,
+    () => snapshot,
+    () => snapshot,
+  )
   return draft && isUsable(draft, owner, today) ? draft : null
 }
 
@@ -137,11 +141,7 @@ export function useWearDraft(owner: string | null, today: string): WearDraft | n
  * describe the *previous* day — merging them would submit one day's clothes
  * against another.
  */
-export function openWearDraft(
-  userId: string,
-  wornOn: string,
-  itemIds: Iterable<string>,
-): void {
+export function openWearDraft(userId: string, wornOn: string, itemIds: Iterable<string>): void {
   commit({ userId, wornOn, itemIds: [...itemIds] })
 }
 

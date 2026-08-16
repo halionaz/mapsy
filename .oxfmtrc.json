@@ -1,0 +1,13 @@
+{
+  "semi": false,
+  "singleQuote": true,
+  "printWidth": 100,
+  "ignorePatterns": [
+    "mapsy-frontend/src/shared/api/database.types.ts",
+    "mapsy-frontend/src/shared/config/dbConstraints.generated.ts",
+    "**/*.md",
+    "**/*.json",
+    "**/*.jsonc",
+    "**/*.html"
+  ]
+}

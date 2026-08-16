@@ -28,7 +28,8 @@ tests/
 - **하루치를 쓸 때는 `set_item_wears(worn_on, item_ids)`를 쓴다.** 클라이언트에서 DELETE 후
   INSERT를 하면 각각 별개 트랜잭션이라, 삭제만 성공하면 그날 기록이 통째로 날아간다.
 - 새 테이블·제약을 추가했으면 `pnpm test:db`를 돌려 `dbConstraints.generated.ts`를 갱신하고,
-  `shared/lib/errorMessage.ts`의 메시지 맵을 맞춰야 한다. 둘은 단위 테스트가 양방향으로 검사한다.
+  `shared/lib/errorMessage.ts`의 메시지 맵을 맞춰야 한다. 둘은 단위 테스트가 양방향으로 검사하고,
+  CI가 PR마다 같은 검사를 돌린다.
 
 ---
 
