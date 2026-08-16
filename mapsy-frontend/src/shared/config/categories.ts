@@ -1,15 +1,12 @@
 /**
- * Clothing categories — PRD §5.1.
+ * 옷 카테고리 — PRD §5.1.
  *
- * Two fixed levels. The original brief mixed levels ("상의/하의" alongside
- * "청바지/롱슬리브"), so the hierarchy is pinned here: a garment always belongs
- * to exactly one subcategory, and its group is derived from the id prefix.
+ * 두 단계로 고정한다. 옷은 늘 정확히 하나의 소분류에 속하고, 대분류는 id 접두사에서
+ * 파생된다.
  *
- * Ids are stable storage keys and must not be renamed once data exists —
- * `items.category_id` holds the subcategory id verbatim. The table is declared
- * `as const` so `SubcategoryId` is a literal union rather than plain `string`,
- * which means a typo like `top.tshirtt` fails to compile instead of quietly
- * becoming an unfilterable row.
+ * id는 저장 키라 데이터가 생긴 뒤에는 바꿀 수 없다 — `items.category_id`가 소분류 id를
+ * 그대로 담는다. 표를 `as const`로 선언해 `SubcategoryId`가 `string`이 아닌 리터럴
+ * 유니온이 되므로, `top.tshirtt` 같은 오타는 필터에 걸리지 않는 행이 아니라 컴파일 에러가 된다.
  */
 
 export const CATEGORY_GROUP_IDS = [
@@ -26,7 +23,7 @@ export const CATEGORY_GROUP_IDS = [
 export type CategoryGroupId = (typeof CATEGORY_GROUP_IDS)[number]
 
 interface SubcategoryDef {
-  /** `${groupId}.${slug}` — the prefix is what `groupIdOf` reads. */
+  /** `${groupId}.${slug}` — 접두사를 `groupIdOf`가 읽는다. */
   readonly id: `${CategoryGroupId}.${string}`
   readonly label: string
 }
@@ -137,34 +134,15 @@ export type Subcategory = CategoryGroup['subcategories'][number]
 export type SubcategoryId = Subcategory['id']
 
 /**
- * The subcategory ids this table can actually resolve to a group.
+ * 이 표가 실제로 대분류까지 풀어낼 수 있는 소분류 id.
  *
- * Identical to `SubcategoryId` today, and the point is that the compiler is what
- * says so. `CATEGORY_GROUP_IDS` and `CATEGORY_GROUPS` are two hand-written lists
- * and nothing pairs them, while `SubcategoryDef.id` only demands
- * `${CategoryGroupId}.${string}` — so a subcategory can keep the prefix of a
- * group that has been deleted from the table and still be a perfectly good
- * `SubcategoryId`. Measured before this existed: with `onepiece` removed from
- * the table and `onepiece.dress` left sitting in 상의, `tsc -b` passed and the
- * garment stopped appearing on 내 옷장 — filed by `groupSections` under
- * `undefined`, a bucket nothing ever draws from.
+ * 오늘은 `SubcategoryId`와 같고, 그렇다고 말하는 주체가 컴파일러라는 것이 요점이다.
+ * `SubcategoryDef.id`는 `${CategoryGroupId}.${string}`만 요구하므로, 표에서 지운 대분류의
+ * 접두사를 단 소분류도 멀쩡한 `SubcategoryId`가 된다 — 그러면 `groupSections`가 그 옷을
+ * 아무도 그리지 않는 `undefined` 칸에 넣는다.
  *
- * Narrowing `groupIdOf`'s total overload to this type moves that failure to
- * compile time and to the places that depend on it: `Item.categoryId` is a
- * `SubcategoryId`, so the day the two stop being the same type, a caller passing
- * one falls through to the `string` overload and is handed an `undefined`.
- *
- * It only bites where the result lands somewhere with a type of its own —
- * `Array.includes`, `Map.get`, `Map.set`. A fresh container infers its element
- * type *from* the value and swallows the `undefined` in silence, which is why
- * the wardrobe's rail writes `new Set<CategoryGroupId>(…)` rather than
- * `new Set(…)`; measured on the broken table, that one type argument is the
- * difference between three call sites failing and two.
- *
- * Counted: four callers. `applyFilters`, `groupSections` and the rail stop
- * compiling; `ItemForm` does not, and should not — it reaches the call through
- * `categoryId ? … : undefined`, so it has declared the `undefined` itself and
- * the presets it feeds already take one.
+ * 단 결과가 자기 타입을 가진 자리에 놓일 때만 문다. 새 컨테이너는 원소 타입을 값에서
+ * 추론해 `undefined`를 삼키므로, 옷장 레일이 `new Set<CategoryGroupId>(…)`로 쓴다.
  */
 type ResolvableSubcategoryId = Extract<
   SubcategoryId,
@@ -181,28 +159,22 @@ const GROUP_BY_ID = new Map<string, CategoryGroup>(
   CATEGORY_GROUPS.map((group) => [group.id, group]),
 )
 
-/** True for ids that exist in the table above — use before trusting DB strings. */
+/** 위 표에 있는 id인지. DB 문자열을 믿기 전에 쓴다. */
 export function isSubcategoryId(value: string): value is SubcategoryId {
   return SUBCATEGORY_BY_ID.has(value)
 }
 
 /**
- * Derives the group from a subcategory id.
+ * 소분류 id에서 대분류를 얻는다.
  *
- * Two signatures, and which one applies says where the id came from. A plain
- * `string` is a database value, where an id written by an older build may no
- * longer be in the table — that arm returns undefined instead of throwing. A
- * `SubcategoryId` came out of the table above, so its group exists and there is
- * nothing for the caller to handle.
+ * 시그니처가 둘인 것은 id가 어디서 왔는지를 말하기 위해서다. 평범한 `string`은 DB 값이라
+ * 옛 빌드가 쓴 id가 표에 없을 수 있고, 그쪽은 던지지 않고 undefined를 준다.
+ * `SubcategoryId`는 위 표에서 나온 것이라 대분류가 반드시 있다.
  *
- * The narrow arm is not an optimism, and it is held down at both ends.
- * `mapRow.toCategoryId` folds unrecognised ids to `etc.etc` at the boundary, so
- * every `Item` reaching the UI carries one of the ids listed here; and
- * `ResolvableSubcategoryId` is what makes "listed here" mean "has a group in
- * this table" rather than merely "looks like one". Together they are what lets
- * the wardrobe be split into sections without a branch for garments that belong
- * to no section — a branch that could only ever be written as "drop it", which
- * on the home screen reads as the item having been deleted.
+ * 좁은 쪽은 낙관이 아니라 양끝에서 붙들려 있다 — `mapRow.toCategoryId`가 경계에서
+ * 모르는 id를 `etc.etc`로 접고, `ResolvableSubcategoryId`가 "표에 있음"을 "이 표에
+ * 대분류가 있음"으로 만든다. 그 둘이 어느 구획에도 속하지 않는 옷을 위한 분기 없이
+ * 옷장을 나눌 수 있게 한다.
  */
 export function groupIdOf(categoryId: ResolvableSubcategoryId): CategoryGroupId
 export function groupIdOf(categoryId: string): CategoryGroupId | undefined
@@ -210,7 +182,7 @@ export function groupIdOf(categoryId: string): CategoryGroupId | undefined {
   return GROUP_BY_ID.get(categoryId.split('.')[0])?.id
 }
 
-/** "상의 · 반팔티" — used in the item detail view and search results. */
+/** "상의 · 반팔티" */
 export function categoryLabel(categoryId: string): string {
   const group = GROUP_BY_ID.get(categoryId.split('.')[0])
   const sub = SUBCATEGORY_BY_ID.get(categoryId)

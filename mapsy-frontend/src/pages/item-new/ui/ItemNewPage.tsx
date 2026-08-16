@@ -5,34 +5,30 @@ import { useCreateItem } from '@/entities/item'
 import { useCurrentUserId } from '@/features/auth'
 import { ItemForm, type ItemFormValues } from '@/features/item-form'
 import { newId } from '@/shared/lib/id'
-import { buttonStyle } from '@/shared/ui/buttonStyle'
+import { buttonStyle } from '@/shared/ui/Button.css'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { ScreenHeader } from '@/shared/ui/ScreenHeader'
 
 /**
  * 옷 등록 (PRD §6.2).
  *
- * Submitting navigates straight back to the wardrobe: the pending-upload store
- * puts a card on the grid immediately and the upload continues behind it. Only
- * the failure case needs the user's attention again, and the card carries that
- * — including the reason, since a constraint violation fails the same way on
- * every retry.
+ * 제출하면 곧장 옷장으로 돌아간다. 등록 대기 스토어가 격자에 카드를 즉시 올리고 업로드는
+ * 그 뒤에서 이어진다. 사용자의 주의를 다시 필요로 하는 것은 실패뿐이고, 그것은 카드가
+ * 이유까지 함께 싣는다.
  */
 export function ItemNewPage() {
   const navigate = useNavigate()
   const userId = useCurrentUserId()
   const create = useCreateItem()
 
-  // `photosChanged` is the edit screen's question — there is nothing here for a
-  // photo to have changed against.
+  // `photosChanged`는 편집 화면의 질문이다 — 여기엔 사진이 달라졌을 대상이 없다.
   function handleSubmit({ photos, photosChanged: _changed, ...draft }: ItemFormValues) {
     if (!userId) return
     create.mutate({
       pending: {
         tempId: newId(),
         draft,
-        // Every entry is a picked one here — there is no item yet for a stored
-        // photo to have belonged to.
+        // 여기서는 전부 고른 사진이다 — 저장본이 속했을 옷이 아직 없다.
         photos: photos.flatMap((entry) => (entry.kind === 'picked' ? [entry.photo] : [])),
         userId,
         state: 'uploading',
@@ -45,10 +41,8 @@ export function ItemNewPage() {
     <ScreenHeader
       title="옷 등록"
       subtitle="사진과 이름, 카테고리만 있으면 끝나요."
-      // Only when the form is what renders: it is the form's action bar that
-      // pins itself to the bottom edge and takes over the safe-area inset. The
-      // preview-mode notice below is ordinary scrolling content and still wants
-      // the body's own padding.
+      // 폼이 그려질 때만. 아래 가장자리에 고정되며 안전영역 인셋을 떠맡는 것은 폼의
+      // 액션 바다. 아래 미리보기 모드 안내는 평범한 스크롤 콘텐츠라 본문 패딩이 필요하다.
       flushBottom={userId != null}
     >
       {userId ? (

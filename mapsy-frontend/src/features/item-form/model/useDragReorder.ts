@@ -11,65 +11,47 @@ import {
 } from '../lib/photoGrid'
 
 /**
- * Press-and-hold to pick a tile up, drag it, let go.
+ * 길게 눌러 타일을 집고, 끌고, 놓는다.
  *
- * **Why a hold rather than an immediate drag.** The picker sits inside a form
- * that scrolls, and a touch that starts on a tile has to be able to mean either
- * thing. The browser decides which at the first movement, so the only way to
- * have both is to let the finger declare itself: stay still and it is a
- * rearrange, move and it is a scroll. That is also what the phone does on its
- * own home screen, so it needs no explaining.
+ * 즉시 끌기가 아닌 것은 피커가 스크롤되는 폼 안에 있어서다. 타일에서 시작한 터치가 둘 중
+ * 어느 쪽도 될 수 있어야 하고, 손가락이 스스로 밝히게 두는 것이 유일한 길이다 — 가만히
+ * 있으면 재정렬, 움직이면 스크롤. 마우스는 모호하지 않으므로 타이머 없이 몇 픽셀에서 시작한다.
  *
- * A mouse has no such ambiguity — the page scrolls by wheel — so there the drag
- * starts on the first few pixels of movement instead of on a timer.
- *
- * **Why the page stops scrolling only after the lift.** `touch-action` is read
- * when the gesture begins, so it cannot be switched on part-way; the way to keep
- * scrolling available until the tile lifts and not after is `preventDefault` on
- * touchmove from that moment. React's own touch listeners are passive at the
- * root and cannot do it, hence the native listener below.
- *
- * Keyboards get the same operation without the pointer: space picks up, the
- * arrows move, space drops, escape puts it back. Dragging is the reason the
- * old 앞으로/뒤로 buttons are gone, and it must not be the reason the picker
- * became unusable without a touchscreen.
+ * 페이지 스크롤이 들린 *뒤에야* 멈추는 것은 `touch-action`이 제스처 시작 때 읽혀 도중에
+ * 켤 수 없기 때문이다. 그 순간부터 touchmove를 `preventDefault`하는 수밖에 없고, React의
+ * 터치 리스너는 루트에서 passive라 못 하므로 아래에서 네이티브 리스너를 단다.
  */
 
-/** Long enough not to fire while a finger is on its way past, short enough to feel like a lift. */
+/** 지나가는 손가락에는 안 걸릴 만큼 길고, 들어올림으로 느껴질 만큼 짧게. */
 const HOLD_MS = 220
-/** Movement within the hold that means the finger came to scroll. */
+/** 누르는 동안 이만큼 움직였으면 스크롤하러 온 손가락이다. */
 const HOLD_SLOP_PX = 8
-/** Movement that starts a mouse drag. */
+/** 마우스 끌기를 시작시키는 움직임. */
 const MOUSE_SLOP_PX = 4
 
 interface Held {
-  /** Where the photo sits in the committed list. */
+  /** 확정된 목록에서 사진이 있는 자리. */
   from: number
-  /** Where it would land if it were let go now. */
+  /** 지금 놓으면 도착할 자리. */
   to: number
-  /** Offset from its own slot while a pointer drags it; `null` while it animates to a slot. */
+  /** 포인터가 끄는 동안 자기 슬롯에서의 오프셋. 슬롯으로 애니메이션하는 동안은 `null`. */
   follow: { x: number; y: number } | null
-  /** Picked up by keyboard, which is the only way a hold can outlive the focus that made it. */
+  /** 키보드로 집은 것. 집기가 그것을 만든 포커스보다 오래 살 수 있는 유일한 경로다. */
   keyboard: boolean
 }
 
 /**
- * Where a pointer is, in both coordinate systems.
+ * 포인터의 위치를 두 좌표계 모두로.
  *
- * A drag asks two different questions of the same movement and they do not take
- * the same answer, which is a distinction this file has now got wrong once in
- * each direction. So the names carry the space:
+ * 끌기는 같은 움직임에 서로 다른 두 질문을 하고 둘의 답이 다르다. 그래서 이름이 좌표계를 싣는다.
  *
- * **Page** — for the tile's offset and for which slot is under the pointer. The
- * grid is measured in page coordinates because a mouse drag can scroll the page
- * under it (the wheel is never blocked, only touch panning is), and a tile
- * positioned from client deltas drifts away from the cursor by however far the
- * page moved while the drop still lands where the cursor is.
+ * **Page** — 타일의 오프셋과, 포인터 아래가 몇 번 슬롯인가. 격자를 페이지 좌표로 재는
+ * 것은 마우스 끌기가 그 아래에서 페이지를 스크롤할 수 있기 때문이다. client 델타로
+ * 배치한 타일은 페이지가 움직인 만큼 커서에서 멀어진다.
  *
- * **Client** — for the hold's slop, which asks whether the *finger moved on the
- * glass*. A pan scrolls the page under the finger at 1:1, so page-space movement
- * during a scroll is ~0: measured there, a scroll is indistinguishable from
- * holding still, and holding still is what lifts a tile.
+ * **Client** — 길게 누르기의 slop. *유리 위에서 손가락이 움직였는가*를 묻는다. 패닝은
+ * 손가락 아래에서 페이지를 1:1로 스크롤하므로 스크롤 중의 페이지 좌표 이동은 ~0이다.
+ * 거기서 재면 스크롤과 가만히 있는 것을 구분할 수 없고, 가만히 있는 것이 타일을 들어올린다.
  */
 function pointerPoint(event: React.PointerEvent<HTMLElement>) {
   return {
@@ -86,17 +68,17 @@ interface Gesture {
   pointerId: number
   index: number
   element: HTMLElement
-  /** Where it went down, in both spaces — see `pointerPoint`. */
+  /** 눌린 자리, 두 좌표계 모두 — `pointerPoint` 참고. */
   start: PointerPoint
   holdTimer: number | null
   lifted: boolean
-  /** The authority on where it would land — pointerup can arrive before a re-render. */
+  /** 어디에 놓일지에 대한 권위 — pointerup은 리렌더보다 먼저 올 수 있다. */
   to: number
 }
 
 export interface DragReorder {
   gridRef: React.RefObject<HTMLDivElement | null>
-  /** Set on the grid while a rearrange is in progress; the tiles' transition hangs off it. */
+  /** 재정렬 중 격자에 걸린다. 타일의 트랜지션이 여기 매달려 있다. */
   rearranging: boolean
   tileProps: (index: number) => {
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => void
@@ -107,23 +89,22 @@ export interface DragReorder {
     onBlur: () => void
     'aria-pressed': boolean
   }
-  /** Where the tile at `index` is drawn relative to its own slot. */
+  /** `index`의 타일이 자기 슬롯에서 얼마나 떨어져 그려지는지. */
   offsetOf: (index: number) => { x: number; y: number }
-  /** The tile being held, by its index in the committed list. */
+  /** 집혀 있는 타일의, 확정된 목록에서의 인덱스. */
   heldIndex: number | null
-  /** True while a finger or mouse is dragging it, which is when it must not animate. */
+  /** 손가락이나 마우스가 끄는 중 — 애니메이션이 붙으면 안 되는 구간. */
   following: boolean
-  /** The slot the tile at `index` is drawn in — where it *looks* like it is. */
+  /** `index`의 타일이 그려지는 슬롯 — *보이는* 자리. */
   slotOf: (index: number) => number
   /**
-   * Drops a rearrange on the floor, mid-drag or mid-settle.
+   * 끌기 도중이든 내려앉는 도중이든 재정렬을 버린다.
    *
-   * For a caller that is about to change the list underneath one: the held
-   * numbers are positions in a list that is about to stop existing, and the
-   * pending commit would put a photo back that was just removed.
+   * 그 아래 목록을 바꾸려는 호출부를 위한 것이다. 집고 있는 숫자는 곧 사라질 목록의
+   * 위치이고, 대기 중인 확정은 방금 지운 사진을 되돌려 놓는다.
    */
   abandon: () => void
-  /** For the live region — what just happened, in a sentence. */
+  /** 라이브 리전용 — 방금 일어난 일을 한 문장으로. */
   announcement: string
 }
 
@@ -151,7 +132,7 @@ export function useDragReorder({
     [],
   )
 
-  /** A short tap where the phone supports it. Silently absent on iOS. */
+  /** 지원하는 폰에서 짧은 진동. iOS에는 조용히 없다. */
   function tick(pattern: number) {
     navigator.vibrate?.(pattern)
   }
@@ -162,14 +143,12 @@ export function useDragReorder({
   }
 
   /**
-   * Stops the page scrolling under the tile that just lifted.
+   * 방금 들린 타일 아래에서 페이지가 스크롤되는 것을 멈춘다.
    *
-   * Attached here rather than from an effect, and that is the whole point:
-   * an effect runs a frame after the state that triggers it, and the first
-   * touchmove of the drag can land in that gap. One unprevented touchmove is
-   * enough — the browser starts scrolling, and every touchmove after it arrives
-   * `cancelable: false`, so the page and the tile then move together for the
-   * rest of the gesture.
+   * effect가 아니라 여기서 다는 것이 요점이다. effect는 자신을 부른 상태보다 한 프레임
+   * 뒤에 돌고, 끌기의 첫 touchmove가 그 틈에 떨어질 수 있다. 막지 못한 touchmove 하나면
+   * 충분하다 — 브라우저가 스크롤을 시작하고 그 뒤의 모든 touchmove가 `cancelable: false`로
+   * 와서, 남은 제스처 내내 페이지와 타일이 함께 움직인다.
    */
   function blockScroll() {
     const grid = gridRef.current
@@ -184,8 +163,7 @@ export function useDragReorder({
     current.holdTimer = null
     measure()
     blockScroll()
-    // So a finger that wanders off the tile — which is the entire point — keeps
-    // reporting to it.
+    // 타일 밖으로 나간 손가락이 — 그게 요점이다 — 계속 이 타일에 보고하도록.
     current.element.setPointerCapture?.(current.pointerId)
     tick(8)
     setHeld({ from: current.index, to: current.index, follow: { x: 0, y: 0 }, keyboard: false })
@@ -227,8 +205,8 @@ export function useDragReorder({
     }
     gesture.current = current
 
-    // A mouse waits for movement instead: there is nothing for a hold to
-    // disambiguate, and a delay before the cursor picks something up feels broken.
+    // 마우스는 대신 움직임을 기다린다. 길게 누르기가 가릴 모호함이 없고, 커서가 뭔가를
+    // 집기 전의 지연은 고장으로 느껴진다.
     if (event.pointerType !== 'mouse') {
       current.holdTimer = window.setTimeout(() => {
         if (gesture.current === current) lift(current)
@@ -243,9 +221,8 @@ export function useDragReorder({
     const point = pointerPoint(event)
 
     if (!current.lifted) {
-      // On the glass: did the finger itself move? A page that scrolled out from
-      // under it does not count, and in page space that is all a scroll looks
-      // like.
+      // 유리 위에서: 손가락 자체가 움직였는가. 그 아래에서 스크롤된 페이지는 세지
+      // 않는다.
       const travelled = Math.hypot(
         point.clientX - current.start.clientX,
         point.clientY - current.start.clientY,
@@ -253,15 +230,14 @@ export function useDragReorder({
       if (event.pointerType === 'mouse') {
         if (travelled > MOUSE_SLOP_PX) lift(current)
       } else if (travelled > HOLD_SLOP_PX) {
-        // The finger came to scroll. Nothing has been prevented yet, so the
-        // browser is free to carry on with it.
+        // 스크롤하러 온 손가락이다. 아직 아무것도 막지 않았으므로 브라우저가 이어간다.
         forget()
       }
       return
     }
 
-    // In the document, from here down: both the tile's offset and the slot under
-    // the pointer are answers about where things sit on the page.
+    // 여기부터는 문서 좌표다 — 타일의 오프셋도, 포인터 아래 슬롯도 페이지 위 위치에
+    // 대한 답이다.
     const follow = {
       x: point.pageX - current.start.pageX,
       y: point.pageY - current.start.pageY,
@@ -286,23 +262,19 @@ export function useDragReorder({
     forget()
 
     /**
-     * Read here rather than at lift, and from the tile rather than from the
-     * token.
+     * 들어올릴 때가 아니라 여기서, 토큰이 아니라 타일에서 읽는다.
      *
-     * Here, because the transition to wait for is the one `[data-rearranging]`
-     * turns on, and that attribute only exists while something is held — at lift
-     * the tile still answers with the base rule's duration, which today happens
-     * to be the same number and would stop being one the day the shadow and the
-     * movement want different speeds.
+     * 여기인 이유는 기다려야 할 트랜지션이 `[data-rearranging]`이 켜는 쪽이고 그 속성은
+     * 무언가 집혀 있는 동안에만 있기 때문이다. 들어올리는 시점의 타일은 아직 base 규칙의
+     * duration으로 답하는데, 오늘 우연히 같은 숫자일 뿐 그림자와 이동이 서로 다른 속도를
+     * 원하는 날 갈라진다.
      *
-     * From the tile, because that is what makes `prefers-reduced-motion` answer
-     * for itself: the token says 200ms to someone whose tiles move in one.
+     * 타일에서 읽는 이유는 `prefers-reduced-motion`이 스스로 답하게 하기 위해서다.
      */
     const settle = tile ? readTransitionMs(tile) : 0
 
-    // Dropping the offset lets the tile animate into its slot; the list is
-    // rewritten once it gets there, which is why nothing visibly jumps at the
-    // moment the DOM order changes.
+    // 오프셋을 놓으면 타일이 자기 슬롯으로 애니메이션한다. 목록은 도착한 뒤에 다시
+    // 쓰이므로 DOM 순서가 바뀌는 순간에 눈에 띄게 튀는 것이 없다.
     setHeld({ from, to, follow: null, keyboard: false })
     settleTimer.current = window.setTimeout(() => {
       settleTimer.current = null
@@ -312,10 +284,8 @@ export function useDragReorder({
   }
 
   /**
-   * Something took the pointer away — the system, or a gesture the browser
-   * decided was its own after all. Puts the photo back rather than committing:
-   * an interrupted drag is not an instruction, and the one place this is
-   * reachable is the one place we cannot know what the user meant.
+   * 무언가 포인터를 가져갔다 — 시스템이거나, 브라우저가 결국 자기 것이라고 정한 제스처.
+   * 확정하지 않고 사진을 되돌려 놓는다. 끊긴 끌기는 지시가 아니다.
    */
   function handlePointerCancel(event: React.PointerEvent<HTMLElement>) {
     const current = gesture.current
@@ -328,7 +298,7 @@ export function useDragReorder({
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLElement>, index: number) {
-    // A pointer is already holding something, or the keys belong to another tile.
+    // 이미 포인터가 무언가를 들고 있거나, 키가 다른 타일의 것이다.
     if (held && (!held.keyboard || held.from !== index)) return
 
     if (event.key === ' ' || event.key === 'Enter') {
@@ -363,7 +333,7 @@ export function useDragReorder({
     setAnnouncement(`${to + 1}번째로 옮겼어요.`)
   }
 
-  /** Where the tile at `index` is drawn — the one rule both the badge and the offset read. */
+  /** `index`의 타일이 그려지는 자리 — 배지와 오프셋이 함께 읽는 하나의 규칙. */
   function slotOf(index: number): number {
     return held ? displaySlot(index, held.from, held.to) : index
   }
@@ -382,8 +352,8 @@ export function useDragReorder({
       onPointerUp: handlePointerUp,
       onPointerCancel: handlePointerCancel,
       onKeyDown: (event) => handleKeyDown(event, index),
-      // A keyboard hold lives on the focused tile; losing focus with it still up
-      // would leave the grid held open with no way to put it down.
+      // 키보드로 집은 것은 포커스된 타일에 산다. 집은 채로 포커스를 잃으면 내려놓을
+      // 방법 없이 격자가 열린 채 남는다.
       onBlur: () => {
         if (held?.keyboard && held.from === index) {
           setHeld(null)

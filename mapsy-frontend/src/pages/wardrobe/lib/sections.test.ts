@@ -28,41 +28,40 @@ function item(overrides: Partial<Item> & { id: string }): Item {
 const labels = (items: Item[]) => groupSections(items).map((section) => section.group.label)
 
 describe('groupSections', () => {
-  it('leaves out the groups this wardrobe has nothing in', () => {
-    // The whole point of the split: someone who owns no 원피스/셋업 and no 가방
-    // should not be handed a heading for either, nor a chip built from one.
+  it('이 옷장에 아무것도 없는 그룹은 뺀다', () => {
+    // 나누는 이유의 전부다 — 원피스/셋업도 가방도 없는 사람에게 그 제목을 건네서도,
+    // 그것으로 지은 칩을 건네서도 안 된다.
     expect(labels([item({ id: 'a' }), item({ id: 'b', categoryId: 'shoes.boots' })])).toEqual([
       '상의',
       '신발',
     ])
   })
 
-  it('orders sections by the category table, not by what was registered first', () => {
+  it('먼저 등록된 순서가 아니라 카테고리 표 순서로 구획을 놓는다', () => {
     const registered = [
       item({ id: 'a', categoryId: 'shoes.boots' }),
       item({ id: 'b', categoryId: 'top.knit' }),
       item({ id: 'c', categoryId: 'bottom.denim' }),
     ]
 
-    // Insertion order would put 신발 first and move the headings around every
-    // time a garment is added, which is a screen that has to be re-read on each
-    // visit.
+    // 삽입 순서였다면 신발이 먼저 오고 옷을 등록할 때마다 제목이 움직인다.
+    // 방문할 때마다 다시 읽어야 하는 화면이다.
     expect(labels(registered)).toEqual(['상의', '하의', '신발'])
   })
 
-  it('keeps the order it was given inside a section', () => {
+  it('구획 안에서는 받은 순서를 지킨다', () => {
     const sorted = [
       item({ id: 'newer', categoryId: 'top.knit' }),
       item({ id: 'shoe', categoryId: 'shoes.boots' }),
       item({ id: 'older', categoryId: 'top.shirt' }),
     ]
 
-    // The caller sorts — by 최근 등록순, 가격 높은순, whatever the sheet asked
-    // for — and the split must not quietly re-order within a heading.
+    // 정렬은 호출부가 한다 — 최근 등록순이든 가격 높은순이든 시트가 요청한 것으로 —
+    // 그리고 나누기가 제목 안에서 조용히 재정렬하면 안 된다.
     expect(groupSections(sorted)[0].items.map((entry) => entry.id)).toEqual(['newer', 'older'])
   })
 
-  it('sections an empty wardrobe into nothing at all', () => {
+  it('빈 옷장은 아무 구획도 만들지 않는다', () => {
     expect(groupSections([])).toEqual([])
   })
 })

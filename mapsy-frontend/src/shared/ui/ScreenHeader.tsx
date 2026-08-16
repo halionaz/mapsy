@@ -1,24 +1,16 @@
 import { useRef } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { useNavigate } from 'react-router'
-import { css, cva } from 'styled-system/css'
-import { hstack, vstack } from 'styled-system/patterns'
 
-import { appBarBox } from './appBarStyle'
+import { useScrolledPast } from '@/shared/lib/useScrolledPast'
 import { IconButton } from './Button'
-import { useScrolledPast } from './useScrolledPast'
+import * as styles from './ScreenHeader.css'
 
 /**
- * Sub-screen chrome: a back affordance, the screen's name, and a padded body.
+ * 하위 화면의 뼈대 — 뒤로 가기, 화면 이름, 패딩이 붙은 본문.
  *
- * The name is set once and large, at the top of the content, and the sticky bar
- * picks it up only after it has scrolled away — the platform pattern on both
- * phones, and the reason the bar can otherwise be almost empty. `hero` is
- * rendered above the title for screens whose subject is a photograph rather than
- * a word.
- *
- * Shared by the item create / detail / edit screens so they can't drift apart on
- * safe-area padding, which is invisible on a simulator and obvious on a phone.
+ * 이름은 본문 맨 위에 크게 한 번 놓이고, 고정 바는 그것이 스크롤로 사라진 뒤에야
+ * 이름을 받는다. 등록·상세·편집 화면이 함께 써서 안전영역 패딩이 서로 어긋나지 않는다.
  */
 export function ScreenHeader({
   title,
@@ -31,31 +23,26 @@ export function ScreenHeader({
   children,
 }: {
   title: string
-  /** A short line above the title — a category, a count. */
+  /** 제목 위 한 줄 — 카테고리, 개수. */
   eyebrow?: React.ReactNode
   subtitle?: React.ReactNode
   action?: React.ReactNode
-  /** Full-bleed content between the bar and the title, e.g. the photo strip. */
+  /** 바와 제목 사이의 전폭 영역. 사진 스트립 같은 것. */
   hero?: React.ReactNode
   /**
-   * What a screen reader should be told about the state of this screen.
+   * 이 화면의 상태를 스크린리더에게 알리는 문장.
    *
-   * Lives here rather than in the screen because a live region is read when its
-   * contents *change*: one that appears with its text already in it is
-   * announced by some screen readers and not others, and one that unmounts when
-   * the data lands never says that the wait is over. Every state of a screen
-   * renders this same header, so the region survives the switch between them and
-   * the wait and its result are two values of one element.
+   * 화면이 아니라 여기 있는 이유는 라이브 리전이 *내용이 바뀔 때* 읽히기 때문이다.
+   * 이미 문장을 담은 채 나타난 리전은 읽는 리더와 안 읽는 리더가 갈리고, 데이터가
+   * 도착할 때 언마운트되는 리전은 기다림이 끝났다고 말하지 못한다. 화면의 모든 상태가
+   * 같은 헤더를 그리므로 이 리전은 상태 전환을 살아남는다.
    */
   status?: string
   /**
-   * Lets the body run all the way to the bottom edge of the screen.
+   * 본문이 화면 아래 끝까지 닿게 한다.
    *
-   * The default padding is what keeps the last line of a scrolling page clear of
-   * the home indicator. A screen that pins something to that edge itself — the
-   * item form's action bar — has to be able to reach it, and then owns the safe
-   * area inset instead. The choice lives here rather than as a negative margin
-   * at the call site so the padding is still stated in exactly one place.
+   * 기본 패딩은 마지막 줄이 홈 인디케이터에 걸리지 않게 하는 것이다. 그 가장자리에
+   * 무언가를 직접 고정하는 화면(옷 폼의 액션 바)은 대신 안전영역 인셋을 스스로 떠맡는다.
    */
   flushBottom?: boolean
   children: React.ReactNode
@@ -66,39 +53,32 @@ export function ScreenHeader({
   const collapsed = useScrolledPast(titleRef, barRef)
 
   return (
-    <div className={vstack({ gap: '0', alignItems: 'stretch', flex: '1' })}>
-      <p role="status" className={css({ srOnly: true })}>
+    <div className={styles.screen}>
+      <p role="status" className={styles.srOnly}>
         {status ?? ''}
       </p>
 
-      <header ref={barRef} className={bar} data-collapsed={collapsed || undefined}>
+      <header ref={barRef} className={styles.bar} data-collapsed={collapsed || undefined}>
         <IconButton label="뒤로" onClick={() => navigate(-1)}>
           <ChevronLeft size={22} />
         </IconButton>
 
-        {/* The bar's copy of the title. `aria-hidden` because the real heading is
-            the <h1> below and is always in the accessibility tree — announcing
-            both would read the screen's name twice on entry. */}
-        <span className={barTitle} aria-hidden="true">
+        {/* 바가 가진 제목의 사본. 진짜 제목은 아래 <h1>이고 늘 접근성 트리에 있으므로
+            여기서 한 번 더 읽히면 화면 이름을 두 번 말하게 된다. */}
+        <span className={styles.barTitle} aria-hidden="true">
           {title}
         </span>
 
-        {/* Reserves the same width as the back button when there is no action,
-            so the bar title stays optically centred either way. */}
-        <div className={css({ minWidth: 'tap', display: 'flex', justifyContent: 'flex-end' })}>
-          {action}
-        </div>
+        <div className={styles.barActionSlot}>{action}</div>
       </header>
 
       {hero}
 
-      <main className={main({ flushBottom })}>
-        <div ref={titleRef} className={vstack({ gap: '1.5', alignItems: 'stretch', mb: '6' })}>
-          {eyebrow && (
-            <p className={css({ textStyle: 'eyebrow', color: 'accent.text' })}>{eyebrow}</p>
-          )}
-          <h1 className={css({ textStyle: 'title', wordBreak: 'keep-all' })}>{title}</h1>
-          {subtitle && <p className={css({ textStyle: 'body', color: 'fg.muted' })}>{subtitle}</p>}
+      <main className={styles.main({ flushBottom })}>
+        <div ref={titleRef} className={styles.titleBlock}>
+          {eyebrow && <p className={styles.eyebrow}>{eyebrow}</p>}
+          <h1 className={styles.title}>{title}</h1>
+          {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
         </div>
 
         {children}
@@ -106,76 +86,3 @@ export function ScreenHeader({
     </div>
   )
 }
-
-// The vertical metrics are `appBarBox`, which the wardrobe's bar wears too — the
-// two used to state their own and disagreed. Merged rather than joined with
-// `cx`, so anything set here wins over it rather than races it; see that file.
-const bar = css(
-  appBarBox,
-  hstack.raw({
-    position: 'sticky',
-    top: '0',
-    zIndex: 'header',
-    justify: 'space-between',
-    gap: '2',
-    px: '2',
-    // Opaque from the start rather than only once scrolled: the bar is pinned
-    // over content, and a transparent one lets a photograph slide underneath it.
-    bg: 'bg',
-    borderBottomWidth: '1px',
-    borderBottomStyle: 'solid',
-    // The rule appears with the collapsed title, so an unscrolled screen reads
-    // as one surface instead of a page with a toolbar bolted to it.
-    borderColor: 'transparent',
-    transitionProperty: 'border-color',
-    transitionDuration: 'normal',
-    '&[data-collapsed]': { borderColor: 'border.subtle' },
-  }),
-)
-
-const barTitle = css({
-  flex: '1',
-  minWidth: 0,
-  textStyle: 'subheading',
-  textAlign: 'center',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  opacity: 0,
-  translate: 'auto',
-  translateY: '4px',
-  transitionProperty: 'opacity, translate',
-  transitionDuration: 'normal',
-  transitionTimingFunction: 'out',
-  '[data-collapsed] &': { opacity: 1, translateY: '0' },
-  _motionReduce: { transitionDuration: '1ms' },
-})
-
-/**
- * A recipe rather than a `css()` with a ternary in it.
- *
- * Panda reads source at build time and cannot see through
- * `pb: flush ? '0' : '…'` — it would emit neither value and the body would
- * silently lose its bottom padding on every screen. Variants are the supported
- * way to branch.
- *
- * A flex column so a child can claim the leftover height: the item form's action
- * bar uses `margin-top: auto` to sit on the bottom edge when the form is shorter
- * than the screen, which a block container has no free space to give it.
- */
-const main = cva({
-  base: {
-    flex: '1',
-    display: 'flex',
-    flexDirection: 'column',
-    px: '5',
-    pt: '5',
-  },
-  variants: {
-    flushBottom: {
-      true: { pb: '0' },
-      false: { pb: 'calc({spacing.12} + var(--safe-b))' },
-    },
-  },
-  defaultVariants: { flushBottom: false },
-})

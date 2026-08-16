@@ -7,13 +7,11 @@ import type { ProcessedPhoto } from '@/shared/lib/image'
 import { ItemForm } from './ItemForm'
 
 /**
- * The two rules that changed when the edit screen started showing photos.
+ * 편집 화면이 사진을 보여주기 시작하면서 바뀐 두 규칙.
  *
- * Photos used to be registration-only, which made both of these registration's
- * problem alone: "at least one photo" was a rule about a form that started
- * empty, and handing the blobs over was a handoff to a store that always took
- * them. Editing can now take the last photo away, and its save can come back
- * refused with the form still on screen.
+ * 사진이 등록 전용이던 시절에는 둘 다 등록만의 문제였다 — "사진 최소 한 장"은 비어서
+ * 시작하는 폼에 대한 규칙이었고, blob을 넘기는 것은 늘 받아주는 스토어로의 인계였다.
+ * 이제 편집이 마지막 사진을 뺄 수 있고, 그 저장이 폼이 화면에 남은 채 거절돼 돌아올 수 있다.
  */
 
 const { releasePreviewMock } = vi.hoisted(() => ({ releasePreviewMock: vi.fn() }))
@@ -59,7 +57,7 @@ function picked(previewUrl: string): PhotoEntry {
 }
 
 describe('ItemForm', () => {
-  it('refuses a save that would leave the garment with no photo', () => {
+  it('사진 없는 옷을 만드는 저장을 거절한다', () => {
     const onSubmit = vi.fn()
     render(
       <ItemForm
@@ -72,22 +70,21 @@ describe('ItemForm', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '저장' }))
 
-    // The database refuses the same thing — an item with no photos is a blank
-    // card on the grid. This is the half that says so before anything uploads.
+    // DB도 같은 것을 거절한다 — 사진 없는 옷은 격자의 빈 카드다. 이쪽은 아무것도
+    // 올라가기 전에 그것을 말하는 절반이다.
     expect(onSubmit).not.toHaveBeenCalled()
     expect(screen.queryByText('사진을 한 장 이상 추가해주세요.')).not.toBeNull()
   })
 
   /**
-   * Whether the save is allowed to rewrite the photo list.
+   * 저장이 사진 목록을 다시 써도 되는지.
    *
-   * Reported from the form because the form is what the person actually touched.
-   * The obvious alternative — comparing the submitted list against the wardrobe
-   * cache — reads a photo *another device* added while this screen sat open as
-   * an edit made here, and the rewrite then deletes it. The user never saw it
-   * and the toast says 저장했어요.
+   * 폼에서 알리는 것은 사람이 실제로 건드린 것이 폼이기 때문이다. 뻔한 대안인 "제출된
+   * 목록을 옷장 캐시와 비교"는, 이 화면이 열려 있는 동안 *다른 기기*가 더한 사진을
+   * 여기서 한 편집으로 읽고 재작성이 그것을 지운다. 사용자는 본 적도 없는데 토스트는
+   * 저장했어요라고 말한다.
    */
-  it('reports that a text-only edit left the photos alone', () => {
+  it('텍스트만 고친 편집은 사진을 건드리지 않았다고 알린다', () => {
     const onSubmit = vi.fn()
     render(
       <ItemForm
@@ -107,7 +104,7 @@ describe('ItemForm', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ photosChanged: false }))
   })
 
-  it('reports a rearrange as a change', () => {
+  it('재정렬은 변경으로 알린다', () => {
     const onSubmit = vi.fn()
     render(
       <ItemForm
@@ -131,7 +128,7 @@ describe('ItemForm', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ photosChanged: true }))
   })
 
-  it('takes its previews back when the save is refused, and frees them on the way out', () => {
+  it('저장이 거절되면 미리보기를 되받고, 떠날 때 반납한다', () => {
     const onSubmit = vi.fn()
     const props = {
       initial: { title: '마산 플리스', photos: [picked('blob:new')] },
@@ -145,7 +142,7 @@ describe('ItemForm', () => {
     fireEvent.click(screen.getByRole('button', { name: '저장' }))
     expect(onSubmit).toHaveBeenCalledTimes(1)
 
-    // The save failed, so nobody took the blobs: leaving now has to free them.
+    // 저장이 실패했으니 아무도 blob을 가져가지 않았다 — 지금 떠나면 반납해야 한다.
     rerender(<ItemForm {...props} error="저장하지 못했어요." />)
     unmount()
 

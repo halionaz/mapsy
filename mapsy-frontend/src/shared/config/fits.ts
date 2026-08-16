@@ -1,9 +1,8 @@
 /**
- * Fit presets — PRD §5.5.
+ * 핏 프리셋 — PRD §5.5.
  *
- * Tops and bottoms describe fit with different vocabulary, and for shoes, bags
- * and accessories the concept doesn't apply at all — those groups return an
- * empty list and the form hides the field rather than showing a dead control.
+ * 상의와 하의는 핏을 다른 어휘로 말하고, 신발·가방·액세서리에는 개념 자체가 없다 —
+ * 그 대분류는 빈 목록을 돌려주고 폼은 죽은 컨트롤 대신 필드를 감춘다.
  */
 
 import type { CategoryGroupId } from './categories'

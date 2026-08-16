@@ -1,102 +1,81 @@
-import { useState } from 'react'
 import { Navigate, useLocation } from 'react-router'
-import { css } from 'styled-system/css'
-import { vstack } from 'styled-system/patterns'
 
-import { signInWithGoogle, useSession } from '@/features/auth'
+import { useSession, useSignIn } from '@/features/auth'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
+import { errorMessage } from '@/shared/lib/errorMessage'
 import { Button } from '@/shared/ui/Button'
+import * as styles from './LoginPage.css'
 
 /**
- * Login — one Google button, no sign-up form (PRD §3).
+ * 로그인 — Google 버튼 하나, 가입 폼 없음 (PRD §3).
  *
- * mapsy is single-user for now, but authentication still goes through Supabase
- * Auth so every row is scoped by `auth.uid()` under RLS. Opening it up to other
- * people later is then a configuration change rather than a rewrite.
+ * mapsy는 아직 1인용이지만 인증은 Supabase Auth를 거친다. 그래야 모든 행이 RLS 아래에서
+ * `auth.uid()`로 좁혀지고, 나중에 다른 사람에게 여는 것이 재작성이 아니라 설정 변경이 된다.
  *
- * The screen is a wordmark and one button, so the whole first impression rests
- * on the type: the name is set at display size in the brand orange, over a soft
- * glow that is the only piece of decoration in the app.
+ * 화면이 워드마크와 버튼 하나뿐이라 첫인상 전체가 타입에 실린다.
  */
 export function LoginPage() {
   const session = useSession()
   const location = useLocation()
-  const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const signIn = useSignIn()
 
-  // Signing in leaves this screen the moment the session lands — including on
-  // the way back from the OAuth redirect, which is what `useSession` listens for.
+  // 세션이 도착하는 순간 이 화면을 떠난다 — OAuth 리다이렉트에서 돌아오는 길도 포함이다.
   if (session.status === 'authenticated') {
     const from = (location.state as { from?: string } | null)?.from
     return <Navigate to={from ?? '/'} replace />
   }
 
-  async function signIn() {
-    setPending(true)
-    setError(null)
-    try {
-      await signInWithGoogle()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '로그인에 실패했어요.')
-    } finally {
-      setPending(false)
-    }
-  }
-
   return (
-    <div className={screen}>
-      <div className={glow} aria-hidden="true" />
+    <div className={styles.screen}>
+      <div className={styles.glow} aria-hidden="true" />
 
-      <div className={vstack({ gap: '10', justify: 'center', flex: '1', width: 'full' })}>
-        <div className={vstack({ gap: '3' })}>
-          <h1 className={wordmark}>mapsy</h1>
-          <p className={css({ textStyle: 'body', color: 'fg.muted' })}>내가 가진 옷을 한눈에</p>
+      <div className={styles.center}>
+        <div className={styles.wordmarkBlock}>
+          <h1 className={styles.wordmark}>mapsy</h1>
+          <p className={styles.tagline}>내가 가진 옷을 한눈에</p>
         </div>
 
-        <div className={vstack({ gap: '4', width: 'full', maxWidth: 'field' })}>
+        <div className={styles.actions}>
           <Button
             variant="inverted"
             size="lg"
             full
             icon={<GoogleMark />}
-            loading={pending}
+            loading={signIn.isPending}
             disabled={!isSupabaseConfigured}
-            onClick={() => void signIn()}
+            onClick={() => signIn.mutate()}
           >
-            {pending ? '이동 중…' : 'Google로 계속하기'}
+            {signIn.isPending ? '이동 중…' : 'Google로 계속하기'}
           </Button>
 
           {!isSupabaseConfigured && (
-            <p className={note}>
+            <p className={styles.note}>
               Supabase 환경변수가 아직 없어요.
               <br />
-              <code className={code}>.env.example</code>을 <code className={code}>.env.local</code>
-              로 복사해 채워주세요.
+              <code className={styles.code}>.env.example</code>을{' '}
+              <code className={styles.code}>.env.local</code>로 복사해 채워주세요.
             </p>
           )}
 
-          {error && (
-            <p role="alert" className={css({ textStyle: 'caption', color: 'danger' })}>
-              {error}
+          {signIn.error && (
+            <p role="alert" className={styles.error}>
+              {errorMessage(signIn.error, '로그인에 실패했어요.')}
             </p>
           )}
         </div>
       </div>
 
-      <p className={css({ textStyle: 'caption', color: 'fg.subtle' })}>
-        계속하면 옷장 데이터가 이 계정에 저장돼요
-      </p>
+      <p className={styles.footnote}>계속하면 옷장 데이터가 이 계정에 저장돼요</p>
     </div>
   )
 }
 
 /**
- * Google's own mark, drawn inline.
+ * Google의 마크를 인라인으로 그린다.
  *
- * Their sign-in guidelines ask for the four-colour G on the button, and it is
- * the one place in the app where a brand other than ours has a say in the
- * colours. Inline rather than an asset so it costs no request and inherits
- * nothing from the theme — these four hexes are fixed by Google, not by us.
+ * 그들의 로그인 가이드라인이 버튼에 네 색 G를 요구하고, 앱에서 우리 아닌 브랜드가 색에
+ * 발언권을 갖는 유일한 자리다. 에셋이 아니라 인라인이라 요청이 들지 않고 테마에서
+ * 아무것도 물려받지 않는다 — 이 네 hex는 Google이 정한 것이지 우리가 정한 것이 아니다.
  */
 function GoogleMark() {
   return (
@@ -120,83 +99,3 @@ function GoogleMark() {
     </svg>
   )
 }
-
-const screen = css({
-  position: 'relative',
-  // A stacking context, so the glow below can sit at `z-index: -1` and land
-  // behind this screen's content instead of behind the page background — where a
-  // negative index without an isolating ancestor would put it, invisibly.
-  isolation: 'isolate',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: '8',
-  mx: 'auto',
-  width: 'full',
-  maxWidth: 'app',
-  minHeight: '100dvh',
-  px: '8',
-  // Anchored content clears the notch and home indicator; viewport-fit is set to
-  // cover in index.html.
-  pt: 'calc({spacing.16} + var(--safe-t))',
-  pb: 'calc({spacing.8} + var(--safe-b))',
-  textAlign: 'center',
-  overflow: 'hidden',
-})
-
-/**
- * The one decorative element in the app: a wash of brand orange behind the
- * wordmark, clipped by the screen.
-
- *
- * A radial gradient rather than a blurred box — `filter: blur()` on an element
- * this large is a full-screen offscreen buffer on a phone, and it is the first
- * paint of the first screen.
- */
-const glow = css({
-  position: 'absolute',
-  // Behind every descendant of `screen`, unconditionally. Relying on each
-  // sibling to be `position: relative` instead left the decoration painting over
-  // the wordmark, and kept working only for as long as everyone remembered.
-  zIndex: -1,
-  top: '-20%',
-  left: '50%',
-  translate: 'auto',
-  translateX: '-1/2',
-  width: '150%',
-  aspectRatio: '1',
-  pointerEvents: 'none',
-  background: 'radial-gradient(circle at 50% 50%, {colors.brand.500} 0%, transparent 62%)',
-  opacity: { base: 0.1, _dark: 0.16 },
-})
-
-const wordmark = css({
-  textStyle: 'display',
-  fontSize: '3rem',
-  // The wordmark is the brand, so it is the one place the accent is used at
-  // size. Painted as a gradient through the ramp rather than a flat fill: at
-  // 48px a single orange looks like a colour someone typed, and the shift from
-  // 400 to 600 gives the letterforms a light source.
-  //
-  // Panda's own `textGradient` utility rather than a hand-written
-  // `background-clip: text`: the unprefixed property only landed in Safari 16.4
-  // and this app targets iOS Safari 16, where a hand-rolled version paints the
-  // app's name in transparent ink. The utility emits the -webkit- pair.
-  textGradient: 'to-br',
-  gradientFrom: 'brand.400',
-  gradientTo: 'brand.600',
-})
-
-const note = css({
-  textStyle: 'caption',
-  color: 'fg.muted',
-  lineHeight: 'relaxed',
-})
-
-const code = css({
-  color: 'fg',
-  fontFamily: 'mono',
-  bg: 'bg.subtle',
-  px: '1',
-  rounded: 'sm',
-})

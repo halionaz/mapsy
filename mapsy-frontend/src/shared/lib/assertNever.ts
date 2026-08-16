@@ -1,27 +1,12 @@
 /**
- * Closes a chain of cases so the compiler counts them.
+ * 분기 사슬을 닫아 컴파일러가 경우의 수를 세게 한다.
  *
- * A `?:` chain ending in a bare `else` accepts a new member of the union in
- * silence — it simply falls through to whatever the last branch happened to be.
- * That is fine when the last branch is a genuine default and wrong when it is
- * one case among equals, which is the usual situation: the wardrobe's five
- * screen states each draw something different and each say something different,
- * and a sixth added later would quietly have drawn the grid and announced a
- * count for it.
+ * 맨 끝이 그냥 `else`인 `?:` 사슬은 유니온에 새 멤버가 늘어도 말없이 받아들이고 마지막
+ * 분기로 흘려보낸다. 여기서 닫으면 모든 경우를 이름 붙였을 때만 `value`가 `never`로
+ * 좁혀지므로, 하나가 늘면 빌드가 멈춘다.
  *
- * Ending the chain here makes the union exhaustive by type: `value` is narrowed
- * to `never` only if every case was named, so adding one stops the build.
- *
- * The throw is for the boundary the types do not cover — a value that arrived
- * from outside TypeScript, parsed from JSON or handed over by an API. Where the
- * union is computed locally, as the wardrobe's screen state is, it is plain dead
- * code and that is fine: the compile error is the whole product.
- *
- * What a throw actually costs is worth knowing before reaching for this at a
- * real boundary. React unmounts the tree when a render throws, so the visible
- * result is whatever catches it — `app/ErrorBoundary` in this app, which draws a
- * failure with a way out. Without that boundary it would be a white page, which
- * is worse than any wrong screen.
+ * throw는 타입이 닿지 않는 경계 — JSON에서 파싱되었거나 API가 건넨 값 — 몫이다.
+ * 유니온을 로컬에서 계산하는 곳에서는 그냥 죽은 코드이고, 컴파일 에러가 이 함수의 전부다.
  */
 export function assertNever(value: never): never {
   throw new Error(`Unhandled case: ${JSON.stringify(value)}`)

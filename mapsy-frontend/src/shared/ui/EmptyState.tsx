@@ -1,16 +1,10 @@
-import { css } from 'styled-system/css'
-import { vstack } from 'styled-system/patterns'
+import * as styles from './EmptyState.css'
 
 /**
- * The screen has nothing to show, and says which kind of nothing.
+ * 보여줄 것이 없는 화면 — 그리고 어떤 종류의 없음인지.
  *
- * One component for all three because they were three different layouts before —
- * an empty wardrobe, a filter that matched nothing, and a load that failed each
- * centred their own stack at their own sizes. They are the same moment from the
- * user's side (I am looking at a blank screen) and should look like it.
- *
- * The icon sits in a tinted circle rather than loose on the background: a lone
- * outline glyph in the middle of an empty screen reads as a broken image.
+ * 빈 옷장·조건에 맞는 옷 없음·불러오기 실패가 한 컴포넌트인 것은, 사용자 쪽에서는
+ * 셋 다 "빈 화면을 보고 있다"는 같은 순간이기 때문이다.
  */
 export function EmptyState({
   icon,
@@ -26,45 +20,16 @@ export function EmptyState({
   tone?: 'neutral' | 'danger'
 }) {
   return (
-    <div
-      className={vstack({
-        gap: '3',
-        justify: 'center',
-        flex: '1',
-        py: '16',
-        px: '6',
-        textAlign: 'center',
-      })}
-    >
-      <span className={tone === 'danger' ? dangerBadge : neutralBadge} aria-hidden="true">
+    <div className={styles.block}>
+      <span
+        className={tone === 'danger' ? styles.dangerBadge : styles.neutralBadge}
+        aria-hidden="true"
+      >
         {icon}
       </span>
-      <p className={css({ textStyle: 'heading' })}>{title}</p>
-      {description && (
-        <p
-          className={css({
-            textStyle: 'body',
-            color: 'fg.muted',
-            maxWidth: 'field',
-            wordBreak: 'keep-all',
-          })}
-        >
-          {description}
-        </p>
-      )}
-      {action && <div className={css({ mt: '2' })}>{action}</div>}
+      <p className={styles.title}>{title}</p>
+      {description && <p className={styles.description}>{description}</p>}
+      {action && <div className={styles.action}>{action}</div>}
     </div>
   )
 }
-
-const badgeBase = {
-  display: 'grid',
-  placeItems: 'center',
-  width: '14',
-  height: '14',
-  rounded: 'full',
-  mb: '1',
-} as const
-
-const neutralBadge = css({ ...badgeBase, bg: 'bg.subtle', color: 'fg.subtle' })
-const dangerBadge = css({ ...badgeBase, bg: 'danger.subtle', color: 'danger' })

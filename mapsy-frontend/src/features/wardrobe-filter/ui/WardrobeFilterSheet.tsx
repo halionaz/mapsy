@@ -1,37 +1,34 @@
-import { vstack } from 'styled-system/patterns'
-
 import { CLOTHING_COLORS, type ColorId } from '@/shared/config/colors'
 import { SEASONS, type SeasonId } from '@/shared/config/seasons'
 import { Button } from '@/shared/ui/Button'
+import { chipLegend, chipStyle } from '@/shared/ui/Chip.css'
 import { ChipGroup } from '@/shared/ui/ChipGroup'
 import { ChipSelect } from '@/shared/ui/ChipSelect'
-import { chipLegend, chipStyle } from '@/shared/ui/chipStyle'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
 import { Sheet } from '@/shared/ui/Sheet'
+import * as styles from './WardrobeFilterSheet.css'
 import { activeFilterCount, clearFilters } from '../lib/filterSummary'
 import type { FilterOptions } from '../lib/filterOptions'
 import { SORT_OPTIONS, type WardrobeFilters } from '../model/filters'
 
 /**
- * 필터 바텀시트 — the axes the category rail above the grid cannot express
- * (PRD §6.1).
+ * 필터 바텀시트 — 격자 위 카테고리 레일이 표현하지 못하는 축들 (PRD §6.1).
  *
- * Changes apply as they are made rather than on a 적용 press. Filtering is
- * in-memory and instant (PRD §8.4), so the grid behind the sheet is already the
- * preview — making the user commit before seeing the result would be adding a
- * round trip that does not exist.
+ * 적용 버튼이 아니라 고르는 즉시 반영된다. 필터링이 메모리에서 즉시 일어나므로(PRD §8.4)
+ * 시트 뒤의 격자가 이미 미리보기다 — 결과를 보기 전에 확정하게 만드는 것은 존재하지도
+ * 않는 왕복을 더하는 일이다.
  *
- * Which also decides the footer: the primary button says 결과 보기 and only
- * closes, because by the time it is pressed the result is what is underneath.
+ * 푸터도 거기서 정해진다. 주 버튼은 결과 보기이고 닫기만 한다. 눌릴 때쯤이면 결과는
+ * 이미 아래에 있다.
  */
 interface WardrobeFilterSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   filters: WardrobeFilters
   onChange: (filters: WardrobeFilters) => void
-  /** Brand / size / fit / tag values present in this wardrobe. */
+  /** 이 옷장에 실제로 있는 브랜드·사이즈·핏·태그 값. */
   options: FilterOptions
-  /** How many garments the current filters match, for the footer button. */
+  /** 지금 필터에 걸리는 옷의 수. 푸터 버튼이 쓴다. */
   resultCount: number
 }
 
@@ -66,11 +63,10 @@ export function WardrobeFilterSheet({
         </>
       }
     >
-      <div className={vstack({ gap: '6', alignItems: 'stretch' })}>
-        {/* Sorting is not an axis that can be off — clearing it would leave the
-            grid in whatever order the last comparator happened to produce, and
-            `applyFilters`' comparator has no branch for "no sort". `ChipSelect`
-            is what makes that unrepresentable rather than merely avoided. */}
+      <div className={styles.body}>
+        {/* 정렬은 끌 수 있는 축이 아니다 — 비우면 마지막 비교 함수가 우연히 만든 순서로
+            격자가 남고, `applyFilters`의 비교 함수에는 "정렬 없음" 가지가 없다.
+            `ChipSelect`가 그것을 피하는 게 아니라 표현 불가능하게 만든다. */}
         <ChipSelect
           label="정렬"
           options={SORT_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}

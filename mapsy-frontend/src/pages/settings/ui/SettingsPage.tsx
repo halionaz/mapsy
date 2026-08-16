@@ -1,46 +1,39 @@
 import { useMemo, useState } from 'react'
 import { LogOut, PackageOpen } from 'lucide-react'
-import { css } from 'styled-system/css'
-import { hstack, vstack } from 'styled-system/patterns'
 
 import { ItemCard, useWardrobe } from '@/entities/item'
 import { attachWears, useWears } from '@/entities/wear'
-import { signOut, useSession } from '@/features/auth'
+import { useSession, useSignOut } from '@/features/auth'
+import { formatDayAgo } from '@/shared/lib/format'
 import { useToday } from '@/shared/lib/useToday'
 import { Button } from '@/shared/ui/Button'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { ScreenHeader } from '@/shared/ui/ScreenHeader'
 import { toaster } from '@/shared/ui/toast'
+import * as styles from './SettingsPage.css'
 
 /**
- * 설정 (PRD §6.4) — account, disposed garments, sign out.
+ * 설정 (PRD §6.4) — 계정, 처분한 옷, 로그아웃.
  *
- * 처분한 옷 is a section here rather than its own route because it is the same
- * grid over the same already-loaded collection with one predicate changed; a
- * screen for it would be a second copy of the wardrobe page whose only
- * difference is a `status` value.
+ * 처분한 옷이 별도 라우트가 아니라 여기의 한 구획인 것은, 이미 불러온 같은 컬렉션 위에서
+ * 술어 하나만 바꾼 같은 격자이기 때문이다. 화면을 따로 두면 `status` 값 하나만 다른
+ * 옷장 화면의 사본이 된다.
  */
 export function SettingsPage() {
   const session = useSession()
   const { data } = useWardrobe()
   const { data: wearData } = useWears()
   const today = useToday()
+  const signOut = useSignOut()
   const [confirmingSignOut, setConfirmingSignOut] = useState(false)
-  const [signingOut, setSigningOut] = useState(false)
 
   const user = session.status === 'authenticated' ? session.session.user : null
   const email = user?.email ?? null
-  /**
-   * Wear history is attached here too, and it is worth more on this screen than
-   * on the wardrobe: the card's line reads as the last time the garment was worn
-   * before it was let go.
-   *
-   * Filtered before the merge rather than after, which spends less — though not
-   * where it first looked. `attachWears` summarises the whole wear log either
-   * way (`summarizeWears` walks the entries, not the items), so what filtering
-   * first saves is the `map` afterwards: a summary is attached to the few
-   * garments this screen draws instead of to every garment in the wardrobe.
-   */
+
+  // 착용 이력을 여기서도 붙인다. 옷장보다 이 화면에서 값이 크다 — 카드의 줄이 그 옷을
+  // 놓아주기 전 마지막으로 입은 때로 읽힌다.
+  //
+  // 합치기 전에 거른다. 이 화면이 그리는 몇 벌에만 요약이 붙는다.
   const disposed = useMemo(
     () =>
       attachWears(
@@ -50,34 +43,30 @@ export function SettingsPage() {
     [data, wearData],
   )
 
-  async function handleSignOut() {
-    setSigningOut(true)
-    try {
-      await signOut()
-      // No navigation: the session listener drops `AppLayout` back to its gate,
-      // which is what sends anyone unauthenticated to /login.
-    } catch {
-      toaster.create({ title: '로그아웃하지 못했어요.', type: 'error' })
-      setSigningOut(false)
-      setConfirmingSignOut(false)
-    }
+  function handleSignOut() {
+    signOut.mutate(undefined, {
+      // 성공해도 이동하지 않는다. 세션 리스너가 `AppLayout`을 게이트로 되돌리고,
+      // 인증되지 않은 방문을 /login으로 보내는 것이 그쪽이다.
+      onError: () => {
+        toaster.create({ title: '로그아웃하지 못했어요.', type: 'error' })
+        setConfirmingSignOut(false)
+      },
+    })
   }
 
   return (
     <ScreenHeader title="설정">
-      <div className={vstack({ gap: '8', alignItems: 'stretch' })}>
-        <section className={vstack({ gap: '3', alignItems: 'stretch' })}>
-          <h2 className={sectionTitle}>계정</h2>
-          <div className={card}>
-            <div className={hstack({ gap: '3' })}>
-              <span className={avatar} aria-hidden="true">
+      <div className={styles.page}>
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>계정</h2>
+          <div className={styles.card}>
+            <div className={styles.account}>
+              <span className={styles.avatar} aria-hidden="true">
                 {(email ?? 'm').slice(0, 1).toUpperCase()}
               </span>
-              <div className={css({ minWidth: 0 })}>
-                <p className={css({ textStyle: 'bodyStrong', truncate: true })}>
-                  {email ?? '미리보기 모드'}
-                </p>
-                <p className={css({ textStyle: 'caption', color: 'fg.muted' })}>
+              <div className={styles.accountText}>
+                <p className={styles.email}>{email ?? '미리보기 모드'}</p>
+                <p className={styles.emailNote}>
                   {email ? 'Google 계정으로 로그인됨' : 'Supabase 환경변수가 없어요'}
                 </p>
               </div>
@@ -85,21 +74,24 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className={vstack({ gap: '3', alignItems: 'stretch' })}>
-          <h2 className={sectionTitle}>
-            처분한 옷<span className={css({ ml: '2', color: 'fg.subtle' })}>{disposed.length}</span>
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            처분한 옷<span className={styles.count}>{disposed.length}</span>
           </h2>
 
           {disposed.length === 0 ? (
-            <p className={emptyNote}>
+            <p className={styles.emptyNote}>
               <PackageOpen size={15} aria-hidden="true" />
               처분한 옷이 아직 없어요.
             </p>
           ) : (
-            <ul className={grid}>
+            <ul className={styles.grid}>
               {disposed.map((item) => (
                 <li key={item.id}>
-                  <ItemCard item={item} today={today} />
+                  <ItemCard
+                    item={item}
+                    wornLabel={item.lastWornOn ? formatDayAgo(item.lastWornOn, today) : null}
+                  />
                 </li>
               ))}
             </ul>
@@ -113,7 +105,7 @@ export function SettingsPage() {
             full
             icon={<LogOut />}
             onClick={() => setConfirmingSignOut(true)}
-            disabled={signingOut}
+            disabled={signOut.isPending}
           >
             로그아웃
           </Button>
@@ -126,54 +118,9 @@ export function SettingsPage() {
         title="로그아웃할까요?"
         description="다시 로그인하면 옷장은 그대로 있어요."
         confirmLabel="로그아웃"
-        pending={signingOut}
-        onConfirm={() => void handleSignOut()}
+        pending={signOut.isPending}
+        onConfirm={handleSignOut}
       />
     </ScreenHeader>
   )
 }
-
-const sectionTitle = css({ textStyle: 'subheading', color: 'fg' })
-
-const card = css({
-  p: '4',
-  rounded: 'field',
-  bg: 'bg.elevated',
-  borderWidth: '1px',
-  borderStyle: 'solid',
-  borderColor: 'border.subtle',
-})
-
-const avatar = css({
-  display: 'grid',
-  placeItems: 'center',
-  flexShrink: 0,
-  width: '11',
-  height: '11',
-  rounded: 'full',
-  bg: 'accent',
-  color: 'accent.fg',
-  textStyle: 'heading',
-})
-
-const emptyNote = hstack({
-  gap: '2',
-  px: '4',
-  py: '4',
-  rounded: 'field',
-  bg: 'bg.subtle',
-  color: 'fg.muted',
-  textStyle: 'caption',
-})
-
-// Same three tracks as the wardrobe grid, for the same reason — see the note on
-// `minmax(0, 1fr)` in `pages/wardrobe/ui/WardrobeGrid.tsx`.
-const grid = css({
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  '& > li': { minWidth: 0 },
-  gap: '3',
-  listStyle: 'none',
-  p: '0',
-  m: '0',
-})

@@ -1,20 +1,12 @@
 /**
- * Detects a full-collection fetch that came back short.
+ * 전량 로드가 짧게 돌아온 것을 잡는다.
  *
- * PostgREST truncates to its configured `max-rows` **silently** — a shorter
- * array, not an error. Setting our own `.limit()` does not reveal that: if the
- * server's ceiling is the lower of the two, the response is under our limit and
- * looks complete.
+ * PostgREST는 `max-rows`에서 **조용히** 자른다 — 에러가 아니라 짧은 배열이다. 우리가
+ * `.limit()`을 걸어도 드러나지 않는다. 서버 상한이 더 낮으면 응답은 우리 한도 아래라
+ * 완전해 보인다.
  *
- * `count: 'exact'` is what actually detects it. The response carries the total
- * row count independently of how many rows came back, so comparing the two
- * catches truncation from either source — and incidentally reports what the
- * server's ceiling really is.
- *
- * Shared because the reasoning is, not because the two call sites are alike:
- * both the wardrobe and the wear log bet on loading everything and filtering in
- * memory (PRD §8.4), and the only thing standing between that bet and a
- * silently half-drawn screen is this comparison being made at all.
+ * 잡아내는 것은 `count: 'exact'`다. 몇 행이 왔는지와 무관하게 전체 행 수가 실려 오므로
+ * 둘을 비교하면 어느 쪽에서 잘렸든 걸린다.
  */
 export function warnIfTruncated(received: number, total: number | null, what: string): void {
   if (total == null || received >= total) return

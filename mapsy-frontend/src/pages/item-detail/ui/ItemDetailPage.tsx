@@ -9,11 +9,8 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { css, cx } from 'styled-system/css'
-import { hstack, vstack } from 'styled-system/patterns'
 
 import {
-  useDeleteItem,
   useSetFavorite,
   useSetStatus,
   useWardrobe,
@@ -22,6 +19,7 @@ import {
 } from '@/entities/item'
 import { attachWears, useToggleWear, useWears, type Worn } from '@/entities/wear'
 import { useCurrentUserId } from '@/features/auth'
+import { useDeleteItem } from '@/features/item-delete'
 import { PhotoViewer, useItemPhotos, type PhotoSlot } from '@/features/item-photos'
 import { categoryLabel } from '@/shared/config/categories'
 import { colorLabel } from '@/shared/config/colors'
@@ -31,28 +29,24 @@ import { errorMessage } from '@/shared/lib/errorMessage'
 import { formatDate, formatDayAgo, formatPrice } from '@/shared/lib/format'
 import { useToday } from '@/shared/lib/useToday'
 import { Button, IconButton } from '@/shared/ui/Button'
-import { buttonStyle } from '@/shared/ui/buttonStyle'
+import { buttonStyle } from '@/shared/ui/Button.css'
 import { ColorSwatch } from '@/shared/ui/ColorSwatch'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { ScreenHeader } from '@/shared/ui/ScreenHeader'
-import { skeletonSurface } from '@/shared/ui/skeletonStyle'
 import { SquarePhoto } from '@/shared/ui/SquarePhoto'
 import { toaster } from '@/shared/ui/toast'
+import * as styles from './ItemDetailPage.css'
 
 /**
  * 옷 상세 (PRD §6.3).
  *
- * Reads from the wardrobe cache instead of fetching by id — the whole collection
- * is already loaded, so a per-item request would only add a spinner.
+ * id로 가져오지 않고 옷장 캐시에서 읽는다 — 컬렉션이 이미 통째로 있으므로 옷 하나를 위한
+ * 요청은 스피너만 늘린다.
  *
- * The screen is the same shape for every garment. Title, category and photo are
- * the only things an item is guaranteed to have, and hiding each unfilled field
- * meant two items could produce two visibly different screens — one a short
- * stub, the other a full sheet — with nothing to say whether a field was blank
- * or simply not a thing this app records. So every field keeps its row and says
- * it is empty, and the photo keeps its square whether or not there is anything
- * to put in it yet.
+ * 화면 모양은 모든 옷에 대해 같다. 옷이 반드시 갖는 것은 이름·카테고리·사진뿐이라,
+ * 채워지지 않은 필드를 감추면 같은 앱이 짧은 토막과 꽉 찬 시트라는 두 화면을 만들고,
+ * 필드가 비어 있는 것인지 이 앱이 기록하지 않는 것인지 말해주는 것이 없다.
  */
 export function ItemDetailPage() {
   const { id } = useParams()
@@ -72,55 +66,47 @@ export function ItemDetailPage() {
   const found = data?.find((entry) => entry.id === id)
 
   /**
-   * The garment with its wear history on it.
+   * 착용 이력이 붙은 옷.
    *
-   * Through `attachWears` on a list of one rather than a second single-item
-   * summariser beside it — the grid's numbers and this screen's have to be the
-   * same numbers, and two ways of adding them up is how they stop being.
+   * 옆에 단건 요약기를 따로 두지 않고 길이 1의 목록에 `attachWears`를 쓴다 — 격자의
+   * 숫자와 이 화면의 숫자가 같아야 하고, 더하는 방법이 둘이면 언젠가 달라진다.
    */
   const wears = useMemo(() => wearData ?? [], [wearData])
   const item = useMemo(() => (found ? attachWears([found], wears)[0] : undefined), [found, wears])
-  // `some`, not `itemIdsWornOn(...).has(...)`: that builds a Set of every
-  // garment worn that day to answer a question about one of them.
+  // `itemIdsWornOn(...).has(...)`가 아니라 `some` — 그쪽은 옷 하나에 대한 질문에 답하려고
+  // 그날 입은 모든 옷의 Set을 짓는다.
   const wornToday = useMemo(
     () =>
       found != null && wears.some((entry) => entry.itemId === found.id && entry.wornOn === today),
     [found, wears, today],
   )
-  // Sorted, signed and paired in one place — the URLs are matched to the photos
-  // by position, and deriving that order twice is how a tile ends up showing its
-  // neighbour's photo.
+  // 정렬·서명·짝짓기가 한 곳에서 일어난다 — URL이 사진과 위치로 짝지어지므로, 그 순서를
+  // 두 번 파생하면 타일이 이웃의 사진을 보여준다.
   const { photos, slots, markUnloadable } = useItemPhotos(item?.images)
   const [photoIndex, setPhotoIndex] = useState(0)
   const stripRef = useRef<HTMLDivElement>(null)
 
   /**
-   * Which photo the viewer is open on, kept in the history entry rather than in
-   * component state.
+   * 뷰어가 어느 사진으로 열려 있는지를 컴포넌트 상태가 아니라 히스토리 항목에 둔다.
    *
-   * A full-screen overlay that the phone's Back gesture does not close is an
-   * overlay that closes the screen underneath it instead — the user goes to put
-   * the photo down and the whole item disappears. Opening it as a navigation
-   * makes Back close it, and costs nothing else: react-router owns the entry, so
-   * there is no hand-rolled pushState fighting its scroll restoration.
+   * 폰의 뒤로 가기 제스처가 닫지 못하는 전체 화면 오버레이는, 대신 그 아래 화면을 닫는
+   * 오버레이다 — 사진을 내려놓으려다 옷 전체가 사라진다. 이동으로 열면 뒤로 가기가 닫고,
+   * 값도 들지 않는다. react-router가 항목을 소유하므로 스크롤 복원과 싸우는 pushState가 없다.
    *
-   * By photo id, not URL: the URLs are re-signed, and an id still resolves after
-   * that (or after a reload restores this state).
+   * URL이 아니라 사진 id로. URL은 재서명되지만 id는 그 뒤에도 풀린다.
    */
   const openedPhotoId = (location.state as { photoId?: string } | null)?.photoId ?? null
 
-  // Every branch below renders a ScreenHeader, so the live region inside it is
-  // one element across all three and announces each state as it arrives.
+  // 아래 모든 분기가 ScreenHeader를 그리므로, 그 안의 라이브 리전이 셋을 통틀어 한
+  // 요소이고 각 상태를 도착하는 대로 알린다.
   if (isLoading) {
     return (
       <ScreenHeader
         title="옷 상세"
         status="옷 정보를 불러오는 중이에요."
-        // Through `hero`, not as the first thing in the body: the loaded screen
-        // puts its photo outside the body's padding, and a placeholder that sits
-        // inside it is a placeholder in the wrong place — the page would jump
-        // sideways and in by 20px at the moment the item arrives, which is the
-        // reflow these skeletons exist to prevent.
+        // 본문의 첫 요소가 아니라 `hero`로. 불러온 화면은 사진을 본문 패딩 밖에 두므로,
+        // 안에 앉은 자리표시자는 틀린 자리의 자리표시자다 — 옷이 도착하는 순간 페이지가
+        // 본문 패딩만큼 옆으로 튄다.
         hero={<SquarePhoto src={null} alt="" shape="flush" />}
       >
         <DetailSkeletonBody />
@@ -149,11 +135,10 @@ export function ItemDetailPage() {
   const disposed = item.status === 'disposed'
 
   /**
-   * Which photo is centred, read back from the scroll position.
+   * 어느 사진이 가운데인지를 스크롤 위치에서 되읽는다.
    *
-   * The step is measured from where the second tile actually starts rather than
-   * assumed to be the container width, so it stays right whatever the gap
-   * between tiles is.
+   * 컨테이너 폭이라고 가정하지 않고 두 번째 타일이 실제로 시작하는 자리에서 재므로,
+   * 타일 사이 간격이 어떻든 맞는다.
    */
   function handleStripScroll() {
     const strip = stripRef.current
@@ -167,18 +152,17 @@ export function ItemDetailPage() {
     setPhotoIndex(clamp(Math.round(strip.scrollLeft / step), 0, photoCount - 1))
   }
 
-  /** Scrolls the strip to a photo, so it can follow what the viewer is showing. */
+  /** 스트립을 한 사진으로 스크롤한다. 뷰어가 보여주는 것을 따라가도록. */
   function showInStrip(photoId: string) {
     const strip = stripRef.current
     const position = photos.findIndex((image) => image.id === photoId)
     const tile = strip?.children[position]
     const first = strip?.children[0]
     if (!strip || !(tile instanceof HTMLElement) || !(first instanceof HTMLElement)) return
-    // The distance between two tiles, not one tile's `offsetLeft`. Nothing
-    // between here and <body> is positioned, so a tile's offsetParent is the
-    // document and its offsetLeft carries the whole page layout with it — on a
-    // wide window that is the centred column's margin, which is most of a tile,
-    // and the strip snaps to the wrong photo. Between siblings it cancels.
+    // 타일 하나의 `offsetLeft`가 아니라 두 타일 사이의 거리. 여기와 <body> 사이에
+    // positioned된 것이 없어 타일의 offsetParent가 문서이고, offsetLeft가 페이지 레이아웃
+    // 전체를 싣는다 — 넓은 창에서는 가운데 정렬된 컬럼의 여백이고 그것이 타일 대부분이라,
+    // 스트립이 엉뚱한 사진으로 스냅한다. 형제끼리는 그것이 상쇄된다.
     strip.scrollTo({ left: tile.offsetLeft - first.offsetLeft })
   }
 
@@ -190,9 +174,9 @@ export function ItemDetailPage() {
       navigate('/', { replace: true })
       toaster.create({ title: `'${item.title}'을(를) 삭제했어요.`, type: 'success' })
     } catch (e) {
-      // The dialog stays open: the message names a failure of the thing it is
-      // still asking about, and closing it would leave the user looking at an
-      // item that is still there with no idea whether the press registered.
+      // 다이얼로그는 열린 채로 둔다. 메시지가 그 다이얼로그가 아직 묻고 있는 것의 실패를
+      // 이름 부르고 있고, 닫으면 사용자는 여전히 그 자리에 있는 옷을 보며 눌림이 먹혔는지
+      // 알 수 없게 된다.
       toaster.create({
         title: '삭제하지 못했어요',
         description: errorMessage(e, '잠시 후 다시 시도해주세요.'),
@@ -206,9 +190,8 @@ export function ItemDetailPage() {
       title={item.title}
       eyebrow={categoryLabel(item.categoryId)}
       subtitle={item.brand}
-      // A sentence, not the bare title: the title is already the heading two
-      // elements away, and hearing the same words twice in a row reads as a
-      // stutter rather than as an arrival.
+      // 제목 그대로가 아니라 문장으로. 제목은 이미 두 요소 건너의 헤딩이고, 같은 말을
+      // 연달아 듣는 것은 도착이 아니라 더듬는 것으로 읽힌다.
       status={`${item.title} 정보를 불러왔어요.`}
       action={
         <IconButton
@@ -241,31 +224,28 @@ export function ItemDetailPage() {
         />
       }
     >
-      <div className={vstack({ gap: '7', alignItems: 'stretch' })}>
+      <div className={styles.body}>
         {disposed && (
-          <p className={disposedNotice}>
+          <p className={styles.disposedNotice}>
             <PackageOpen size={15} aria-hidden="true" />
             처분한 옷이에요. 옷장 목록에는 보이지 않아요.
           </p>
         )}
 
-        {/* On its own line above 편집 and 처분, and the only one of the three
-            that is a toggle rather than a route.
+        {/* 편집·처분 위 자기 줄에, 그리고 셋 중 라우트가 아니라 토글인 유일한 것.
+            이것이 옷 한 벌짜리 길이다 — 옷장의 오늘 입은 옷은 코디 전체를 고르는 것이고,
+            점심에 걸친 자켓 하나를 더하러 여기 왔는데 격자를 열어 칸 하나를 체크해야
+            한다면 그건 아니다.
 
-            This is the one-garment way in — the wardrobe's 오늘 입은 옷 is for
-            picking a whole outfit, and coming here to add the jacket you threw
-            on at lunch should not mean opening a grid to tick one square.
-
-            `aria-pressed` rather than a label that flips between an action and a
-            state: "오늘 입었어요" as a heading and as a button would be the same
-            words meaning two different things depending on the fill. */}
+            행동과 상태 사이를 오가는 라벨이 아니라 `aria-pressed`다. "오늘 입었어요"가
+            제목이면서 버튼이면 채움색에 따라 같은 말이 두 뜻이 된다. */}
         <Button
           variant={wornToday ? 'solid' : 'surface'}
           shape="block"
           full
           aria-pressed={wornToday}
           icon={<CalendarCheck />}
-          // Preview mode has no session, and the row carries a user_id.
+          // 미리보기 모드에는 세션이 없고, 행은 user_id를 싣는다.
           disabled={!userId}
           loading={toggleWear.isPending}
           onClick={() => {
@@ -282,11 +262,10 @@ export function ItemDetailPage() {
           오늘 입었어요
         </Button>
 
-        <div className={hstack({ gap: '2' })}>
-          {/* No `flex: '1'` on top: `full` already means "take the rest of the
-              line", and stacking a `flex` shorthand on a recipe that sets
-              `flex-shrink` and `width` is the order-dependent override this
-              branch documented a rule against. */}
+        <div className={styles.actions}>
+          {/* 위에 `flex: '1'`을 얹지 않는다. `full`이 이미 "줄의 나머지를 가져간다"는
+              뜻이고, `flex-shrink`와 `width`를 정하는 레시피 위에 flex 단축을 쌓는 것은
+              순서에 좌우되는 덮어쓰기다. */}
           <Link to={`/items/${item.id}/edit`} className={buttonStyle({ full: true })}>
             <Pencil />
             편집
@@ -314,15 +293,15 @@ export function ItemDetailPage() {
           </Button>
         </div>
 
-        <dl className={vstack({ gap: '0', alignItems: 'stretch' })}>
+        <dl className={styles.fields}>
           {DETAIL_FIELDS.map((field) => (
-            <div key={field.label} className={detailRow}>
-              <dt className={detailLabel}>{field.label}</dt>
-              <dd className={detailValue}>
+            <div key={field.label} className={styles.row}>
+              <dt className={styles.rowLabel}>{field.label}</dt>
+              <dd className={styles.rowValue}>
                 {field.value(item, today) ?? (
-                  <span className={css({ color: 'fg.subtle' })}>
+                  <span className={styles.emptyValue}>
                     <span aria-hidden="true">—</span>
-                    <span className={css({ srOnly: true })}>미입력</span>
+                    <span className={styles.srOnly}>미입력</span>
                   </span>
                 )}
               </dd>
@@ -353,16 +332,12 @@ export function ItemDetailPage() {
         onConfirm={() => void handleDelete()}
       />
 
-      {/* Mounted only while open, so it starts from a known state every time
-          rather than holding a stale index and zoom from the last photo.
-          Closing goes back, because opening came forward. */}
-      {/* Gated on the history entry alone, not on there being a photo to show.
-          Unmounting when there is momentarily nothing to draw would close and
-          re-open the viewer — losing the page and the zoom — over a network
-          blip. The viewer draws waiting and failure itself.
-          (A re-sign no longer produces that gap: react-query keeps the previous
-          URLs until the new ones land. This survives as the guard for the
-          states that still can — a photo deleted from under the screen.) */}
+      {/* 열려 있는 동안만 마운트되므로 매번 알려진 상태에서 시작한다. 앞으로 와서 열렸으니
+          닫는 것은 뒤로 가기다.
+
+          그릴 사진이 있는지가 아니라 히스토리 항목만으로 가른다. 잠깐 그릴 것이 없다고
+          언마운트하면 네트워크 한 번 끊긴 것으로 뷰어가 닫혔다 다시 열리며 페이지와 배율을
+          잃는다. 기다림과 실패는 뷰어가 직접 그린다. */}
       {openedPhotoId != null && (
         <PhotoViewer
           slots={slots}
@@ -370,11 +345,10 @@ export function ItemDetailPage() {
           title={item.title}
           onPageChange={(slot) => showInStrip(slot.id)}
           onLoadError={markUnloadable}
-          // Unguarded, and one press is still one pop. Where the browser has a
-          // close watcher the back gesture fires `close` without touching
-          // history, and where it does not the entry pops and the state that
-          // renders this disappears — and removing an open <dialog> from the DOM
-          // does not fire `close`. Only one of the two paths ever runs.
+          // 가드 없이도 한 번 누름이 한 번 pop이다. close watcher가 있는 브라우저에서는
+          // 뒤로 제스처가 히스토리를 건드리지 않고 `close`를 울리고, 없는 곳에서는 항목이
+          // pop되어 이것을 그리는 state가 사라진다 — DOM에서 열린 `<dialog>`를 없애는 것은
+          // `close`를 울리지 않는다. 두 경로 중 하나만 돈다.
           onClose={() => navigate(-1)}
         />
       )}
@@ -383,11 +357,10 @@ export function ItemDetailPage() {
 }
 
 /**
- * The photo carousel, full-bleed above the title.
+ * 제목 위 전폭 사진 캐러셀.
  *
- * Edge to edge rather than inside the body's padding: this is the one thing on
- * the screen the user came to look at, and a garment photograph with a 20px
- * margin on each side is a garment photograph 10% smaller for no reason.
+ * 본문 패딩 안이 아니라 가장자리까지 간다. 사용자가 보러 온 유일한 것이고, 양옆에 여백을
+ * 두른 옷 사진은 이유 없이 작아진 사진이다.
  */
 function PhotoStrip({
   item,
@@ -411,14 +384,13 @@ function PhotoStrip({
   const photoCount = photos.length
 
   return (
-    <section aria-label="사진" className={vstack({ gap: '3', alignItems: 'stretch' })}>
+    <section aria-label="사진" className={styles.photoSection}>
       {photoCount === 0 ? (
         <SquarePhoto src={null} alt="" fallback="empty" shape="flush" />
       ) : (
-        <div ref={stripRef} onScroll={onScroll} className={strip}>
-          {/* Driven by the image rows, not by the URLs: the count is known from
-              the cache immediately, so the right number of squares is on screen
-              before any signing has come back. */}
+        <div ref={stripRef} onScroll={onScroll} className={styles.strip}>
+          {/* URL이 아니라 사진 행이 개수를 정한다 — 캐시에서 즉시 알 수 있으므로 서명이
+              돌아오기 전에 맞는 개수의 정사각이 화면에 있다. */}
           {slots.map((slot, index) => (
             <button
               key={slot.id}
@@ -426,30 +398,23 @@ function PhotoStrip({
               disabled={slot.state !== 'ready'}
               aria-label={`사진 ${index + 1} 크게 보기`}
               onClick={() => onOpen(slot.id)}
-              className={tile}
+              className={styles.tile}
             >
               <SquarePhoto
                 src={slot.url}
                 alt={`${item.title} 사진 ${index + 1}`}
-                // The slot's own state, once `ready` is taken out of it — that
-                // is the case with a photo in it, where there is no fallback to
-                // draw.
+                // 슬롯 자신의 상태에서 `ready`를 뺀 것 — 사진이 있어 그릴 대체물이 없는 경우다.
                 fallback={slot.state === 'ready' ? undefined : slot.state}
-                // Cropped to fill, not fitted. The stored original keeps the
-                // proportions it was shot in, so this does cut the ends off a
-                // tall garment — which is the trade being made: a hero that
-                // letterboxes a portrait photo puts two bars of page colour down
-                // the sides of the one thing the screen is about. The whole
-                // photograph is one tap away in the viewer, which fits it and
-                // lets it be pinched and panned.
+                // 맞추지 않고 채워 자른다. 저장된 원본은 찍힌 비율 그대로라 긴 옷의 끝이
+                // 잘리는데, 그것이 이 거래다 — 세로 사진을 레터박스로 맞추면 화면이
+                // 말하려는 하나의 것 양옆에 페이지 색 띠 둘이 생긴다. 사진 전체는 탭 한
+                // 번 거리의 뷰어에 있다.
                 fit="cover"
                 shape="flush"
-                // Only the first tile is on screen; the rest are a swipe away,
-                // and fetching all five 1280px originals to show one is a cost
-                // paid on the phone's connection.
+                // 화면에 있는 것은 첫 타일뿐이다. 나머지는 스와이프 한 번 뒤에 있고,
+                // 하나를 보이자고 1280px 원본 다섯 장을 받는 것은 폰의 연결로 치르는 값이다.
                 loading={index === 0 ? 'eager' : 'lazy'}
-                // Feeds back into `slots`, which disables this button and drops
-                // the photo from what the viewer will open.
+                // `slots`로 되먹여 이 버튼을 잠그고, 뷰어가 열 사진에서 뺀다.
                 onLoadError={() => onLoadError(slot.id)}
               />
             </button>
@@ -457,16 +422,14 @@ function PhotoStrip({
         </div>
       )}
 
-      {/* Reserved whether or not there is more than one photo, so the block
-          below starts at the same height on every item. */}
-      <div className={hstack({ gap: '1.5', justify: 'center', height: '1.5' })}>
+      {/* 사진이 하나뿐이어도 자리를 잡아둬, 아래 블록이 모든 옷에서 같은 높이에서 시작한다. */}
+      <div className={styles.dots}>
         {photoCount > 1 &&
           photos.map((image, index) => (
             <span
               key={image.id}
-              className={dot}
-              // Clamped rather than read straight: a photo deleted from under
-              // the screen leaves the index pointing past the end.
+              className={styles.dot}
+              // 그대로 읽지 않고 가둔다 — 화면 밑에서 사진이 지워지면 인덱스가 끝을 넘는다.
               data-current={index === clamp(photoIndex, 0, photoCount - 1) || undefined}
             />
           ))}
@@ -476,92 +439,30 @@ function PhotoStrip({
 }
 
 /**
- * Full bleed, one photo per screen.
+ * 옷을 알기 전의 화면.
  *
- * No padding and no gap, so a tile is exactly the width of the column and a
- * swipe moves by exactly one photograph. The previous version inset the strip by
- * the body's padding and left the neighbours peeking, which advertised that
- * there were more — but it also meant no photo was ever shown whole, and the
- * item's own picture was the one thing on the screen that never filled it. The
- * dots under the strip say the same thing without spending the width.
- */
-const strip = css({
-  display: 'flex',
-  gap: '0',
-  overflowX: 'auto',
-  scrollSnapType: 'x mandatory',
-  scrollbarWidth: 'none',
-  '&::-webkit-scrollbar': { display: 'none' },
-})
-
-const tile = css({
-  flex: '0 0 100%',
-  // `start`, not `center`. With the tile exactly as wide as the strip the two
-  // agree, but `start` keeps agreeing if the column ever gains padding, where
-  // centring would leave every snap position half a padding out.
-  scrollSnapAlign: 'start',
-  cursor: 'zoom-in',
-  _disabled: { cursor: 'default' },
-  // Drawn inside the tile. The strip scrolls on x, which computes overflow-y to
-  // auto as well, so a ring offset outwards is clipped on all four sides.
-  layerStyle: 'focusableInset',
-})
-
-const dot = css({
-  width: '1.5',
-  height: '1.5',
-  rounded: 'full',
-  bg: 'border.strong',
-  transitionProperty: 'background-color, width',
-  transitionDuration: 'fast',
-  // The current page is a stadium rather than a bigger circle — it reads at 6px
-  // where a diameter change does not.
-  '&[data-current]': { width: '4', bg: 'accent' },
-})
-
-const disposedNotice = hstack({
-  gap: '2',
-  px: '4',
-  py: '3',
-  rounded: 'field',
-  bg: 'bg.subtle',
-  color: 'fg.muted',
-  textStyle: 'caption',
-})
-
-/**
- * The screen before the item is known.
- *
- * Built from the same field list as the real screen, in the same rows at the
- * same widths, so that what arrives fills the shapes in rather than replacing
- * one screen with another. The labels are not placeholders at all — they are
- * 카테고리, 색상, 브랜드 whichever garment this turns out to be, so there is no
- * reason to draw a grey bar where the real word can go.
- *
- * The title is the one thing that cannot be reserved: it is the item's name, and
- * the header says which screen this is until it can say which item.
+ * 진짜 화면과 같은 필드 목록에서, 같은 행과 같은 너비로 짓는다 — 도착하는 것이 화면을
+ * 갈아치우는 대신 모양을 채운다. 라벨은 자리표시자가 아니다. 어떤 옷이든 카테고리·색상·
+ * 브랜드이므로 진짜 단어가 갈 자리에 회색 막대를 그릴 이유가 없다.
  */
 function DetailSkeletonBody() {
   return (
-    <div className={vstack({ gap: '7', alignItems: 'stretch' })} aria-hidden="true">
-      {/* The photo placeholder is the header's `hero`, so that it lands in the
-          same full-bleed square the real strip occupies. */}
-      <div className={hstack({ gap: '2' })}>
-        <div className={cx(inertButton, css({ flex: '1' }))} />
-        <div className={cx(inertButton, css({ width: '24' }))} />
+    <div className={styles.body} aria-hidden="true">
+      {/* 사진 자리표시자는 헤더의 `hero`다 — 진짜 스트립이 차지하는 전폭 정사각에 앉도록. */}
+      <div className={styles.actions}>
+        <div className={styles.inertButtonWide} />
+        <div className={styles.inertButtonNarrow} />
       </div>
 
-      <dl className={vstack({ gap: '0', alignItems: 'stretch' })}>
+      <dl className={styles.fields}>
         {DETAIL_FIELDS.map((field) => (
-          <div key={field.label} className={detailRow}>
-            <dt className={detailLabel}>{field.label}</dt>
-            {/* The bar sits in a real value cell, so the row is the height of
-                the line of text it is standing in for rather than the height of
-                the bar. */}
-            <dd className={detailValue}>
-              {/* Inline `style` because the width is data, and Panda only emits
-                  what it can see written in the source. */}
-              <span className={valueBar} style={{ width: field.skeletonWidth }} />
+          <div key={field.label} className={styles.row}>
+            <dt className={styles.rowLabel}>{field.label}</dt>
+            {/* 막대가 진짜 값 칸 안에 앉으므로, 행 높이가 막대가 아니라 대신 서 있는
+                텍스트 줄의 높이다. */}
+            <dd className={styles.rowValue}>
+              {/* 너비가 데이터이고 Panda는 소스에 적힌 것만 내보내므로 인라인 `style`. */}
+              <span className={styles.valueBar} style={{ width: field.skeletonWidth }} />
             </dd>
           </div>
         ))}
@@ -570,54 +471,29 @@ function DetailSkeletonBody() {
   )
 }
 
-/** A placeholder sized like a run of text, on the text's own baseline. */
-const valueBar = cx(
-  skeletonSurface,
-  css({ display: 'inline-block', height: '2.5', rounded: 'sm', verticalAlign: 'middle' }),
-)
-
 /**
- * A button-shaped box that is not a button.
+ * 필드 목록, 한 곳에.
  *
- * Borrows the real button's height so the reserved space is exactly right, and
- * gives back everything that promises it can be pressed — no cursor, no hover,
- * and `aria-hidden` on the block above keeps it away from assistive technology.
- */
-const inertButton = cx(skeletonSurface, css({ minHeight: 'tap', rounded: 'full' }))
-
-/**
- * The field list, in one place.
+ * 라벨과 값이 함께 있는 것은 스켈레톤이 라벨을 그리고 불러온 화면이 둘 다 그리기
+ * 때문이다. 목록이 둘이면 발을 맞춰야 하는 목록이 둘이고, 열한 행을 그리는 화면에
+ * 스켈레톤이 여섯 행만 예약하는 어긋남은 데이터가 도착해 페이지가 자랄 때까지 보이지 않는다.
  *
- * Labels and values together, because the skeleton draws the labels and the
- * loaded screen draws both, and two lists would be two lists to keep in step —
- * the skeleton silently reserving six rows for a screen that always renders
- * eleven is exactly that drift, and it is invisible until the data lands and the
- * page grows by a couple of hundred pixels.
- *
- * Every row is rendered whether or not it has anything in it. The list of fields
- * is the same for every garment, so what is missing is as much a part of the
- * screen as what is there — and the blank is the fastest route to 편집 for
- * filling it in.
+ * 비어 있어도 모든 행을 그린다. 필드 목록은 어떤 옷에서나 같으므로, 없는 것도 있는 것만큼
+ * 화면의 일부다 — 그리고 그 빈칸이 채우러 가는 가장 빠른 길이다.
  */
 const DETAIL_FIELDS: {
   label: string
-  /**
-   * `today` is passed in rather than read from the clock here, so the row and
-   * the card that sent the user to this screen cannot disagree about what day it
-   * is — and so this table stays testable without freezing time.
-   */
+  /** `today`를 시계에서 읽지 않고 받으므로, 이 행과 여기로 보낸 카드가 오늘에 대해 어긋나지 않는다. */
   value: (item: Worn<WardrobeItem>, today: string) => React.ReactNode | null
   /**
-   * Width of this row's placeholder bar while the item loads.
+   * 옷을 불러오는 동안 이 행의 자리표시자 막대 너비.
    *
-   * On the field rather than in a list beside it. A parallel array would have to
-   * stay exactly as long as this one, and falling short is silent — an
-   * out-of-range read is `undefined`, which is a legal width and draws a bar of
-   * nothing. Here a field added without one does not compile.
+   * 옆의 목록이 아니라 필드에 있다. 평행 배열은 이 목록과 정확히 같은 길이를 유지해야
+   * 하는데 모자라도 조용하다 — 범위 밖 읽기는 `undefined`이고 그것은 합법적인 너비라
+   * 아무것도 아닌 막대를 그린다. 여기서는 이것 없는 필드가 컴파일되지 않는다.
    *
-   * The values are ragged on purpose: a column of identical bars reads as a
-   * table that failed to render, where uneven ones read as text that has not
-   * arrived yet.
+   * 값이 들쭉날쭉한 것은 의도다. 같은 길이의 막대가 늘어선 열은 렌더에 실패한 표로
+   * 읽히지만, 고르지 않은 쪽은 아직 도착하지 않은 텍스트로 읽힌다.
    */
   skeletonWidth: string
 }[] = [
@@ -626,20 +502,16 @@ const DETAIL_FIELDS: {
     label: '착용',
     skeletonWidth: '42%',
     /**
-     * The one row that says "아직" out loud instead of falling through to the
-     * `—` every other field uses when it is blank.
+     * 다른 필드가 비었을 때 쓰는 `—`로 흘려보내지 않고 "아직"을 소리 내어 말하는 유일한 행.
      *
-     * That dash is read as 미입력, and a garment nobody has recorded yet is not a
-     * field somebody forgot to fill in — it is an answer. The grid card stays
-     * silent in the same situation for the opposite reason: there, on a wardrobe
-     * where nothing has been recorded yet, this sentence would be on every
-     * single card.
+     * 그 대시는 미입력으로 읽히는데, 아무도 기록하지 않은 옷은 누가 채우기를 잊은 필드가
+     * 아니라 하나의 답이다. 격자 카드가 같은 상황에서 침묵하는 것은 반대 이유다 —
+     * 거기서는, 아직 아무것도 기록되지 않은 옷장에서 이 문장이 모든 카드에 붙는다.
      */
     value: (item, today) => {
       if (item.lastWornOn === null) return '아직 기록이 없어요'
-      // Unreachable from a row the database wrote, but chained rather than
-      // interpolated: `${null}` renders the word "null" beside a real count,
-      // which is the sort of thing that only shows up in a screenshot.
+      // DB가 쓴 행에서는 닿지 않지만, 보간이 아니라 연결로 쓴다 — `${null}`은 진짜 개수
+      // 옆에 "null"이라는 단어를 그린다.
       const ago = formatDayAgo(item.lastWornOn, today)
       return ago ? `${ago} · 총 ${item.wearCount}번` : `총 ${item.wearCount}번`
     },
@@ -649,9 +521,9 @@ const DETAIL_FIELDS: {
     skeletonWidth: '40%',
     value: (item) =>
       item.colors.length ? (
-        <span className={hstack({ gap: '3', flexWrap: 'wrap' })}>
+        <span className={styles.colorList}>
           {item.colors.map((color) => (
-            <span key={color} className={hstack({ gap: '1.5' })}>
+            <span key={color} className={styles.colorItem}>
               <ColorSwatch color={color} size="md" />
               {colorLabel(color)}
             </span>
@@ -677,32 +549,3 @@ const DETAIL_FIELDS: {
   },
   { label: '메모', skeletonWidth: '70%', value: (item) => item.memo },
 ]
-
-/**
- * One field, as a row with a rule under it.
- *
- * Rules rather than the gap the list used to have. Eleven label/value pairs
- * floating in whitespace is a wall of text where nothing says which value
- * belongs to which label once a value wraps to two lines; a hairline per row
- * makes it a table without drawing one.
- */
-const detailRow = css({
-  display: 'flex',
-  gap: '4',
-  alignItems: 'flex-start',
-  py: '3',
-  borderBottomWidth: '1px',
-  borderBottomStyle: 'solid',
-  borderColor: 'border.subtle',
-  '&:last-of-type': { borderBottomWidth: '0' },
-})
-
-const detailLabel = css({
-  width: '68px',
-  flexShrink: 0,
-  textStyle: 'caption',
-  color: 'fg.muted',
-  pt: '0.5',
-})
-
-const detailValue = css({ m: '0', flex: '1', textStyle: 'body', whiteSpace: 'pre-wrap' })

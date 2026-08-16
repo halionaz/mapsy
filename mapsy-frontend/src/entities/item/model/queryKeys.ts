@@ -1,26 +1,21 @@
 /**
- * Cache keys for the wardrobe — the item entity's one collection query.
+ * 옷장의 캐시 키 — 옷 엔티티가 가진 하나뿐인 컬렉션 쿼리.
  *
- * Lives in the entity rather than in a shared registry because a key is the
- * *address* of a cache entry, and an address belongs beside the thing that
- * fills it — `fetchWardrobe` is in this slice. A global registry puts the two
- * an import away from each other and gains nothing: the drift it is supposed to
- * prevent is between the mutations below and this file, which are neighbours
- * either way.
+ * 공용 레지스트리가 아니라 엔티티 안에 있다. 키는 캐시 엔트리의 *주소*이고, 주소는
+ * 그것을 채우는 것 옆에 있어야 한다.
  *
- * Two shapes, and the difference matters:
+ * 모양이 둘이고 차이가 중요하다.
  *
- * - `all` is a **prefix**. react-query matches `cancelQueries` and
- *   `invalidateQueries` by prefix, so this reaches every wardrobe query
- *   including ones added later.
- * - `list()` is an **exact** key. `setQueryData` and `getQueryData` do not match
- *   by prefix — they address one entry — so those must go through it.
+ * - `all`은 **접두사**다. react-query가 `cancelQueries`와 `invalidateQueries`를
+ *   접두사로 맞추므로, 나중에 추가될 옷장 쿼리까지 닿는다.
+ * - `list()`는 **정확한** 키다. `setQueryData`·`getQueryData`는 접두사로 맞추지 않고
+ *   엔트리 하나를 가리키므로 반드시 이쪽을 거쳐야 한다.
  */
 
 const ROOT = ['wardrobe'] as const
 
 export const wardrobeKeys = {
   all: ROOT,
-  /** The whole collection — one entry, filtered client-side (PRD §8.4). */
+  /** 컬렉션 전체 — 엔트리 하나, 클라이언트에서 거른다 (PRD §8.4). */
   list: () => [...ROOT, 'list'] as const,
 } as const

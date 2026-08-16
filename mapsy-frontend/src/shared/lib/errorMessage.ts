@@ -1,32 +1,26 @@
 /**
- * Human-readable text for anything thrown by the data layer.
+ * 데이터 계층이 던진 것을 사람이 읽을 문장으로.
  *
- * Supabase's query results carry a plain `{ message, details, hint, code }`
- * object rather than an Error — the client only constructs `PostgrestError` on
- * the `throwOnError` path, which this app does not use. So `instanceof Error`
- * is false and `String(error)` renders "[object Object]", which is what the
- * wardrobe's failure card was showing instead of a reason.
+ * Supabase의 쿼리 결과는 Error가 아니라 평범한 `{ message, details, hint, code }`
+ * 객체를 싣는다 — 클라이언트가 `PostgrestError`를 만드는 것은 이 앱이 쓰지 않는
+ * `throwOnError` 경로뿐이다. 그래서 `instanceof Error`가 거짓이고 `String(error)`는
+ * "[object Object]"가 된다.
  */
 
 /**
- * Every constraint in the `public` schema, mapped to something a person can act
- * on. The form mirrors most of these and normally catches them first; this is
- * the surface left over for anything that slips past, and it should not be raw
- * Postgres text on a Korean screen.
+ * `public` 스키마의 모든 제약을, 사람이 대응할 수 있는 말로.
  *
- * Complete rather than "the ones we expect to hit" — deciding which unreachable
- * ones to skip is the judgement that left gaps three times running. It is no
- * longer maintained by hand either: `dbConstraints.generated.ts` is produced
- * from the schema by `pnpm test:db`, and a unit test fails if this map does not
- * cover it.
+ * 닿을 법한 것만이 아니라 전부다 — 어떤 도달 불가능한 이름을 뺄지 고르는 판단이 여기에
+ * 구멍을 냈다. 손으로 관리하지도 않는다. `dbConstraints.generated.ts`가 `pnpm test:db`로
+ * 스키마에서 생성되고, 이 표가 그것을 덮지 않으면 단위 테스트가 깨진다.
  */
 const CONSTRAINT_MESSAGES: Record<string, string> = {
   items_title_length: '이름이 너무 길어요.',
   items_memo_length: '메모가 너무 길어요.',
   items_brand_length: '브랜드 이름이 너무 길어요.',
   items_size_length: '사이즈 표기가 너무 길어요.',
-  // Fit only ever comes from preset chips, so this is unreachable today — listed
-  // so the map stays a complete mirror of the CHECKs rather than a partial one.
+  // 핏은 프리셋 칩에서만 오므로 오늘은 닿지 않는다 — 표를 CHECK의 완전한 거울로
+  // 두기 위해 적어 둔다.
   items_fit_length: '핏 표기가 너무 길어요.',
   items_price_max: '가격이 너무 커요.',
   items_purchase_place_length: '구매처가 너무 길어요.',
@@ -48,22 +42,9 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   item_images_dimensions_positive: '사진 크기를 읽지 못했어요.',
   item_images_item_sort_key: '사진 순서가 중복됐어요.',
   item_images_item_fk: '사진을 붙일 옷을 찾을 수 없어요.',
-  // The wear log's three, and none of them currently reaches a screen.
-  //
-  // The two unique ones because nothing writes in a way that can trip them:
-  // `set_item_wears` is `on conflict do nothing` and the single toggle is an
-  // `ignoreDuplicates` upsert.
-  //
-  // The foreign key is different — it fires in ordinary use, when a submit
-  // carries a garment another device has deleted — but the wardrobe screen now
-  // reads its SQLSTATE first. A 23503 there means the collection is stale, so
-  // that screen refetches and writes a sentence about *that* instead of asking
-  // this map for one. The detail screen's wear toggle never asks either; its
-  // failure toast is a fixed string.
-  //
-  // Listed anyway, for the reason the fit entry above is: this map is a mirror
-  // of the schema, and deciding which unreachable names to leave out is the
-  // judgement that put gaps in it three times.
+  // 착용 기록의 셋. 지금은 어느 것도 화면에 닿지 않는다 — 유니크 둘은 쓰기가
+  // `on conflict do nothing`과 `ignoreDuplicates` upsert라 걸릴 수 없고, 외래키는
+  // 실제로 울리지만 옷장 화면이 SQLSTATE를 먼저 읽어 자기 문장을 쓴다.
   item_wears_item_date_key: '그날 입은 옷으로 이미 기록돼 있어요.',
   item_wears_item_fk: '착용 기록을 붙일 옷을 찾을 수 없어요.',
   items_id_user_key: '이미 있는 옷이에요.',
@@ -73,18 +54,14 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   item_wears_pkey: '이미 있는 착용 기록이에요.',
 }
 
-/** Exported for the coverage test; not part of the public surface otherwise. */
+/** 커버리지 테스트용 노출. */
 export const MAPPED_CONSTRAINTS = Object.keys(CONSTRAINT_MESSAGES)
 
 /**
- * By SQLSTATE, for violations that carry no constraint name to look up.
+ * 찾아볼 제약 이름이 없는 위반을 위한 SQLSTATE 표.
  *
- * `23502` is the one that matters: NOT NULL is not a row in `pg_constraint` on
- * Postgres 17, so it is absent from the generated inventory and from the map
- * above, and its message — `null value in column "title" of relation "items"
- * violates not-null constraint` — quotes the column, not a constraint. Nothing
- * in `CONSTRAINT_MESSAGES` could ever match it, which left the last path that
- * put raw English on a Korean screen.
+ * `23502`가 그 이유다. NOT NULL은 Postgres 17의 `pg_constraint`에 행이 없어 생성된
+ * 목록에도 위 표에도 없고, 메시지가 제약이 아니라 컬럼을 인용한다.
  */
 const CODE_MESSAGES: Record<string, string> = {
   '22003': '숫자가 너무 커요.', // numeric_value_out_of_range
@@ -95,13 +72,10 @@ const CODE_MESSAGES: Record<string, string> = {
 }
 
 /**
- * Postgres always quotes the constraint name, so pull it out and look it up.
+ * Postgres는 늘 제약 이름을 따옴표로 싣는다. 뽑아서 정확히 찾는다.
  *
- * Scanning the table for a substring hit worked while the names happened to be
- * unrelated, but the map is generated now and only grows: the first entry that
- * is a prefix of a longer name would win on insertion order alone, silently
- * returning the wrong sentence. Extracting first makes the lookup exact and
- * removes the ordering dependency nothing was testing.
+ * 표를 부분 문자열로 훑으면, 어떤 이름이 더 긴 이름의 접두사일 때 삽입 순서만으로
+ * 이기고 조용히 틀린 문장을 돌려준다.
  */
 function friendly(message: string, code: unknown): string | null {
   const named = /constraint "([^"]+)"/.exec(message)?.[1]
@@ -111,16 +85,11 @@ function friendly(message: string, code: unknown): string | null {
 }
 
 /**
- * Whether a data-layer failure carries this SQLSTATE.
+ * 이 실패가 그 SQLSTATE를 싣고 있는지.
  *
- * For the callers that need to *do* something about a specific failure rather
- * than describe it — the wear submit refetches the wardrobe on `23503`, because
- * a foreign key violation there means the collection it built the request from
- * is behind the database.
- *
- * By code and not by matching the message, which is the same reason the lookup
- * above extracts the constraint name instead of scanning for a substring: the
- * text is Postgres's and can be reworded, the code cannot.
+ * 실패를 설명하는 대신 *무언가 해야 하는* 호출부용이다 — 착용 기록 제출은 `23503`에
+ * 옷장을 다시 불러온다. 메시지가 아니라 코드로 보는 이유는 문구는 Postgres 것이고
+ * 바뀔 수 있지만 코드는 아니기 때문.
  */
 export function hasErrorCode(error: unknown, code: string): boolean {
   return error != null && typeof error === 'object' && (error as { code?: unknown }).code === code
@@ -136,10 +105,7 @@ export function errorMessage(error: unknown, fallback = '알 수 없는 오류')
     }
   }
 
-  // Reached only by an Error whose message is empty — the branch above already
-  // handles every Error with text, because `message` is an own property. Without
-  // the `||` this returned '' and the screen rendered a label with nothing after
-  // it.
+  // 메시지가 빈 Error만 여기 닿는다. `||`가 없으면 ''를 돌려주고 화면에는 라벨만 남는다.
   if (error instanceof Error) return error.message || fallback
   return fallback
 }

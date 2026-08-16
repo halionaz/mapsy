@@ -1,18 +1,15 @@
 /**
- * Public API of the wear entity — 착용 기록.
+ * 착용 기록 엔티티의 공개 API.
  *
- * A garment worn on a day. Separate from `entities/item` rather than a few more
- * columns on it, because the two are written at completely different rates: an
- * item is registered once and edited rarely, a wear is recorded every morning.
- * Keeping them apart is what lets a wear toggle leave the item cache — and every
- * signed cover URL in it — untouched.
+ * 하루에 입은 옷. `entities/item`의 컬럼 몇 개가 아니라 별개 엔티티인 것은, 둘이 쓰이는
+ * 빈도가 완전히 다르기 때문이다 — 옷은 한 번 등록하고 드물게 고치지만 착용은 매일 아침
+ * 기록된다. 떼어 둔 덕에 착용 토글이 옷 캐시와 그 안의 모든 서명 URL을 건드리지 않는다.
  */
 
 export type { WearEntry, WearSummary, Worn } from './model/types'
 
 export { dropItemWears, useSetWears, useToggleWear, useWears } from './model/queries'
 
-// `summarizeWears` is deliberately not here. Its only caller is `attachWears`
-// beside it, and its own tests reach it through the module — exporting it was
-// surface with nothing behind it.
+// `summarizeWears`는 일부러 없다. 유일한 호출부가 옆의 `attachWears`이고, 테스트는
+// 모듈로 직접 닿는다.
 export { attachWears, itemIdsWornOn } from './lib/wearStats'

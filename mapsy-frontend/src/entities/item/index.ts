@@ -1,10 +1,8 @@
 /**
- * Public API of the item entity.
+ * 옷 엔티티의 공개 API.
  *
- * Everything outside this folder imports from `@/entities/item` and nothing
- * deeper — so `api/`, `model/` and `ui/` can be rearranged without touching a
- * call site, and what is internal stays internal (`fetchWardrobe`, `mapRow`,
- * `coverOf`: reachable only through the hooks below).
+ * 이 폴더 밖에서는 `@/entities/item`까지만 import한다. 그래야 `api/`·`model/`·`ui/`를
+ * 호출부를 건드리지 않고 재배치할 수 있고, 내부인 것은 내부로 남는다.
  */
 
 export type {
@@ -25,7 +23,8 @@ export {
 
 export {
   useCreateItem,
-  useDeleteItem,
+  // 화면이 아니라 `features/item-delete`가 쓴다 — 이것만으로는 착용 기록 캐시가 남는다.
+  useDeleteItemRow,
   useDiscardUpload,
   useRetryUpload,
   useSetFavorite,

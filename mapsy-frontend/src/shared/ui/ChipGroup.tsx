@@ -1,31 +1,18 @@
-import { css } from 'styled-system/css'
-import { hstack } from 'styled-system/patterns'
-
-import { chipLegend, chipStyle } from './chipStyle'
+import { chipLegend, chipMaxHint, chipRow, chipStyle, fieldset } from './Chip.css'
 
 /**
- * Selectable chips — the single control the whole app uses for choosing from a
- * preset (category, colour, size, fit, season, sort).
- *
- * Native `<select>` is the obvious alternative, but a wardrobe form asks six of
- * these in a row and stacked dropdowns turn registration into a chore. Chips
- * show the options and their state at once, which is what makes the optional
- * section skimmable enough to actually fill in.
- *
- * Every choice here can end up empty — a multi-select with nothing ticked, a
- * single-select cleared by tapping its own chip again. A choice that must have
- * an answer is `ChipSelect`, which cannot express the empty one.
+ * 비워둘 수 있는 선택 — 아무것도 안 고른 다중 선택, 같은 칩을 다시 눌러 해제한 단일 선택.
+ * 반드시 답이 있어야 하는 선택은 `ChipSelect`이고, 그쪽은 빈 상태를 표현할 수 없다.
  */
 
 export interface ChipOption<T extends string> {
   value: T
   label: string
   /**
-   * Drawn before the label — a colour dot, a small glyph.
+   * 라벨 앞에 그려지는 색 점이나 작은 글리프.
    *
-   * Separate from `label` rather than widening it to `ReactNode`: the label is
-   * also the accessible name of the chip, and a node cannot be relied on to
-   * produce one.
+   * `label`을 ReactNode로 넓히지 않고 분리한 이유는 label이 칩의 접근 가능한 이름이기도
+   * 해서다 — 노드는 이름을 만들어낸다고 보장할 수 없다.
    */
   icon?: React.ReactNode
 }
@@ -35,9 +22,9 @@ interface ChipGroupProps<T extends string> {
   options: readonly ChipOption<T>[]
   selected: readonly T[]
   onChange: (next: T[]) => void
-  /** Single-select clears the other choice instead of accumulating. */
+  /** 단일 선택은 누적하지 않고 기존 선택을 대체한다. */
   multiple?: boolean
-  /** Caps a multi-select; further chips disable rather than silently no-op. */
+  /** 다중 선택의 상한. 넘으면 나머지 칩이 disabled가 된다. */
   max?: number
 }
 
@@ -65,17 +52,12 @@ export function ChipGroup<T extends string>({
   }
 
   return (
-    <fieldset className={css({ border: 'none', p: '0', m: '0' })}>
+    <fieldset className={fieldset}>
       <legend className={chipLegend}>
         {label}
-        {max != null && <span className={css({ color: 'fg.subtle' })}>{` · 최대 ${max}개`}</span>}
+        {max != null && <span className={chipMaxHint}>{` · 최대 ${max}개`}</span>}
       </legend>
-      <div
-        className={hstack({
-          gap: '2',
-          flexWrap: 'wrap',
-        })}
-      >
+      <div className={chipRow}>
         {options.map((option) => {
           const active = selected.includes(option.value)
           return (

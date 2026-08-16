@@ -1,26 +1,24 @@
 import { SearchX } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { css } from 'styled-system/css'
 
 import { storedPhotoEntries, useUpdateItem, useWardrobe } from '@/entities/item'
 import { ItemForm, type ItemFormValues } from '@/features/item-form'
 import { useItemPhotos } from '@/features/item-photos'
 import { releasePreview } from '@/shared/lib/image'
 import { Spinner } from '@/shared/ui/Button'
-import { buttonStyle } from '@/shared/ui/buttonStyle'
+import { buttonStyle } from '@/shared/ui/Button.css'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { ScreenHeader } from '@/shared/ui/ScreenHeader'
 import { toaster } from '@/shared/ui/toast'
+import * as styles from './ItemEditPage.css'
 
 /**
  * 옷 편집 (PRD §6.3).
  *
- * The same form as registration, prefilled — photos included. Adding, removing
- * and reordering all happen in the form's own list and are written when 저장 is
- * pressed, so 취소 leaves the garment exactly as it was. What that costs is a
- * save that waits on the upload: registration hands its photos to a background
- * store and returns to the grid immediately, which it can because there is
- * nothing on screen yet that the upload could contradict.
+ * 등록과 같은 폼을 채워서 쓴다 — 사진까지 포함해서. 추가·삭제·재정렬이 전부 폼 자신의
+ * 목록에서 일어나고 저장을 누를 때 쓰이므로, 취소하면 옷이 있던 그대로 남는다. 대가는
+ * 업로드를 기다리는 저장이다. 등록은 사진을 백그라운드 스토어에 넘기고 곧장 격자로
+ * 돌아가는데, 그럴 수 있는 것은 아직 화면에 그 업로드와 모순될 것이 없기 때문이다.
  */
 export function ItemEditPage() {
   const { id } = useParams()
@@ -31,32 +29,27 @@ export function ItemEditPage() {
   const item = data?.find((entry) => entry.id === id)
 
   /**
-   * Thumbnails for the photos the item already has.
+   * 옷이 이미 가진 사진의 썸네일.
    *
-   * Through the detail screen's hook rather than a second signing of the smaller
-   * thumbnail paths. This screen is only reachable from that one, so its URLs
-   * are already in the cache and already decoded by the browser — asking for
-   * different URLs for the same five photos would download them all again. The
-   * trade is a deep link straight to /edit, which then pulls full-size originals
-   * into 84px tiles.
+   * 더 작은 썸네일 경로를 다시 서명하지 않고 상세 화면의 훅을 거친다. 이 화면은 거기서만
+   * 닿으므로 그 URL이 이미 캐시에 있고 브라우저가 이미 디코드했다 — 같은 다섯 장에 다른
+   * URL을 요구하면 전부 다시 받는다. 대가는 /edit로 바로 들어오는 딥링크이고, 그때는
+   * 작은 타일에 원본이 들어온다.
    */
   const { slots } = useItemPhotos(item?.images)
-  // A pending slot is left out entirely: absent means "still coming", which is
-  // what the picker draws a skeleton for. Built inline — nothing downstream
-  // compares this by identity, so memoising it would buy a hook and a dependency
-  // array and no measured saving.
+  // pending 슬롯은 아예 뺀다 — 없음이 "오는 중"이고, 피커가 스켈레톤을 그리는 상태다.
+  // 인라인으로 짓는다. 아래쪽에서 이것을 identity로 비교하는 것이 없다.
   const storedUrls = new Map(
     slots.flatMap((slot) => (slot.state === 'pending' ? [] : [[slot.id, slot.url] as const])),
   )
 
-  // The wardrobe is normally already in cache by the time anyone reaches this
-  // screen — it is opened from the detail view — so these are announced rather
-  // than drawn as a skeleton: there is nothing here to reserve space for that
-  // the form below will not immediately fill.
+  // 이 화면에 닿을 때쯤이면 옷장이 보통 이미 캐시에 있다(상세 화면에서 열린다).
+  // 그래서 스켈레톤을 그리지 않고 알리기만 한다 — 아래 폼이 곧장 채우지 않을, 자리를
+  // 잡아둘 것이 여기 없다.
   if (isLoading) {
     return (
       <ScreenHeader title="옷 편집" status="옷 정보를 불러오는 중이에요.">
-        <div className={css({ display: 'grid', placeItems: 'center', py: '16' })}>
+        <div className={styles.loading}>
           <Spinner size={22} />
         </div>
       </ScreenHeader>
@@ -88,9 +81,9 @@ export function ItemEditPage() {
           navigate(`/items/${item.id}`, { replace: true })
           toaster.create({ title: '저장했어요.', type: 'success' })
 
-          // The picked photos are in storage now, so their previews can go. Held
-          // until here rather than released at submit: a save that fails leaves
-          // the form standing, and retrying it re-uploads from these same bytes.
+          // 고른 사진이 이제 스토리지에 있으니 미리보기를 놓아준다. 제출 시점이 아니라
+          // 여기까지 붙들었던 것은, 실패한 저장이 폼을 세워둔 채 남기고 재시도가 바로 이
+          // 바이트에서 다시 올리기 때문이다.
           for (const entry of photos) {
             if (entry.kind === 'picked') releasePreview(entry.photo)
           }
@@ -100,9 +93,8 @@ export function ItemEditPage() {
   }
 
   return (
-    // Same form, so the same pinned action bar — and the same reason for it: the
-    // optional section opens by default when an item already has values in it,
-    // which is exactly the case where 저장 is furthest from the last field.
+    // 같은 폼이니 같은 고정 액션 바이고 이유도 같다 — 이미 값이 있는 옷은 선택 구획이
+    // 기본으로 열리고, 저장이 마지막 필드에서 가장 먼 것이 정확히 그 경우다.
     <ScreenHeader title="옷 편집" status={`${item.title} 편집`} flushBottom>
       <ItemForm
         initial={{ ...item, photos: storedPhotoEntries(item.images) }}

@@ -22,29 +22,24 @@ import {
 } from './mapRow'
 
 /**
- * Supabase access for the wardrobe.
+ * 옷장의 Supabase 접근.
  *
- * Reads and updates carry no owner condition: the policies already scope every
- * row to auth.uid(), and repeating that in the client would suggest the security
- * lives here rather than in the database.
+ * 읽기와 갱신에는 소유자 조건이 없다. 정책이 이미 모든 행을 auth.uid()로 좁히고,
+ * 클라이언트에서 그것을 되풀이하면 보안이 DB가 아니라 여기 있는 것처럼 보인다.
  *
- * **Deletes are the exception** — `deleteItem` and the rollback inside
- * `createItem` both add `.eq('user_id', …)`. Not because RLS is doubted, but
- * because those two are the only queries whose mistake cannot be taken back: a
- * `delete` that matches more rows than intended has no undo, so it is worth one
- * redundant predicate. Do not "tidy" them into consistency with the rest.
+ * **삭제만 예외다** — `deleteItem`과 `createItem` 안의 롤백은 `.eq('user_id', …)`를
+ * 더한다. RLS를 의심해서가 아니라, 그 둘만이 실수를 되돌릴 수 없는 쿼리이기 때문이다.
+ * 나머지와 일관되게 "정리"하지 말 것.
  */
 
 const ITEM_COLUMNS = '*'
 const IMAGE_COLUMNS = '*'
 
 /**
- * Ceilings on the full-collection fetch. `warnIfTruncated` explains what the
- * `count: 'exact'` beside each one is for.
+ * 전량 로드의 상한. 옆의 `count: 'exact'`가 무엇을 위한 것인지는 `warnIfTruncated`에 있다.
  *
- * PRD §8.4 puts the move to server-side filtering at ~1,000 garments, so these
- * sit just past that: reaching one means the client-side approach has been
- * outgrown, not that something broke.
+ * PRD §8.4이 서버 사이드 필터링으로 넘어갈 지점을 옷 1,000벌쯤으로 잡으므로 그 조금
+ * 위에 둔다 — 여기 닿았다는 것은 고장이 아니라 방식을 넘어섰다는 뜻이다.
  */
 const ITEM_FETCH_LIMIT = 2000
 const IMAGE_FETCH_LIMIT = ITEM_FETCH_LIMIT * 5
@@ -84,8 +79,7 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
     images: imagesByItem.get(row.id) ?? [],
   }))
 
-  // One signing call for every cover rather than one per item — the round trips
-  // are what cost, not the number of paths.
+  // 커버 전부를 한 번에 서명한다 — 비용은 경로 수가 아니라 왕복이다.
   const coverPaths = items
     .map((item) => coverOf(item.images)?.thumbPath)
     .filter((path): path is string => Boolean(path))
@@ -99,11 +93,10 @@ export async function fetchWardrobe(): Promise<WardrobeItem[]> {
 }
 
 /**
- * The cover is the lowest sort_order, not literally 0.
+ * 커버는 `sort_order`가 가장 작은 것이지, 글자 그대로 0이 아니다.
  *
- * `set_item_images` numbers by position so the two are normally the same, but
- * reading it as "position 0 or nothing" turns any gap — an older row, a
- * half-applied change — into a card with photos and a blank thumbnail.
+ * `set_item_images`가 위치로 번호를 매기니 보통은 같지만, "0번 아니면 없음"으로 읽으면
+ * 어떤 틈이든 사진은 있는데 썸네일이 빈 카드가 된다.
  */
 function coverOf<T extends { sortOrder: number }>(images: T[]): T | undefined {
   return images.reduce<T | undefined>(
@@ -117,21 +110,15 @@ function contentTypeOf(ext: ProcessedPhoto['ext']): string {
 }
 
 /**
- * Creates an item and uploads its photos.
+ * 옷을 만들고 사진을 올린다.
  *
- * Photos go up **before** the row. The item id is generated client-side so the
- * storage paths can be built without the database having seen anything yet.
+ * 사진이 행보다 **먼저** 올라간다. 옷 id를 클라이언트에서 만들어 DB가 아무것도 보기 전에
+ * 스토리지 경로를 지을 수 있게 한다. 반대 순서(insert → upload → 실패 시 delete)는
+ * 롤백까지 실패하면 사진 없는 유령 행을 남기고, 그건 흔한 짝이다 — 업로드와 롤백이
+ * 실패하는 이유가 둘 다 사라진 네트워크다.
  *
- * The previous order — insert, upload, delete-on-failure — left a ghost behind
- * whenever the rollback failed too. That is not a rare pairing: the usual reason
- * an upload fails is that the network went away, which is also the reason the
- * rollback fails. The result was a photo-less row that the grid renders as a
- * blank card with no way to tell what it refers to.
- *
- * The window is much smaller now, though not zero: if the item row lands and
- * the image rows do not, the same rollback problem applies to the delete below.
- * That failure is reported rather than swallowed, because it is the one case
- * that can still leave a photo-less row behind.
+ * 창은 줄었지만 0은 아니다. 옷 행만 들어간 경우의 delete에 같은 문제가 있어, 그 실패는
+ * 삼키지 않고 알린다.
  */
 export async function createItem(
   draft: ItemDraft,
@@ -177,8 +164,7 @@ export async function createItem(
         coverUrl: cover ? (signed.get(cover.thumbPath) ?? null) : null,
       }
     } catch (imageError) {
-      // The row exists but has no photos, which is the state this ordering is
-      // meant to prevent — take it back out.
+      // 행은 있는데 사진이 없다. 이 순서가 막으려던 상태이므로 도로 뺀다.
       const { error: rollbackError } = await supabase
         .from('items')
         .delete()
@@ -199,11 +185,10 @@ export async function createItem(
 }
 
 /**
- * Uploads every photo and returns what will describe them.
+ * 사진을 전부 올리고, 그것을 서술할 값을 돌려준다.
  *
- * Writes nothing to the database — the caller does, so that a failure here
- * leaves no trace at all. Objects are tracked as they land, and a failure
- * part-way through removes the ones already written rather than orphaning them.
+ * DB에는 아무것도 쓰지 않는다 — 여기서 실패하면 흔적이 아예 남지 않도록. 올라간 객체는
+ * 그때그때 기록하고, 중간에 실패하면 이미 쓴 것을 지운다.
  */
 async function uploadPhotos(
   itemId: string,
@@ -222,20 +207,14 @@ async function uploadPhotos(
       const thumbPath = `${base}_thumb.${photo.ext}`
       const contentType = contentTypeOf(photo.ext)
 
-      // Recorded before either upload is attempted, not after one reports
-      // success. A request that fails may still have left its object behind —
-      // an aborted or dropped connection is this end giving up, not the server
-      // rolling back — and a path that was never recorded is one the cleanup
-      // below walks straight past. Removing an object that does not exist costs
-      // nothing; leaving one that does is the orphan this function exists to
-      // prevent.
+      // 성공 보고 뒤가 아니라 업로드를 시도하기 전에 적는다. 실패한 요청도 객체를
+      // 남겼을 수 있고 — 끊긴 연결은 이쪽이 포기한 것이지 서버가 되돌린 것이 아니다 —
+      // 적히지 않은 경로는 아래 정리가 그냥 지나친다.
       paths.push(path, thumbPath)
 
-      // allSettled, not all. A failed upload usually resolves into `{ error }`
-      // rather than rejecting (see `settledError`), but the rejection path is
-      // real for anything supabase-js does not recognise — and `Promise.all`
-      // rejects on the first of those without waiting for its sibling, so a
-      // sibling that lands afterwards would go unseen.
+      // all이 아니라 allSettled. 실패한 업로드는 보통 reject가 아니라 `{ error }`로
+      // resolve하지만(`settledError`) rejection 경로도 실재하고, `Promise.all`은 형제를
+      // 기다리지 않고 먼저 거절해 뒤늦게 올라간 객체를 놓친다.
       const [full, thumb] = await Promise.allSettled([
         storage.upload(path, photo.full, { contentType }),
         storage.upload(thumbPath, photo.thumb, { contentType }),
@@ -262,21 +241,17 @@ async function uploadPhotos(
 }
 
 /**
- * Rewrites an item's photos to match `entries`: uploads the ones picked in the
- * form, drops the stored ones the form let go of, and puts what is left in the
- * order given.
+ * 옷의 사진 목록을 `entries`에 맞춰 다시 쓴다 — 폼에서 고른 것을 올리고, 폼이 놓은
+ * 저장본을 지우고, 남은 것을 주어진 순서로 놓는다.
  *
- * All three land in one database call because they cannot be separated. Each
- * PostgREST request is its own transaction, and the `sort_order` CHECK is
- * immediate, so a five-photo item has no free position to insert into until
- * something has been deleted — split across requests, the deletion commits on
- * its own and a save that then fails has taken photos away without adding any.
- * `supabase/migrations/20260816000001_set_item_images.sql` carries the argument.
+ * 셋이 DB 호출 하나에 들어가는 것은 나눌 수 없기 때문이다. PostgREST 요청은 각각이
+ * 트랜잭션이고 `sort_order` CHECK는 즉시라, 사진 다섯 장짜리 옷에는 무언가 지워지기
+ * 전까지 넣을 자리가 없다. 요청을 쪼개면 삭제가 혼자 커밋되고, 이어진 저장이 실패하면
+ * 추가는 없이 사진만 사라진다.
+ * `supabase/migrations/20260816000001_set_item_images.sql`에 근거가 있다.
  *
- * Storage is the part that cannot be in the transaction, so it is ordered around
- * it: uploads go first (an unreferenced object is waste, a missing one is a
- * broken image), and the objects the rewrite orphaned are removed only once it
- * has committed.
+ * 트랜잭션에 넣을 수 없는 스토리지는 그 둘레에 배치한다 — 업로드가 먼저(참조 없는 객체는
+ * 낭비지만 없는 객체는 깨진 이미지다), 고아가 된 객체는 커밋된 뒤에만 지운다.
  */
 export async function setItemPhotos(
   item: ItemWithImages,
@@ -291,41 +266,32 @@ export async function setItemPhotos(
   })
 
   if (error) {
-    // Only when the *database* refused. A rejected statement rolls the function
-    // back whole, so nothing refers to these objects and they are pure waste.
+    // *DB가* 거부했을 때만. 거절된 문장은 함수를 통째로 되돌리므로 이 객체를 가리키는
+    // 것이 없고 순수한 낭비다.
     //
-    // Anything else is a maybe, and a maybe has to be left alone: the write may
-    // have committed with the answer lost on the way back, and removing the
-    // objects then leaves rows rendering broken images — the direction
-    // `deleteItem` orders itself to avoid. Orphans are recoverable; missing
-    // files are not.
+    // 나머지는 전부 "모른다"이고, 모르는 것은 두어야 한다. 쓰기는 커밋됐는데 답이 오는
+    // 길에 사라졌을 수 있고, 그때 객체를 지우면 행이 깨진 이미지를 그린다. 고아는
+    // 복구할 수 있지만 사라진 파일은 아니다.
     //
-    // That is why this is a 4xx window rather than `status !== 0`. A dead
-    // connection does resolve with `status: 0` (measured against supabase-js
-    // 2.111.0), but a 5xx does not: the gateway in front of PostgREST answers
-    // 502/504 for a request that may well have committed, and reading "it
-    // answered" as "it rolled back" is exactly wrong there.
+    // `status !== 0`이 아니라 4xx 구간인 이유가 그것이다. 5xx는 커밋됐을 수도 있는
+    // 요청에 PostgREST 앞의 게이트웨이가 답한 것이라, "답했다"를 "되돌렸다"로 읽으면 안 된다.
     if (status >= 400 && status < 500) await removeObjects(paths)
     throw error
   }
 
   const images = (data ?? []).map(toItemImage)
 
-  // What to clean up comes from what came back, not from what the form asked
-  // for: the form says what to keep, the server says what is left. A photo added
-  // on another device since this screen loaded is deleted by the rewrite and its
-  // paths were never ours to name — that leaves an orphan, which is the
-  // recoverable side of the same trade.
+  // 무엇을 지울지는 폼이 아니라 돌아온 것에서 정한다 — 폼은 남길 것을, 서버는 남은 것을
+  // 말한다. 이 화면이 뜬 뒤 다른 기기가 더한 사진은 이 재작성이 지우지만 그 경로는 애초에
+  // 우리가 부를 수 있는 이름이 아니었다. 고아가 남고, 그것이 이 거래의 복구 가능한 쪽이다.
   const kept = new Set(images.map((image) => image.id))
   const dropped = item.images.filter((image) => !kept.has(image.id))
   await removeObjects(dropped.flatMap((image) => [image.path, image.thumbPath]))
 
-  // Signing can fail on its own, and it throws — by then the rewrite has
-  // committed, so the screen would report a failure for a save that landed.
-  // Left as the other two signing call sites have it: a retry is convergent
-  // here (the next attempt states the whole list again, over whatever the last
-  // one wrote), and the alternative is patching the grid with a cover URL that
-  // could not be signed, which is a blank card for a garment that has photos.
+  // 서명은 따로 실패할 수 있고 던진다 — 그때는 이미 재작성이 커밋된 뒤라, 화면은
+  // 성공한 저장에 실패를 알린다. 그래도 그대로 둔다. 재시도가 수렴하고(다음 시도가 전체
+  // 목록을 다시 말한다), 대안은 서명되지 않은 커버 URL로 격자를 기워 사진이 있는 옷을
+  // 빈 카드로 만드는 것이다.
   const cover = coverOf(images)
   const signed = await signPaths(cover ? [cover.thumbPath] : [])
 
@@ -358,16 +324,13 @@ export async function setStatus(id: string, status: ItemStatus): Promise<void> {
 }
 
 /**
- * Deletes an item, its image rows and its storage objects.
+ * 옷과 그 사진 행, 스토리지 객체를 지운다.
  *
- * Paths are read first, then the row goes, then the objects.
+ * 경로를 먼저 읽고, 행을 지우고, 객체를 지운다.
  *
- * Emptying storage first looks tidier — the cascade takes the paths with it, so
- * they have to be captured beforehand either way — but it fails in the worse
- * direction. If the objects are removed and the row delete then fails, the
- * photos are gone for good and the item is left rendering broken images. The
- * other order can only leave orphaned objects, and those are recoverable: the
- * bucket can be listed and reconciled against the rows.
+ * 스토리지를 먼저 비우는 쪽이 깔끔해 보이지만 더 나쁜 방향으로 실패한다. 객체를 지운 뒤
+ * 행 삭제가 실패하면 사진은 영영 사라지고 옷은 깨진 이미지를 그린다. 이 순서가 남길 수
+ * 있는 것은 고아 객체뿐이고, 그것은 버킷을 나열해 행과 맞춰보면 복구된다.
  */
 export async function deleteItem(id: string, userId: string): Promise<void> {
   const supabase = getSupabase()
@@ -388,16 +351,12 @@ export async function deleteItem(id: string, userId: string): Promise<void> {
     .select('id')
   if (error) throw error
 
-  // PostgREST does not call "matched nothing" an error, so without asking for
-  // the rows back a delete that hit none reports success — and the caller acts
-  // on it: the card is patched out of the cache, the screen navigates away, and
-  // the garment reappears at the next refetch with nothing to explain it. The
-  // two predicates above are what make that reachable, and RLS can produce the
-  // same empty result on its own. A guard that can miss is a guard whose result
-  // has to be read.
+  // PostgREST는 "아무것도 안 맞음"을 에러로 부르지 않는다. 행을 돌려받지 않으면 하나도
+  // 못 지운 삭제가 성공으로 보고되고, 호출부는 그대로 움직인다 — 카드가 캐시에서
+  // 빠지고 화면이 떠나고, 다음 갱신에 옷이 설명 없이 되살아난다.
   if (!deleted?.length) throw new Error('삭제할 옷을 찾지 못했어요.')
 
-  // Not fatal: the row is gone, which is what was asked for. A leftover object
-  // costs quota, and failing here would tell the user the delete did not work.
+  // 치명적이지 않다 — 요청받은 행은 사라졌다. 남은 객체는 용량을 먹을 뿐이고, 여기서
+  // 실패하면 사용자에게 삭제가 안 됐다고 말하게 된다.
   await removeObjects(paths)
 }

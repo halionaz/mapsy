@@ -4,28 +4,21 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 /**
- * What react-query reports when a refetch fails on a query that already has
- * data — the premise `WardrobePage` splits its screens on.
+ * 이미 데이터를 가진 쿼리의 갱신이 실패했을 때 react-query가 무엇을 보고하는가 —
+ * `WardrobePage`가 자기 화면을 가르는 전제.
  *
- * That screen draws the grid whenever an answer has arrived and replaces the
- * screen only when nothing was cached, which is the right split only if `error`
- * arrives *beside* `data` rather than instead of it. It does. The screen's own
- * tests cannot establish that: they mock `useWardrobe` and hand it whatever
- * combination they please, so they assert a reaction to a premise they invent.
- * This asserts the premise against the real library.
+ * 그 화면은 답이 도착했으면 격자를 그리고 캐시된 것이 없을 때만 화면을 갈아치우는데,
+ * 그 가름이 옳으려면 `error`가 `data` *대신*이 아니라 *함께* 와야 한다. 실제로 그렇다.
+ * 화면 자신의 테스트로는 세울 수 없다 — `useWardrobe`를 목으로 바꿔 원하는 조합을
+ * 건네므로, 스스로 지어낸 전제에 대한 반응을 검사할 뿐이다.
  *
- * The hook below reads the fields the way the screen does, and that is
- * load-bearing rather than stylistic. react-query v5 tracks which properties a
- * render actually touched and re-renders only for those, so a hook that returns
- * the query object without reading `error` never re-renders when `error`
- * appears: `result.current` stays the snapshot from before the failure and
- * reports `status: 'success'`, `error: null`. Two hand-written probes were fooled
- * by exactly that before this test existed, and concluded the opposite of what
- * is below. The screen destructures what it needs on every render, which is what
- * keeps it subscribed.
+ * 아래 훅이 화면과 같은 방식으로 필드를 읽는 것은 문체가 아니라 필수다. react-query v5는
+ * 렌더가 실제로 만진 프로퍼티만 추적해 그것에만 다시 그리므로, `error`를 읽지 않고 쿼리
+ * 객체를 돌려주는 훅은 `error`가 나타나도 다시 그려지지 않는다 — `result.current`가
+ * 실패 이전 스냅숏에 머물러 `status: 'success'`, `error: null`을 보고한다.
  */
-describe('react-query, the premise the wardrobe rests on', () => {
-  it('sets `error` alongside the data it already had, and stays out of `isLoading`', async () => {
+describe('react-query — 옷장이 딛고 선 전제', () => {
+  it('이미 가진 데이터 옆에 `error`를 세우고 `isLoading`으로 돌아가지 않는다', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const queryFn = vi
       .fn<() => Promise<string[]>>()
@@ -54,13 +47,12 @@ describe('react-query, the premise the wardrobe rests on', () => {
     await result.current.refetch()
     await waitFor(() => expect(result.current.isFetching).toBe(false))
 
-    // The three facts the screen reads, in the state that produced the bug: rows
-    // still in hand, a failure to report, and no reason to draw skeletons.
+    // 버그를 만든 상태에서 화면이 읽는 세 사실 — 손에 남은 행, 알릴 실패, 스켈레톤을
+    // 그릴 이유 없음.
     expect(result.current.data).toEqual(['마산 플리스'])
-    // `toBeInstanceOf`, not `not.toBeNull()` — that one is `!== null`, so an
-    // upgrade that reported failures as `undefined` would keep this test green
-    // while the screen's `error != null` quietly stopped matching and the
-    // failure went unmentioned. Which is the scenario this file exists for.
+    // `not.toBeNull()`이 아니라 `toBeInstanceOf` — 그쪽은 `!== null`이라, 실패를
+    // `undefined`로 보고하는 업그레이드가 오면 이 테스트는 통과한 채 화면의
+    // `error != null`만 조용히 안 맞게 되고 실패가 언급되지 않는다.
     expect(result.current.error).toBeInstanceOf(Error)
     expect(result.current.isLoading).toBe(false)
   })

@@ -1,9 +1,8 @@
 /*
- * Panda's cascade layers, in priority order. Declaring them here — before the
- * generated CSS lands — fixes the ordering regardless of what order the rules
- * themselves arrive in.
+ * Panda의 캐스케이드 레이어를 우선순위 순으로. 생성된 CSS가 도착하기 전에 여기서
+ * 선언하므로, 규칙 자체가 어떤 순서로 오든 순서가 정해진다.
  *
- * Everything else (reset, base body styles, tokens) is generated from
- * panda.config.ts. Hand-written CSS does not belong in this file.
+ * 나머지(reset, body 기본 스타일, 토큰)는 panda.config.ts에서 생성된다.
+ * 손으로 쓴 CSS는 이 파일에 오지 않는다.
  */
 @layer reset, base, tokens, recipes, utilities;

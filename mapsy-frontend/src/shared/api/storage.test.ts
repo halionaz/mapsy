@@ -3,15 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { removeObjects } from './storage'
 
 /**
- * Cleanup is best-effort, and "best-effort" has been got wrong twice here in
- * opposite directions — once by letting the call throw, once by retrying a dead
- * network path by path. Both are invisible from the call sites, and one of them
- * reported an already-deleted garment to the user as a failed delete.
+ * 정리는 최선을 다하는 일이고, "최선"이 여기서 반대 방향으로 두 번 틀렸다 — 한 번은
+ * 호출이 던지게 두어서, 한 번은 끊긴 네트워크를 경로마다 다시 시도해서. 둘 다 호출부에서는
+ * 보이지 않고, 그중 하나는 이미 지워진 옷을 삭제 실패로 사용자에게 알렸다.
  *
- * The shapes below are what supabase-js 2.111.0 actually produces, measured
- * against a live client: a request that never arrives *resolves* carrying a
- * `StorageUnknownError` with no `status`, and an API refusal resolves carrying a
- * `StorageApiError` with a numeric one.
+ * 아래 모양은 supabase-js가 실제로 만드는 것이다 — 닿지 않은 요청은 `status`가 없는
+ * `StorageUnknownError`를 실어 *resolve*하고, API 거부는 숫자 status를 가진
+ * `StorageApiError`를 실어 resolve한다.
  */
 
 const unreachable = () => Object.assign(new Error('fetch failed'), { __isStorageError: true })
@@ -26,10 +24,9 @@ vi.mock('./supabase', () => ({
   getSupabase: () => ({ storage: { from: () => ({ remove }) } }),
 }))
 
-// Re-spied per test rather than once for the file: `mockRestore` un-spies for
-// good, so a single spy plus an `afterEach` restore silently stops recording
-// after the first test — and every assertion about warnings then passes or fails
-// for the wrong reason.
+// 파일에 한 번이 아니라 테스트마다 다시 spy를 건다. `mockRestore`는 spy를 영영 떼므로,
+// spy 하나에 `afterEach` 복원을 붙이면 첫 테스트 뒤로 조용히 기록을 멈추고 경고에 대한
+// 모든 단언이 틀린 이유로 통과하거나 실패한다.
 const silenceWarnings = () => vi.spyOn(console, 'warn').mockImplementation(() => {})
 let warn: ReturnType<typeof silenceWarnings>
 

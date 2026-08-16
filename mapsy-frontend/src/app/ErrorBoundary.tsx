@@ -5,21 +5,16 @@ import { Button } from '@/shared/ui/Button'
 import { EmptyState } from '@/shared/ui/EmptyState'
 
 /**
- * The last thing between a thrown render and a white page.
+ * 던져진 렌더와 흰 화면 사이의 마지막 것.
  *
- * React unmounts the whole tree when a render throws and nothing catches it, so
- * without this the app's answer to any unexpected error is a blank document with
- * no way back — worse than the screen that failed. The app had no boundary at
- * all, which also made `assertNever`'s promise of "an honest error rather than a
- * screen rendering nothing" untrue wherever it was used.
+ * 렌더가 던지고 아무도 잡지 않으면 React는 트리 전체를 언마운트한다. 이것이 없으면
+ * 예상치 못한 에러에 대한 앱의 답은 돌아갈 길 없는 빈 문서이고, 그것은 실패한 화면보다 나쁘다.
  *
- * A class, because `getDerivedStateFromError` has no hook equivalent.
+ * 클래스인 것은 `getDerivedStateFromError`에 대응하는 훅이 없기 때문이다.
  *
- * Recovery is a reload rather than a retry. The boundary cannot know what the
- * throw left half-done — a mutation mid-flight, a store partly written — and
- * offering to re-render the same tree over that state is offering to fail again.
- * Reloading is the one action that is definitely safe, and the wardrobe comes
- * straight back from the server.
+ * 복구는 재시도가 아니라 새로고침이다. 경계는 그 던짐이 무엇을 절반만 해놓았는지 알 수
+ * 없고 — 날아가던 뮤테이션, 절반쯤 쓰인 스토어 — 그 상태 위에 같은 트리를 다시 그리자고
+ * 제안하는 것은 다시 실패하자는 제안이다.
  */
 interface ErrorBoundaryState {
   failed: boolean
@@ -33,8 +28,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // The only record there is. mapsy ships no error reporting, so this is what
-    // a bug report gets to quote from.
+    // 남는 유일한 기록. mapsy에는 에러 리포팅이 없으므로 버그 리포트가 인용할 것이 이것뿐이다.
     console.error('[mapsy] unhandled render error', error, info.componentStack)
   }
 

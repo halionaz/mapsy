@@ -14,7 +14,7 @@ export function App() {
     <AppProviders>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        {/* AppLayout is the auth gate: anonymous visitors are sent to /login. */}
+        {/* AppLayout이 인증 게이트다 — 로그인하지 않은 방문자는 /login으로 간다. */}
         <Route element={<AppLayout />}>
           <Route path="/" element={<WardrobePage />} />
           <Route path="/items/new" element={<ItemNewPage />} />

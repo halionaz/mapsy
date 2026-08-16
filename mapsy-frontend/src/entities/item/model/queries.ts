@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { dropItemWears } from '@/entities/wear'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { errorMessage } from '@/shared/lib/errorMessage'
 import * as api from '../api/itemApi'
@@ -16,42 +15,32 @@ import type { PhotoEntry } from './photoEntries'
 import type { ItemDraft, ItemStatus, ItemWithImages, WardrobeItem } from './types'
 
 /**
- * Query layer for the wardrobe.
+ * 옷장의 쿼리 계층.
  *
- * The whole collection is fetched once and filtered client-side (PRD §8.4), so
- * there is a single cache entry every screen reads from. Mutations patch that
- * entry directly and only refetch when there was nothing to patch, which is what
- * keeps a tap on the favourite star instant — a refetch would re-sign every
- * cover URL and reload the entire grid.
+ * 컬렉션을 한 번 통째로 받아 클라이언트에서 거르므로(PRD §8.4) 모든 화면이 읽는 캐시
+ * 엔트리는 하나다. 뮤테이션은 그 엔트리를 직접 기우고 기울 것이 없었을 때만 다시
+ * 불러온다 — 갱신은 모든 커버 URL을 재서명해 격자 전체를 다시 로드시킨다.
  *
- * In-flight registrations deliberately do *not* live in this cache — see
- * `pendingUploads.ts` for why.
- *
- * Keys are in `./queryKeys` — five mutations address the same entry, and a key
- * spelled out at each call site is a silent no-op when it drifts: `setQueryData`
- * on a key nothing observes writes to an entry that is never read, and reports
- * no error.
+ * 진행 중인 등록은 일부러 이 캐시 밖이다 — 이유는 `pendingUploads.ts`.
+ * 키는 `./queryKeys`에 있다. 호출부마다 적어둔 키는 어긋나는 순간 조용한 무효 연산이 된다.
  */
 
 export function useWardrobe() {
   return useQuery<WardrobeItem[]>({
     queryKey: wardrobeKeys.list(),
     queryFn: api.fetchWardrobe,
-    // Preview mode has no backend to ask. Without this the query runs anyway,
-    // `getSupabase()` throws, and the home screen shows a retry-backed error
-    // card — contradicting the documented promise that the UI is browsable
-    // before a Supabase project exists.
+    // 미리보기 모드에는 물어볼 백엔드가 없다. 이게 없으면 쿼리가 돌고 `getSupabase()`가
+    // 던져, 백엔드 없이도 UI를 둘러볼 수 있다는 약속이 깨진다.
     enabled: isSupabaseConfigured,
   })
 }
 
 /**
- * Patches the cached collection in place.
+ * 캐시된 컬렉션을 제자리에서 기운다.
  *
- * Returning the input untouched when there is no cache entry is deliberate:
- * react-query discards a write whose updater returns undefined, and inventing an
- * array here would publish a "wardrobe" containing only the row we just touched.
- * Callers that must not lose their write invalidate instead — see below.
+ * 엔트리가 없을 때 입력을 그대로 돌려주는 것은 의도다. react-query는 updater가
+ * undefined를 반환하면 쓰기를 버리고, 여기서 배열을 지어내면 방금 건드린 행 하나만 든
+ * "옷장"을 발행하게 된다. 쓰기를 잃으면 안 되는 호출부는 대신 invalidate한다.
  */
 function patchCache(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -63,31 +52,26 @@ function patchCache(
 }
 
 /**
- * What every mutation needs around a cache patch.
+ * 캐시를 기울 때 모든 뮤테이션에 필요한 것.
  *
- * `before` — a fetch already in flight holds a snapshot from before the
- * mutation, and its response overwrites whatever was patched while it was
- * travelling. Cancelling closes that race, and it is cheap, so all five
- * mutations do it. `refetchOnWindowFocus` makes the race reachable in ordinary
- * use: the refetch fires the moment the app is foregrounded, which is exactly
- * when someone resumes what they were doing.
+ * `before` — 이미 날아가고 있는 fetch는 뮤테이션 이전의 스냅숏을 들고 있어서, 응답이
+ * 도착하면 그 사이에 기운 것을 덮는다. 취소가 그 경합을 닫고 값도 싸서 다섯 모두 한다.
+ * `refetchOnWindowFocus`가 그 경합을 평범한 사용에서 닿게 만든다 — 앱이 앞으로 나오는
+ * 순간, 즉 하던 일을 이어가는 바로 그때 다시 불러온다.
  *
- * `after` — only when there is no cache entry to have patched. In practice that
- * is `useCreateItem` alone: the other four are reached from screens that already
- * read the collection, so their cache is warm by construction. An unconditional
- * invalidate looked tidy and was expensive: `useWardrobe` is observed by three
- * screens so it is always active, meaning every star tap refetched the whole
- * collection *and* re-signed every cover URL, changing every `<img src>` and
- * reloading every thumbnail in the grid. Where the mutation patches the server's
- * own response, a refetch can only return what the cache already holds.
+ * `after` — 기울 엔트리가 없었을 때만. 실제로는 `useCreateItem`뿐이다. 나머지 넷은 이미
+ * 컬렉션을 읽는 화면에서 닿으므로 캐시가 구조적으로 따뜻하다. 조건 없는 invalidate는
+ * 깔끔해 보이지만 비싸다 — `useWardrobe`는 옷장을 읽는 화면에서 늘 활성이라, 별 탭
+ * 하나마다 컬렉션 전체를 다시 받고 모든 커버 URL을 재서명해 격자의 모든 썸네일을 다시
+ * 로드한다.
  */
 function useCachePatch() {
   const queryClient = useQueryClient()
 
   return {
     queryClient,
-    // `all` rather than `list()`: cancel and invalidate match by prefix, so a
-    // second wardrobe query added later is covered without touching this.
+    // `list()`가 아니라 `all` — 취소와 무효화는 접두사로 맞추므로, 나중에 옷장 쿼리가
+    // 하나 더 생겨도 여기를 건드릴 필요가 없다.
     before: () => queryClient.cancelQueries({ queryKey: wardrobeKeys.all }),
     after: () => {
       const cached = queryClient.getQueryData<WardrobeItem[]>(wardrobeKeys.list())
@@ -110,13 +94,11 @@ export function useCreateItem() {
     },
 
     onSuccess: async (created, { pending }) => {
-      // Two ways a plain prepend loses the item: an in-flight refetch overwrites
-      // it when it lands, or the cache entry was evicted while the form was open
-      // and the write is dropped entirely. Either way `removePending` then takes
-      // the card away, revoking the preview URLs with it, and the registration
-      // vanishes exactly as it did before the pending store existed.
+      // 그냥 앞에 붙이면 두 가지로 잃는다 — 날아가던 refetch가 도착하며 덮거나, 폼이
+      // 열려 있는 동안 캐시 엔트리가 비워져 쓰기가 통째로 버려지거나. 어느 쪽이든
+      // `removePending`이 카드를 걷어가며 미리보기 URL까지 반납한다.
       //
-      // `before` closes the first; `after` refetches for real in the second.
+      // `before`가 첫째를, `after`가 둘째를 닫는다.
       await before()
       patchCache(queryClient, (entries) => [created, ...entries])
       removePending(pending.tempId)
@@ -124,17 +106,16 @@ export function useCreateItem() {
     },
 
     onError: (error, { pending }) => {
-      // The entry stays visible rather than vanishing — the retry affordance has
-      // to be attached to something the user can see, and its blobs stay with it.
-      // The reason travels with it: a constraint violation ("메모가 너무 김")
-      // fails identically on every retry, and without the message the user has
-      // no way to know that retrying is pointless.
+      // 항목은 사라지지 않고 보이는 채로 남는다 — 재시도 버튼은 볼 수 있는 무언가에
+      // 붙어야 하고, blob도 함께 남아야 한다. 이유도 같이 남긴다. 제약 위반("메모가
+      // 너무 김")은 몇 번을 다시 해도 똑같이 실패하고, 메시지가 없으면 재시도가
+      // 무의미하다는 것을 알 길이 없다.
       markPendingState(pending.tempId, 'failed', errorMessage(error))
     },
   })
 }
 
-/** Re-runs a create that failed, reusing the blobs already processed. */
+/** 실패한 등록을 이미 처리된 blob으로 다시 시도한다. */
 export function useRetryUpload() {
   const create = useCreateItem()
 
@@ -145,30 +126,22 @@ export function useRetryUpload() {
   }
 }
 
-/** Abandons a failed upload, freeing its preview URLs. */
+/** 실패한 업로드를 버리고 미리보기 URL을 반납한다. */
 export function useDiscardUpload() {
   return (tempId: string) => removePending(tempId)
 }
 
 /**
- * Saves the edit form: the fields, and the photo list when it changed.
+ * 편집 폼의 저장 — 필드, 그리고 사진 목록이 바뀌었을 때만 사진.
  *
- * Two requests rather than one, in this order for one reason — the fields are a
- * single cheap request that can be repeated, so a violation there (a memo past
- * its ceiling) fails before anything has been uploaded or deleted. The reverse
- * order pays for a rejected memo with a photo upload.
+ * 필드가 먼저인 것은 그쪽이 되풀이해도 되는 싼 요청이라, 위반이 있으면 아무것도 올리거나
+ * 지우기 전에 실패하기 때문이다. 반대 순서는 거절당할 메모의 값을 사진 업로드로 치른다.
  *
- * They are not atomic together, and a failure between them leaves the fields
- * saved and the photos untouched. Retrying converges: the field update is
- * idempotent, and `set_item_images` is given the whole list rather than a delta,
- * so a second attempt states the same result again — including over rows a first
- * attempt landed but never got to report.
+ * 둘은 원자적이지 않지만 재시도가 수렴한다 — 필드 갱신은 멱등이고 `set_item_images`는
+ * 델타가 아니라 목록 전체를 받는다.
  *
- * The photo write is skipped entirely unless the form says its list changed.
- * That question cannot be answered from here: this sees the cache, which
- * refetches on window focus, and a photo another device added while the screen
- * was open would look like a difference the user made. `samePhotoList` carries
- * the argument.
+ * 사진이 바뀌었는지는 여기서 답할 수 없다. 이 캐시는 창 포커스에 다시 불러오므로, 화면이
+ * 열린 사이 다른 기기가 더한 사진이 사용자가 낸 차이처럼 보인다 — `samePhotoList` 참고.
  */
 export function useUpdateItem() {
   const { queryClient, before, after } = useCachePatch()
@@ -177,9 +150,9 @@ export function useUpdateItem() {
     mutationFn: async (vars: {
       item: ItemWithImages
       draft: ItemDraft
-      /** The form's photo list, cover first. */
+      /** 폼의 사진 목록. 커버가 먼저. */
       photos: PhotoEntry[]
-      /** Whether that list differs from the one the form opened with. */
+      /** 그 목록이 폼이 열릴 때와 다른지. */
       photosChanged: boolean
     }) => {
       const updated = await api.updateItem(vars.item.id, vars.draft)
@@ -217,11 +190,9 @@ export function useSetFavorite() {
         queryClient.setQueryData(wardrobeKeys.list(), context.previous)
       }
     },
-    // Only does anything if the cache was empty — which the star cannot normally
-    // reach, since pressing it requires the detail screen to have found the item
-    // in that cache. Kept for the path where it somehow is: a rejected write is
-    // already undone by onError above, so this is not the recipe's usual
-    // "re-sync with the server" step.
+    // 캐시가 비어 있을 때만 무언가 한다. 별을 누르려면 상세 화면이 그 캐시에서 옷을
+    // 찾았어야 하므로 평소에는 닿지 않는다. 거절된 쓰기는 위 onError가 이미 되돌리므로
+    // 레시피의 흔한 "서버와 다시 맞추기" 단계가 아니다.
     onSettled: after,
   })
 }
@@ -241,21 +212,24 @@ export function useSetStatus() {
   })
 }
 
-export function useDeleteItem() {
+/**
+ * 옷 행과 사진을 지우고, 옷장 캐시에서 걷어낸다.
+ *
+ * 착용 기록 캐시는 건드리지 않는다 — DB는 그 행을 함께 캐스케이드하지만 이 엔티티는
+ * 그것을 모른다. 두 캐시를 함께 맞추는 것은 `features/item-delete`의 `useDeleteItem`이고,
+ * 화면은 그쪽을 쓴다.
+ */
+export function useDeleteItemRow() {
   const { queryClient, before, after } = useCachePatch()
 
   return useMutation({
     mutationFn: (vars: { id: string; userId: string }) => api.deleteItem(vars.id, vars.userId),
-    // The most visible of the five without this: an in-flight fetch holding a
-    // pre-delete snapshot puts the garment back on the grid, with no error and
-    // nothing to retry — the row really is gone, so it disappears again at the
-    // next refetch.
+    // 이게 없으면 가장 눈에 띈다 — 삭제 이전 스냅숏을 든 fetch가 도착하며 옷을 격자에
+    // 되돌려 놓는다. 에러도 없고 재시도할 것도 없다. 행은 정말로 사라졌으므로 다음
+    // 갱신에 다시 사라진다.
     onSuccess: async (_data, { id }) => {
       await before()
       patchCache(queryClient, (entries) => entries.filter((entry) => entry.id !== id))
-      // The wear log is a second cache holding rows the database has just
-      // cascaded away. `dropItemWears` says what happens without this.
-      await dropItemWears(queryClient, id)
       after()
     },
   })

@@ -1,22 +1,22 @@
-// Assets-only Worker — no `main`, so requests are answered at the edge without
-// invoking Worker code. See docs/DEPLOY.md.
+// 정적 자산 전용 Worker — `main`이 없어 Worker 코드를 부르지 않고 엣지에서 응답한다.
+// docs/DEPLOY.md 참고.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
 
-  // Must match the Worker name in the dashboard, or Workers Builds fails.
+  // 대시보드의 Worker 이름과 같아야 한다. 아니면 Workers Builds가 실패한다.
   "name": "mapsy",
   "compatibility_date": "2026-08-01",
 
   "assets": {
     "directory": "./dist",
-    // Hands back index.html for paths with no file, so /items/:id survives a
-    // direct open or refresh.
+    // 파일이 없는 경로에 index.html을 돌려줘, /items/:id가 직접 열기와 새로고침을
+    // 살아남는다.
     "not_found_handling": "single-page-application"
   },
 
   "workers_dev": true,
-  // Per-version preview URLs. Public, and they read the production Supabase
-  // project — put Cloudflare Access in front or set this to false.
+  // 버전별 미리보기 URL. 공개이고 프로덕션 Supabase 프로젝트를 읽는다 —
+  // 앞에 Cloudflare Access를 두거나 이 값을 false로.
   "preview_urls": true,
 
   "observability": { "enabled": true }

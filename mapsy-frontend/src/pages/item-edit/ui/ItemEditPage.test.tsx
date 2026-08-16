@@ -7,14 +7,12 @@ import type { ItemImage, WardrobeItem } from '@/entities/item'
 import { ItemEditPage } from './ItemEditPage'
 
 /**
- * The one line that carries the answer from the form to the write.
+ * 답을 폼에서 쓰기로 나르는 한 줄.
  *
- * `ItemForm` works out whether the photos were touched and `useUpdateItem`
- * honours it; both are held down where they live. What neither can see is this
- * screen handing the flag over — and the type checker only insists that
- * *something* is passed, so a hardcoded `true` compiles and quietly restores the
- * defect the flag exists to prevent: a save that never touched the photos
- * rewriting the list, and deleting whatever another device added meanwhile.
+ * 사진이 건드려졌는지는 `ItemForm`이 알아내고 `useUpdateItem`이 그것을 존중한다. 둘 다
+ * 각자의 자리에서 붙들려 있다. 어느 쪽도 볼 수 없는 것이 이 화면이 그 플래그를 넘기는
+ * 일이고, 타입 검사기는 *무언가* 넘어가기만 하면 되므로 하드코딩된 `true`도 컴파일된다 —
+ * 그리고 플래그가 막으려던 결함을 조용히 되살린다.
  */
 
 const { useWardrobeMock, mutateMock, useItemPhotosMock } = vi.hoisted(() => ({
@@ -29,8 +27,8 @@ vi.mock('@/entities/item', async (importOriginal) => ({
   useUpdateItem: () => ({ mutate: mutateMock, isPending: false, error: null }),
 }))
 
-// The signing hook, which would otherwise reach for Supabase. The picker only
-// needs URLs to draw with, and these tests never look at the pixels.
+// 그대로 두면 Supabase를 집는 서명 훅. 피커는 그릴 URL만 있으면 되고, 이 테스트는
+// 픽셀을 보지 않는다.
 vi.mock('@/features/item-photos', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/item-photos')>()),
   useItemPhotos: useItemPhotosMock,
@@ -100,7 +98,7 @@ function renderPage() {
 }
 
 describe('ItemEditPage', () => {
-  it('tells the save that a text-only edit left the photos alone', () => {
+  it('텍스트만 고친 편집은 사진을 건드리지 않았다고 저장에 알린다', () => {
     renderPage()
 
     fireEvent.change(screen.getByLabelText(/이름/), { target: { value: '마산 플리스 자켓' } })
@@ -112,7 +110,7 @@ describe('ItemEditPage', () => {
     )
   })
 
-  it('tells it when they were rearranged', () => {
+  it('재정렬됐을 때는 그렇다고 알린다', () => {
     renderPage()
 
     const tile = screen.getByLabelText('사진 2')

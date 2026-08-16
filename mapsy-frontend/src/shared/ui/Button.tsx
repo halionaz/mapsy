@@ -1,51 +1,31 @@
 import { LoaderCircle } from 'lucide-react'
-import { css, cx } from 'styled-system/css'
+import { cx } from 'styled-system/css'
 import type { RecipeVariantProps } from 'styled-system/types'
 
-import { buttonStyle, iconButtonStyle } from './buttonStyle'
+import { buttonStyle, iconButtonStyle, spinner } from './Button.css'
 
-// `NonNullable`, because Panda types a recipe's argument as optional and an
-// interface cannot extend a type that might be undefined.
+// `NonNullable` — Panda는 레시피 인자를 optional로 타이핑하고, interface는
+// undefined일 수 있는 타입을 확장하지 못한다.
 type ButtonVariants = NonNullable<RecipeVariantProps<typeof buttonStyle>>
 type IconButtonVariants = NonNullable<RecipeVariantProps<typeof iconButtonStyle>>
 
-// `ComponentProps<'button'>` rather than `ButtonHTMLAttributes`: under React 19
-// `ref` is an ordinary prop on a function component, and it is only in the props
-// type through this one. Ark UI's `asChild` triggers hand a ref to whatever they
-// clone, so a button that silently drops it is a dialog that cannot place focus.
+// `ComponentProps<'button'>` — React 19에서 `ref`는 평범한 prop이고 이 타입으로만
+// props에 들어온다. Ark UI의 `asChild` 트리거가 ref를 넘기므로 흘리면 다이얼로그가
+// 포커스를 놓는다.
 interface ButtonProps extends Omit<React.ComponentProps<'button'>, 'className'>, ButtonVariants {
-  /**
-   * A glyph before the label.
-   *
-   * A prop rather than the first child, so that `loading` has somewhere to put
-   * the spinner. When the icon lived in `children` the spinner was *added* in
-   * front of it and every call site had to remember to hide its own —
-   * `{!pending && <GoogleMark />}` — which two of the three did. The third put
-   * three glyphs on one line for the length of a mutation.
-   */
+  /** 라벨 앞 글리프. children이 아니라 prop인 이유는 `loading`이 이 자리를 뺏기 때문. */
   icon?: React.ReactNode
   /**
-   * Swaps `icon` for a spinner and disables the button.
+   * `icon`을 스피너로 바꾸고 버튼을 잠근다. 라벨은 그대로 두므로 "저장 중…"은 호출부가 넘긴다.
    *
-   * The label is left alone; a caller that wants one ("저장 중…") passes it.
-   * Callers do not need `disabled` as well — that is set here.
-   *
-   * Separate from `disabled` because the two mean different things to a screen
-   * reader: `aria-busy` says the press was received and is being worked on,
-   * where `disabled` alone says nothing happened.
+   * `disabled`와 따로인 것은 스크린리더에게 뜻이 다르기 때문 — `aria-busy`는 눌린 것이
+   * 처리 중이라고, `disabled`는 아무 일도 없다고 말한다.
    */
   loading?: boolean
   className?: string
 }
 
-/**
- * Sets `type="button"` by default.
- *
- * The HTML default is `submit`, which inside `<form>` turns every unlabelled
- * helper — 취소, a disclosure toggle — into a second submit button. The item form
- * had exactly that shape, so the default is inverted here once instead of being
- * remembered at each call site.
- */
+/** HTML 기본값이 `submit`이라 폼 안의 보조 버튼이 전부 제출 버튼이 된다. 여기서 한 번 뒤집는다. */
 export function Button({
   variant,
   size,
@@ -74,7 +54,7 @@ export function Button({
 
 interface IconButtonProps
   extends Omit<React.ComponentProps<'button'>, 'className'>, IconButtonVariants {
-  /** Required: the button's only content is a glyph, so this is its name. */
+  /** 필수 — 내용이 글리프뿐이라 이것이 버튼의 이름이다. */
   label: string
   className?: string
 }
@@ -102,19 +82,7 @@ export function IconButton({
   )
 }
 
-/**
- * `size` is for spinners outside a button — a loading screen, a photo tile.
- * Inside one, `buttonStyle` sizes every glyph it contains and this is ignored.
- */
+/** `size`는 버튼 밖에서 쓸 때만 — 안에서는 `buttonStyle`이 글리프 크기를 정한다. */
 export function Spinner({ size = 16 }: { size?: number }) {
-  return (
-    <LoaderCircle
-      size={size}
-      aria-hidden="true"
-      className={css({
-        animation: 'spin',
-        _motionReduce: { animation: 'none', opacity: 0.6 },
-      })}
-    />
-  )
+  return <LoaderCircle size={size} aria-hidden="true" className={spinner} />
 }

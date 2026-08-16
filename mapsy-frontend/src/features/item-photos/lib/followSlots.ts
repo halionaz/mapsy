@@ -1,38 +1,30 @@
 /**
- * Where the viewer should land when the collection changes under it.
+ * 뷰어 아래에서 컬렉션이 바뀔 때 어디에 앉아야 하는지.
  *
- * The viewer addresses pages by position, and a position stops meaning the same
- * thing the moment a photo is added or removed. Both ways that goes wrong are
- * decided here rather than in the component, because neither is visible from the
- * call site and neither needs a DOM to demonstrate:
+ * 뷰어는 페이지를 위치로 가리키고, 위치는 사진이 늘거나 줄면 같은 뜻이기를 그만둔다.
  *
- * - A photo removed **after** the open page leaves the index past the end —
- *   a blank screen, a counter reading "5 / 4", and `slots[index]` undefined.
- * - A photo removed **before** it is worse, because nothing looks broken: the
- *   length shrinks, the index stays in range, and the same position quietly
- *   addresses the next photo along. `[A,B,C,D,E]` at index 2 is C; losing A
- *   makes index 2 D, with no swipe and no warning.
+ * - 열린 페이지 **뒤**의 사진이 지워지면 인덱스가 끝을 넘어 빈 화면이 된다.
+ * - **앞**의 사진이 지워지면 더 나쁘다 — 아무것도 이상해 보이지 않는 채로 같은 위치가
+ *   다음 사진을 가리킨다.
  *
- * Following the id closes both, and clamps only when the photo really is gone.
+ * id를 따라가면 둘 다 닫히고, 사진이 정말 사라졌을 때만 가둔다.
  */
 export function indexAfterChange(
   slots: readonly { id: string }[],
-  /** The photo on screen, by id. `null` before the viewer has seated. */
+  /** 화면의 사진을 id로. 뷰어가 앉기 전에는 `null`. */
   shownId: string | null,
   currentIndex: number,
 ): number | null {
-  // Nothing to land on. The viewer draws "사진이 없어요" and the index is moot;
-  // moving it would only be an extra write to the track on every change.
+  // 앉을 곳이 없다. 뷰어가 "사진이 없어요"를 그리고 인덱스는 무의미하다.
   if (slots.length === 0) return null
 
   const at = slots.findIndex((slot) => slot.id === shownId)
-  // Still there, possibly somewhere else — follow it. Gone — hold the position,
-  // which is the neighbour that took its place, and clamp if it was the last.
+  // 아직 있으면(자리가 바뀌었더라도) 따라간다. 사라졌으면 위치를 지킨다 — 그 자리를
+  // 이어받은 이웃이다 — 마지막이었으면 가둔다.
   const target = at >= 0 ? at : Math.min(currentIndex, slots.length - 1)
 
-  // `null` rather than the current index, so the caller cannot navigate to where
-  // it already is: `goTo` writes the track and notifies the screen behind, and
-  // this effect runs on every change to the collection — including the re-signs
-  // that leave the photos themselves untouched.
+  // 현재 인덱스가 아니라 `null`을 돌려줘, 호출부가 이미 있는 자리로 이동하지 못하게
+  // 한다. `goTo`는 트랙을 쓰고 뒤 화면에 알리는데, 이 effect는 컬렉션이 바뀔 때마다
+  // 돈다 — 사진 자체는 그대로인 재서명까지 포함해서.
   return target === currentIndex ? null : target
 }

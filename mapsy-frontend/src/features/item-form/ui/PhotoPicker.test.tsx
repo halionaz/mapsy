@@ -7,15 +7,12 @@ import type { ProcessedPhoto } from '@/shared/lib/image'
 import { PhotoPicker } from './PhotoPicker'
 
 /**
- * The tiles the edit screen added: photos that are already in storage, sitting
- * in the same row as ones picked a second ago.
+ * 편집 화면이 더한 타일 — 이미 스토리지에 있는 사진이, 방금 고른 사진과 같은 행에 앉는다.
  *
- * Two of these are things the type checker cannot see. A stored photo has no
- * object URL, so releasing one on removal would throw away nothing while a
- * picked one left unreleased leaks its blob for the life of the tab — and both
- * happen in the same three-line function. And a signed URL arrives later than
- * the tile does, so "not here yet" and "did not arrive" have to stay apart, or a
- * cold open reads as five broken photos.
+ * 여기 둘은 타입 검사기가 볼 수 없는 것이다. 저장본에는 object URL이 없어 삭제 때
+ * 반납해봐야 버릴 것이 없지만, 반납하지 않은 고른 사진은 탭이 사는 내내 blob을 흘린다 —
+ * 그리고 둘 다 같은 세 줄 함수에서 일어난다. 그리고 서명 URL은 타일보다 늦게 오므로
+ * "아직 안 왔다"와 "안 왔다"가 갈려 있어야 한다. 아니면 콜드 오픈이 깨진 사진 다섯 장이 된다.
  */
 
 const { releasePreviewMock, processPhotoMock } = vi.hoisted(() => ({
@@ -26,16 +23,15 @@ const { releasePreviewMock, processPhotoMock } = vi.hoisted(() => ({
 vi.mock('@/shared/lib/image', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/shared/lib/image')>()),
   releasePreview: releasePreviewMock,
-  // jsdom has no canvas, and what these tests need from it is timing anyway.
+  // jsdom에는 캔버스가 없고, 이 테스트가 여기서 필요로 하는 것은 어차피 타이밍이다.
   processPhoto: processPhotoMock,
 }))
 
 /**
- * The one thing jsdom cannot answer: how big the grid came out.
+ * jsdom이 답할 수 없는 유일한 것 — 격자가 얼마나 크게 나왔는지.
  *
- * Only the measurement is replaced — three columns of 84px tiles with a 12px
- * gap, which is what the stylesheet asks for on a phone — so everything the
- * drag decides from it is still the real code deciding it.
+ * 측정만 대체한다(12px 간격의 84px 타일 세 열, 폰에서 스타일시트가 요구하는 그것).
+ * 그것으로 끌기가 정하는 나머지는 전부 진짜 코드가 정하는 그대로다.
  */
 vi.mock('../lib/photoGrid', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/photoGrid')>()),
@@ -77,13 +73,13 @@ function picked(previewUrl: string): PhotoEntry {
   return { kind: 'picked', photo }
 }
 
-/** The photo inside a tile, reached through the tile's own name. */
+/** 타일 안의 사진을, 타일 자신의 이름으로 찾는다. */
 function srcOf(label: string): string | null | undefined {
   return screen.getByLabelText(label).querySelector('img')?.getAttribute('src')
 }
 
 describe('PhotoPicker', () => {
-  it('draws a stored photo from its signed URL and a picked one from its preview', () => {
+  it('저장본은 서명 URL로, 고른 사진은 미리보기로 그린다', () => {
     render(
       <PhotoPicker
         photos={[stored('a'), picked('blob:new')]}
@@ -96,13 +92,13 @@ describe('PhotoPicker', () => {
     expect(srcOf('사진 2')).toBe('blob:new')
   })
 
-  it('keeps "still coming" apart from "did not arrive"', () => {
+  it('"오는 중"과 "안 왔다"를 갈라 둔다', () => {
     const { rerender } = render(
       <PhotoPicker photos={[stored('a')]} onChange={vi.fn()} storedUrls={new Map()} />,
     )
 
-    // No entry yet: the URL is still being signed. A failure notice here would
-    // be the ordinary cold open telling the user their photo is gone.
+    // 아직 항목이 없다 — URL이 서명되는 중이다. 여기에 실패 문구가 뜨면 평범한
+    // 콜드 오픈이 사진이 사라졌다고 말하는 셈이 된다.
     expect(screen.queryByText('불러오지 못함')).toBeNull()
 
     rerender(
@@ -111,7 +107,7 @@ describe('PhotoPicker', () => {
     expect(screen.queryByText('불러오지 못함')).not.toBeNull()
   })
 
-  it('releases the preview of a removed picked photo, and only that', () => {
+  it('지운 고른 사진의 미리보기만 반납한다', () => {
     const onChange = vi.fn()
     const entries = [stored('a'), picked('blob:new')]
     const { rerender } = render(
@@ -122,8 +118,8 @@ describe('PhotoPicker', () => {
       />,
     )
 
-    // A stored photo is only dropped from the list here; it is deleted for real
-    // when the form is saved, and it has no object URL to give back.
+    // 저장본은 여기서 목록에서 빠질 뿐이다. 실제 삭제는 폼이 저장될 때이고, 돌려줄
+    // object URL도 없다.
     fireEvent.click(screen.getByLabelText('사진 1 삭제'))
     expect(releasePreviewMock).not.toHaveBeenCalled()
     expect(onChange).toHaveBeenLastCalledWith([entries[1]])
@@ -140,9 +136,9 @@ describe('PhotoPicker', () => {
     expect(onChange).toHaveBeenLastCalledWith([])
   })
 
-  it('moves the 대표 badge with the tile, not with the list', () => {
-    // Dragging a photo to the front *is* how the cover changes, so a badge that
-    // waits for the drop sits on the wrong tile for the whole gesture.
+  it('대표 배지가 목록이 아니라 타일을 따라간다', () => {
+    // 사진을 맨 앞으로 끄는 것이 *곧* 커버를 바꾸는 방법이라, 놓기를 기다리는 배지는
+    // 제스처 내내 틀린 타일 위에 앉는다.
     render(
       <PhotoPicker
         photos={[stored('a'), stored('b'), stored('c')]}
@@ -159,7 +155,7 @@ describe('PhotoPicker', () => {
     expect(screen.getByText('대표').parentElement?.contains(third)).toBe(true)
   })
 
-  it('rearranges from the keyboard, since dragging is the only other way in', () => {
+  it('키보드로도 재정렬된다 — 다른 길이 끌기뿐이므로', () => {
     const onChange = vi.fn()
     const entries = [stored('a'), picked('blob:new')]
     render(<PhotoPicker photos={entries} onChange={onChange} storedUrls={new Map()} />)
@@ -169,8 +165,7 @@ describe('PhotoPicker', () => {
     expect(tile.getAttribute('aria-pressed')).toBe('true')
 
     fireEvent.keyDown(tile, { key: 'ArrowLeft' })
-    // Still nothing committed — the list is rewritten when it is put down, the
-    // same as a finger letting go.
+    // 아직 확정된 것이 없다 — 목록은 내려놓을 때 다시 쓰이고, 손가락을 떼는 것과 같다.
     expect(onChange).not.toHaveBeenCalled()
 
     fireEvent.keyDown(tile, { key: ' ' })
@@ -178,15 +173,14 @@ describe('PhotoPicker', () => {
   })
 
   /**
-   * Which gesture a touch turns out to be.
+   * 터치가 결국 어느 제스처였는지.
    *
-   * This is the whole reason the tile waits before it lifts: the picker sits in
-   * a form that scrolls, and the same finger on the same pixel has to be able to
-   * mean either thing. Holding still is the declaration. Nothing below needs
-   * layout, which is what makes it testable at all — where the tile then *goes*
-   * is arithmetic, and that lives in photoGrid.test.ts.
+   * 타일이 들리기 전에 기다리는 이유의 전부다 — 피커는 스크롤되는 폼 안에 있고, 같은
+   * 픽셀 위의 같은 손가락이 둘 중 어느 쪽도 될 수 있어야 한다. 가만히 있는 것이 선언이다.
+   * 아래 어느 것도 레이아웃을 필요로 하지 않아서 검사할 수 있다 — 타일이 그 뒤 *어디로*
+   * 가는지는 산술이고 photoGrid.test.ts에 있다.
    */
-  it('lifts a tile once a finger has held it still', () => {
+  it('손가락이 가만히 붙들고 있으면 타일이 들린다', () => {
     vi.useFakeTimers()
     try {
       render(
@@ -208,7 +202,7 @@ describe('PhotoPicker', () => {
     }
   })
 
-  it('leaves a finger that set off to scroll alone', () => {
+  it('스크롤하러 떠난 손가락은 건드리지 않는다', () => {
     vi.useFakeTimers()
     try {
       render(
@@ -224,14 +218,14 @@ describe('PhotoPicker', () => {
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 80 })
       act(() => void vi.advanceTimersByTime(300))
 
-      // Never lifted, so nothing was ever prevented and the page scrolled.
+      // 들린 적이 없으니 아무것도 막히지 않았고 페이지가 스크롤됐다.
       expect(tile.getAttribute('aria-pressed')).toBe('false')
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('drops a dragged photo into the slot the finger left it over', () => {
+  it('끈 사진을 손가락이 놓아둔 슬롯에 내려놓는다', () => {
     vi.useFakeTimers()
     try {
       const onChange = vi.fn()
@@ -242,13 +236,13 @@ describe('PhotoPicker', () => {
       fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 40 })
       act(() => void vi.advanceTimersByTime(300))
 
-      // Two columns to the right — 96px of pitch each — so it is over the third.
+      // 오른쪽으로 두 열 — pitch가 각각 96px — 이므로 세 번째 위다.
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 232, clientY: 40 })
       expect(onChange).not.toHaveBeenCalled()
 
       fireEvent.pointerUp(tile, { pointerId: 1, pointerType: 'touch', clientX: 232, clientY: 40 })
-      // The list is rewritten when the tile finishes settling, not the instant
-      // the finger leaves — that is what keeps the drop from jumping.
+      // 목록은 손가락이 떠나는 순간이 아니라 타일이 내려앉기를 마칠 때 다시 쓰인다 —
+      // 그것이 놓기가 튀지 않게 한다.
       expect(onChange).not.toHaveBeenCalled()
       act(() => void vi.advanceTimersByTime(300))
 
@@ -259,15 +253,14 @@ describe('PhotoPicker', () => {
   })
 
   /**
-   * The slop measures the finger, and the finger is on the glass.
+   * slop이 재는 것은 손가락이고, 손가락은 유리 위에 있다.
    *
-   * A pan scrolls the page under the finger at 1:1, so in page space the point
-   * under it barely moves at all — measure the hold there and a scroll reads as
-   * a finger holding perfectly still, which is the one thing that lifts a tile.
-   * The photo grid sits at the top of an eleven-field form, so starting a scroll
-   * on a photo is the ordinary case, not an edge one.
+   * 패닝은 손가락 아래 페이지를 1:1로 스크롤하므로 페이지 좌표에서 그 아래 점은 거의
+   * 움직이지 않는다 — 거기서 재면 스크롤이 완벽하게 가만히 있는 손가락으로 읽히고,
+   * 그것이 타일을 들어올린다. 사진 격자는 열한 필드 폼의 맨 위라, 사진에서 스크롤을
+   * 시작하는 것은 예외가 아니라 평범한 경우다.
    */
-  it('lets a finger scroll even when the page keeps up with it', () => {
+  it('페이지가 손가락을 따라와도 스크롤은 스크롤로 둔다', () => {
     vi.useFakeTimers()
     const scrolled = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(0)
     try {
@@ -282,7 +275,7 @@ describe('PhotoPicker', () => {
 
       fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 400 })
 
-      // The finger travels 30px up the glass and the page follows it exactly.
+      // 손가락이 유리 위를 30px 올라가고 페이지가 정확히 따라온다.
       scrolled.mockReturnValue(30)
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 370 })
       act(() => void vi.advanceTimersByTime(300))
@@ -294,13 +287,11 @@ describe('PhotoPicker', () => {
     }
   })
 
-  it('keeps the tile under the cursor when the page scrolls mid-drag', () => {
-    // A mouse drag never blocks the wheel — only touch panning is prevented — so
-    // the page can move under a lifted tile. Everything the drag measures is in
-    // page coordinates for that reason, and the tile's own offset has to be too:
-    // from client deltas alone it drifts by however far the page scrolled, while
-    // the drop still lands where the cursor is. You then aim with the tile and
-    // miss by exactly that much.
+  it('끌기 도중 페이지가 스크롤돼도 타일이 커서 아래 남는다', () => {
+    // 마우스 끌기는 휠을 막지 않으므로(막는 것은 터치 패닝뿐) 들린 타일 아래에서 페이지가
+    // 움직일 수 있다. 끌기가 재는 모든 것이 페이지 좌표인 이유가 그것이고, 타일 자신의
+    // 오프셋도 그래야 한다 — client 델타만으로는 페이지가 스크롤된 만큼 떠내려가는데
+    // 놓기는 여전히 커서 자리에 앉는다. 그러면 타일로 겨누고 딱 그만큼 빗나간다.
     vi.useFakeTimers()
     const scrolled = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(0)
     try {
@@ -316,7 +307,7 @@ describe('PhotoPicker', () => {
       fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 40 })
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 50 })
 
-      // The wheel turns: the cursor has not moved on screen, the page has.
+      // 휠이 돈다 — 커서는 화면에서 움직이지 않았고 페이지가 움직였다.
       scrolled.mockReturnValue(100)
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 50 })
 
@@ -328,20 +319,17 @@ describe('PhotoPicker', () => {
   })
 
   /**
-   * The half of "the dragged tile does not animate" that lives in this file.
+   * "끌리는 타일은 애니메이션하지 않는다"의 이 파일 몫 절반.
    *
-   * The other half is a stylesheet rule keyed on this attribute, which nothing
-   * here can evaluate — jsdom carries no CSS. What this pins is the contract
-   * between them: drop the attribute and the rule never matches, and the tile
-   * animates its way after a finger that has already moved on.
+   * 나머지 절반은 이 속성에 걸린 스타일시트 규칙이고, 여기서는 평가할 수 없다 —
+   * jsdom에 CSS가 없다. 이것이 붙드는 것은 둘 사이의 계약이다. 속성을 빼면 규칙이
+   * 맞지 않고, 타일이 이미 지나간 손가락을 애니메이션으로 뒤쫓는다.
    *
-   * The rule is *not* an inline style, deliberately. The drop reads this
-   * element's computed transition-duration to size its wait, so anything the
-   * component writes onto the element can answer its own question — which is
-   * what the `transition` shorthand did, resetting the duration it omitted to
-   * 0s and cutting every drop animation on its first frame.
+   * 그 규칙이 인라인 스타일이 *아닌* 것은 의도다. 놓기가 이 요소의 computed
+   * transition-duration을 읽어 기다릴 시간을 재므로, 컴포넌트가 요소에 쓰는 것은
+   * 자기 질문에 자기가 답하게 된다.
    */
-  it('marks the tile the finger is on, which is what turns its transition off', () => {
+  it('손가락이 올라간 타일을 표시한다 — 그것이 트랜지션을 끈다', () => {
     vi.useFakeTimers()
     try {
       render(
@@ -358,15 +346,13 @@ describe('PhotoPicker', () => {
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 120, clientY: 40 })
       expect(tile.parentElement?.dataset.following).toBe('true')
 
-      // Asserted *here*, mid-drag, because this is the moment the drop takes its
-      // measurement: nothing about the transition may be inline while the finger
-      // is down, or the component is answering its own question. After the drop
-      // these are empty either way, so asserting them there would prove nothing.
+      // 끌기 도중인 *여기서* 검사한다. 놓기가 측정을 하는 순간이 이때이고, 손가락이
+      // 닿아 있는 동안 트랜지션에 관한 것이 인라인이면 안 된다. 놓은 뒤에는 어차피
+      // 비어 있어 거기서 검사하면 아무것도 증명하지 못한다.
       expect(tile.parentElement?.style.transition).toBe('')
       expect(tile.parentElement?.style.transitionProperty).toBe('')
 
-      // Let go and it animates again — that is the settle, and it is the same
-      // attribute stepping out of the way.
+      // 놓으면 다시 애니메이션한다 — 그것이 내려앉기이고, 같은 속성이 비켜서는 것이다.
       fireEvent.pointerUp(tile, { pointerId: 1, pointerType: 'touch', clientX: 120, clientY: 40 })
       expect(tile.parentElement?.dataset.following).toBeUndefined()
     } finally {
@@ -375,20 +361,17 @@ describe('PhotoPicker', () => {
   })
 
   /**
-   * The settle waits for the transition that is in force when the tile lands.
+   * 내려앉기는 타일이 도착할 때 유효한 트랜지션을 기다린다.
    *
-   * Which is not the one in force when it lifts: the movement's duration comes
-   * from the `[data-rearranging]` rule, and that attribute only exists while
-   * something is held. Read at lift, the tile answers with its resting rule
-   * instead — today the same number, and the day the two want different speeds,
-   * a commit that cuts the movement short and drops the tile a jump from where
-   * it was going.
+   * 들릴 때 유효한 것이 아니다. 이동의 duration은 `[data-rearranging]` 규칙에서 오고
+   * 그 속성은 무언가 집혀 있는 동안에만 있다. 들릴 때 읽으면 타일이 쉬는 규칙으로
+   * 답한다 — 오늘은 같은 숫자이고, 둘이 다른 속도를 원하는 날에는 이동을 잘라 타일이
+   * 가려던 자리에서 튄 채 확정된다.
    *
-   * The duration below is planted, because jsdom carries no stylesheet. That
-   * makes this a test of *when* the read happens and nothing more — what the
-   * read then lands on in a browser is the assertion above.
+   * 아래 duration은 심은 것이다. jsdom에 스타일시트가 없기 때문이다. 그래서 이것은
+   * 읽기가 *언제* 일어나는지에 대한 테스트일 뿐이다.
    */
-  it('waits for the transition the tile has when it lands, not when it lifts', () => {
+  it('들릴 때가 아니라 도착할 때의 트랜지션을 기다린다', () => {
     vi.useFakeTimers()
     try {
       const onChange = vi.fn()
@@ -399,8 +382,7 @@ describe('PhotoPicker', () => {
       fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 40 })
       act(() => void vi.advanceTimersByTime(300))
 
-      // Stands in for what [data-rearranging] turns on, which arrives after the
-      // lift and not before it.
+      // [data-rearranging]이 켜는 것을 대신한다. 그것은 들린 뒤에 오지 그 전이 아니다.
       if (tile.parentElement) tile.parentElement.style.transitionDuration = '150ms'
 
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 232, clientY: 40 })
@@ -416,7 +398,7 @@ describe('PhotoPicker', () => {
     }
   })
 
-  it('gives an interrupted drag back rather than guessing at it', () => {
+  it('끊긴 끌기는 추측하지 않고 되돌려준다', () => {
     vi.useFakeTimers()
     try {
       const onChange = vi.fn()
@@ -432,7 +414,7 @@ describe('PhotoPicker', () => {
       fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', clientX: 40, clientY: 40 })
       act(() => void vi.advanceTimersByTime(300))
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 136, clientY: 40 })
-      // The system took the pointer away — a call, a gesture the browser claimed.
+      // 시스템이 포인터를 가져갔다 — 전화, 브라우저가 가져간 제스처.
       fireEvent.pointerCancel(tile, { pointerId: 1, pointerType: 'touch' })
       act(() => void vi.advanceTimersByTime(300))
 
@@ -444,14 +426,13 @@ describe('PhotoPicker', () => {
   })
 
   /**
-   * Two things that answer after the list has moved on.
+   * 목록이 이미 움직인 뒤에 답하는 둘.
    *
-   * Both used to close over the list from the render that started them, so a
-   * photo removed while one was in flight came back when it landed — and if it
-   * was a picked one, `removeAt` had already revoked its preview, so what came
-   * back was a tile pointing at a URL that no longer resolves.
+   * 둘 다 자신을 시작한 렌더의 목록을 붙들고 있었어서, 그 사이에 지운 사진이 도착하며
+   * 되살아났다 — 고른 사진이었다면 `removeAt`이 이미 미리보기를 반납한 뒤라, 되살아난
+   * 것은 더 이상 풀리지 않는 URL을 가리키는 타일이었다.
    */
-  it('keeps a removal that happens while a drop is still settling', () => {
+  it('놓기가 내려앉는 도중에 일어난 삭제를 지킨다', () => {
     vi.useFakeTimers()
     try {
       const onChange = vi.fn()
@@ -464,12 +445,12 @@ describe('PhotoPicker', () => {
       fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 232, clientY: 40 })
       fireEvent.pointerUp(tile, { pointerId: 1, pointerType: 'touch', clientX: 232, clientY: 40 })
 
-      // Inside the settle, before the reorder has been committed.
+      // 내려앉는 도중, 재정렬이 확정되기 전.
       fireEvent.click(screen.getByLabelText('사진 2 삭제'))
       act(() => void vi.advanceTimersByTime(500))
 
-      // The removal, and nothing after it: the pending drop held positions in a
-      // list that no longer exists, so it was dropped rather than replayed.
+      // 삭제만 있고 그 뒤는 없다 — 대기 중이던 놓기는 더는 없는 목록의 위치를 들고
+      // 있었으므로 재생되지 않고 버려졌다.
       expect(onChange).toHaveBeenCalledTimes(1)
       expect(onChange).toHaveBeenCalledWith([entries[0], entries[2]])
     } finally {
@@ -477,7 +458,7 @@ describe('PhotoPicker', () => {
     }
   })
 
-  it('adds newly picked photos to the list as it is when they finish, not as it was', async () => {
+  it('새로 고른 사진을 시작할 때가 아니라 끝날 때의 목록에 더한다', async () => {
     const onChange = vi.fn()
     const entries = [stored('a'), stored('b')]
     let finish: ((photo: ProcessedPhoto) => void) | undefined
@@ -495,8 +476,7 @@ describe('PhotoPicker', () => {
     if (!input) throw new Error('파일 입력을 찾지 못함')
     fireEvent.change(input, { target: { files: [new File([], 'a.jpg', { type: 'image/jpeg' })] } })
 
-    // Decoding takes hundreds of milliseconds, and the delete button stays live
-    // through all of it.
+    // 디코딩은 수백 밀리초가 걸리고, 그동안 삭제 버튼은 계속 살아 있다.
     fireEvent.click(screen.getByLabelText('사진 1 삭제'))
     expect(onChange).toHaveBeenLastCalledWith([entries[1]])
     rerender(<PhotoPicker photos={[entries[1]]} onChange={onChange} storedUrls={new Map()} />)
@@ -517,7 +497,7 @@ describe('PhotoPicker', () => {
     expect(onChange).toHaveBeenLastCalledWith([entries[1], { kind: 'picked', photo: decoded }])
   })
 
-  it('puts a photo back where it was when the move is abandoned', () => {
+  it('이동을 포기하면 사진을 제자리에 되돌린다', () => {
     const onChange = vi.fn()
     render(
       <PhotoPicker

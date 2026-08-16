@@ -1,50 +1,43 @@
 /**
- * Where each photo is drawn while the grid is being rearranged.
+ * 격자를 재정렬하는 동안 각 사진이 어디에 그려지는지.
  *
- * All of it is arithmetic on slot numbers rather than measurement. The tiles are
- * a uniform grid, so "which slot is under the finger" and "how far has this tile
- * been pushed" are both answerable from one pitch and one column count — and the
- * alternative, reading `getBoundingClientRect` per tile per pointermove, reads
- * layout in the middle of a gesture that is also writing transforms, which is
- * the shape that produces a stutter you cannot debug from the code.
+ * 전부 측정이 아니라 슬롯 번호 산술이다. 타일이 균일한 격자라 "손가락 아래가 몇 번
+ * 슬롯인가"와 "이 타일이 얼마나 밀렸는가"가 pitch 하나와 열 수 하나로 답해진다. 대안인
+ * pointermove마다 타일별 `getBoundingClientRect`는, transform을 쓰고 있는 제스처 한가운데서
+ * 레이아웃을 읽는 모양이다.
  *
- * The geometry is *measured once* per drag and from the computed style, not
- * copied from the stylesheet. Panda owns the tile size and the gap; a second
- * copy of 84 in here is the thing that goes quietly wrong the day the tile
- * changes size.
+ * 기하는 끌기마다 *한 번* 재고, 스타일시트에서 베끼지 않고 computed style에서 읽는다.
+ * 타일 크기와 간격은 Panda의 것이고, 84의 두 번째 사본은 타일 크기가 바뀌는 날 조용히
+ * 틀리는 값이다.
  */
 
 import { clamp } from '@/shared/lib/clamp'
 
 export interface GridGeometry {
-  /** Distance between neighbouring slots — one tile plus one gap. */
+  /** 이웃한 슬롯 사이의 거리 — 타일 하나 더하기 간격 하나. */
   pitch: number
   columns: number
   /**
-   * Top-left of the grid in **page** coordinates.
+   * 격자의 좌상단을 **페이지** 좌표로.
    *
-   * Not viewport coordinates: this is measured once when the tile lifts, and a
-   * mouse drag can scroll the page under it — the wheel is never blocked, only
-   * touch panning is. Held in page space, the measurement survives that.
+   * 뷰포트 좌표가 아니다. 타일이 들리는 순간 한 번만 재는데, 마우스 끌기는 그 아래에서
+   * 페이지를 스크롤할 수 있다 — 휠은 막지 않고 터치 패닝만 막는다.
    */
   left: number
   top: number
 }
 
-/** `null` when the grid cannot be measured, which is every environment without layout. */
+/** 격자를 잴 수 없으면 `null` — 레이아웃이 없는 환경 전부가 그렇다. */
 export function readGridGeometry(element: HTMLElement): GridGeometry | null {
   const style = getComputedStyle(element)
-  // The *used* track list — `repeat(auto-fill, 84px)` resolves to "84px 84px …",
-  // so this is both the column count and the tile size. An element with no
-  // layout answers `none` or an empty string, and both fall out as NaN below.
+  // *사용된* 트랙 목록 — `repeat(auto-fill, 84px)`가 "84px 84px …"로 풀리므로 열 수와
+  // 타일 크기를 동시에 준다. 레이아웃이 없는 요소는 `none`이나 빈 문자열로 답하고,
+  // 둘 다 아래에서 NaN으로 떨어진다.
   const tracks = style.gridTemplateColumns.split(' ').filter(Boolean)
   const tile = Number.parseFloat(tracks[0] ?? '')
-  // The longhand, while the stylesheet writes the `gap` shorthand. A browser
-  // resolves one into the other; jsdom does not expand shorthands at all, which
-  // is why the test beside this plants `column-gap` directly and so never walks
-  // that half. Safe as long as nothing sets the grid's gap inline — nothing
-  // does, and the tile above is the standing reminder of what happens when a
-  // component writes to an element something else reads computed values from.
+  // 스타일시트는 `gap` 단축을 쓰지만 여기서는 롱핸드를 읽는다. 브라우저는 하나를 다른
+  // 하나로 풀지만 jsdom은 단축을 펼치지 않으므로, 옆 테스트가 `column-gap`을 직접 심는다.
+  // 격자의 gap을 인라인으로 쓰는 것이 없는 한 안전하다.
   const gap = Number.parseFloat(style.columnGap)
 
   if (!Number.isFinite(tile) || !Number.isFinite(gap)) return null
@@ -59,29 +52,16 @@ export function readGridGeometry(element: HTMLElement): GridGeometry | null {
 }
 
 /**
- * How long this tile takes to move, in milliseconds.
+ * 이 타일이 움직이는 데 걸리는 시간, 밀리초.
  *
- * The drop commits on a timer, and the timer has to outlast the transition or
- * the transform is cleared mid-flight and the tile jumps. Reading it back off
- * the element is the same refusal as the pitch above — the stylesheet owns the
- * number — and it is read from the *element* rather than from the
- * `--durations-normal` token so that `prefers-reduced-motion` is included:
- * under that setting the tiles move in 1ms, and a settle still waiting 200ms
- * would be a fifth of a second in which the drop appears to have done nothing.
+ * 놓기는 타이머로 확정되고 타이머는 트랜지션보다 오래 살아야 한다 — 아니면 transform이
+ * 도중에 지워져 타일이 튄다. 토큰이 아니라 *요소*에서 읽는 것은
+ * `prefers-reduced-motion`을 함께 답하게 하기 위해서다.
  *
- * Both unit spellings are handled, and only one of them is the browser's.
- * Measured in Chrome against these rules: a duration authored as `200ms` reads
- * back `0.2s`, and `1ms` under `prefers-reduced-motion` reads back `0.001s` —
- * computed times come back in seconds whatever the stylesheet said. `200ms` is
- * what **jsdom** returns, because it hands the inline value back unnormalised
- * (measured there too). So the `ms` branch is for the tests that stand on it;
- * the seconds branch is the one production takes, and deleting it because the
- * token reads `200ms` would make every drop commit in a fifth of a millisecond.
+ * 단위 표기 둘 다 다루지만 브라우저의 것은 초뿐이다. `ms`는 인라인 값을 정규화 없이
+ * 넘기는 jsdom의 것이라, 그 가지는 테스트가 딛고 선 자리다.
  *
- * Zero is an answer rather than a failure: a tile with no transition has nothing
- * to wait for, and committing immediately is what that means. Nothing to read at
- * all says the same thing — there is no stylesheet, so there is no animation to
- * outlast.
+ * 0은 실패가 아니라 답이다 — 트랜지션 없는 타일은 기다릴 것이 없다.
  */
 export function readTransitionMs(element: HTMLElement): number {
   const raw = getComputedStyle(element).transitionDuration.trim()
@@ -90,14 +70,14 @@ export function readTransitionMs(element: HTMLElement): number {
   return raw.endsWith('ms') ? amount : amount * 1000
 }
 
-/** The slot under a point — in page coordinates, like the grid — clamped to the slots that hold a photo. */
+/** 한 점 아래의 슬롯 — 격자와 같은 페이지 좌표 — 사진이 있는 슬롯으로 가둔다. */
 export function slotAt(point: { x: number; y: number }, grid: GridGeometry, count: number): number {
   const column = clamp(Math.floor((point.x - grid.left) / grid.pitch), 0, grid.columns - 1)
   const row = Math.max(0, Math.floor((point.y - grid.top) / grid.pitch))
   return clamp(row * grid.columns + column, 0, count - 1)
 }
 
-/** How far slot `to` sits from slot `from`. */
+/** 슬롯 `to`가 슬롯 `from`에서 얼마나 떨어져 있는지. */
 export function slotOffset(
   from: number,
   to: number,
@@ -111,12 +91,10 @@ export function slotOffset(
 }
 
 /**
- * Which slot the photo at `index` is drawn in while the one from `from` hovers
- * over `to`.
+ * `from`의 사진이 `to` 위에 떠 있는 동안 `index`의 사진이 그려지는 슬롯.
  *
- * Everything between the two ends shifts by one, in the direction that opens a
- * gap at `to`. Nothing outside that range moves — which is why dragging across a
- * five-photo row only ever animates the photos actually passed over.
+ * 두 끝 사이의 것들이 `to`에 자리를 내주는 방향으로 하나씩 밀린다. 그 범위 밖은 움직이지
+ * 않으므로, 다섯 장짜리 행을 가로질러 끌어도 실제로 지나친 사진만 움직인다.
  */
 export function displaySlot(index: number, from: number, to: number): number {
   if (index === from) return to
@@ -124,7 +102,7 @@ export function displaySlot(index: number, from: number, to: number): number {
   return index >= to && index < from ? index + 1 : index
 }
 
-/** The list with one item lifted out and put back down at `to`. */
+/** 항목 하나를 들어내 `to`에 다시 놓은 목록. */
 export function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
   const next = [...items]
   const [moved] = next.splice(from, 1)

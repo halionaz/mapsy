@@ -1,17 +1,13 @@
 /**
- * Mirrors the CHECK constraints in supabase/migrations.
+ * supabase/migrations의 CHECK 제약을 비춘다.
  *
- * Not belt-and-braces: with photos uploading before the row is inserted, a
- * violation is only discovered after every object has been transferred. The
- * user waits through the whole upload, sees "업로드 실패", and retrying fails at
- * exactly the same point. Catching it in the form costs nothing and turns a
- * dead end into a corrected character count.
+ * 이중 안전장치가 아니다. 사진이 행보다 먼저 올라가므로 위반은 객체를 전부 전송한 뒤에야
+ * 드러난다. 사용자는 업로드를 다 기다린 끝에 "업로드 실패"를 보고, 다시 시도해도 정확히
+ * 같은 자리에서 실패한다. 폼에서 잡는 것은 공짜이고, 막다른 길을 글자 수 수정으로 바꾼다.
  *
- * Every number here is a copy of one the database owns, so `limits.test.ts`
- * checks each against the generated constraint definitions — and refuses to let
- * a new ceiling appear in the schema without either a mirror or a written reason
- * for not having one. Names alone were not enough: `price` below drifted while
- * its constraint kept its name.
+ * 여기 모든 숫자는 DB가 소유한 숫자의 사본이라 `limits.test.ts`가 생성된 제약 정의와
+ * 하나씩 맞춰본다. 이름만으로는 부족했다 — 아래 `price`는 제약 이름이 그대로인 채로 값이
+ * 어긋났다.
  */
 export const LIMITS = {
   title: 100,
@@ -22,21 +18,18 @@ export const LIMITS = {
   tagLength: 40,
   tagCount: 20,
   /**
-   * Mirrors `items_price_max`. The previous value here was 10,000,000,000 with a
-   * comment claiming it sat inside int4 — it does not; int4 stops at
-   * 2,147,483,647, so everything between the two passed the form and died at
-   * INSERT after the photos had uploaded. It drifted because it was the one
-   * limit with no named constraint behind it and therefore nothing asserting it.
+   * `items_price_max`의 거울. 이전 값은 100억이었고 int4 안이라는 주석이 붙어 있었다 —
+   * int4는 2,147,483,647에서 끝난다. 그 사이의 값은 폼을 통과하고 사진이 다 올라간 뒤
+   * INSERT에서 죽었다.
    */
   price: 1_000_000_000,
 } as const
 
 /**
- * How many photos one item may have — mirrors `item_images_sort_order_range`,
- * whose ceiling is on `sort_order` and so is one less than this.
+ * 옷 하나가 가질 수 있는 사진 수 — `item_images_sort_order_range`의 거울이고, 그쪽
+ * 상한은 `sort_order`에 걸려 있어 이 값보다 하나 작다.
  *
- * Here rather than beside the picker that enforces it, for the same reason as
- * everything above: it is a copy of a number the database owns, and the test
- * that keeps the copies honest has to be able to read it.
+ * 강제하는 피커 옆이 아니라 여기 있는 것은 위와 같은 이유다. DB가 소유한 숫자의 사본이고,
+ * 사본을 정직하게 유지하는 테스트가 그것을 읽을 수 있어야 한다.
  */
 export const MAX_PHOTOS = 5

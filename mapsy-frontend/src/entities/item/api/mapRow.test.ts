@@ -33,55 +33,54 @@ const baseRow: ItemRow = {
 }
 
 describe('toItem', () => {
-  it('maps snake_case columns onto the domain shape', () => {
+  it('snake_case 컬럼을 도메인 모양으로 옮긴다', () => {
     const item = toItem(baseRow)
     expect(item.categoryId).toBe('outer.fleece')
     expect(item.purchasePlace).toBe('무신사')
     expect(item.isFavorite).toBe(false)
   })
 
-  it('drops colours that are not in the palette', () => {
-    // A row written by a build with a wider palette must not smuggle an
-    // unknown id into ColorId.
+  it('팔레트에 없는 색을 버린다', () => {
+    // 더 넓은 팔레트를 가진 빌드가 쓴 행이 모르는 id를 ColorId로 밀입국시키면 안 된다.
     const item = toItem({ ...baseRow, colors: ['navy', 'ivory', 'white'] })
     expect(item.colors).toEqual(['navy', 'white'])
   })
 
-  it('drops unknown seasons', () => {
+  it('모르는 계절을 버린다', () => {
     const item = toItem({ ...baseRow, seasons: ['fall', 'monsoon'] })
     expect(item.seasons).toEqual(['fall'])
   })
 
-  it('handles empty arrays', () => {
-    // Not null arrays: colors/seasons/tags are `not null default '{}'`, and the
-    // generated row types carry that through, so the empty case is the only one.
+  it('빈 배열을 다룬다', () => {
+    // null 배열이 아니다 — colors·seasons·tags가 `not null default '{}'`이고 생성된
+    // 행 타입도 그것을 그대로 싣는다.
     const item = toItem({ ...baseRow, colors: [], seasons: [], tags: [] })
     expect(item.colors).toEqual([])
     expect(item.seasons).toEqual([])
     expect(item.tags).toEqual([])
   })
 
-  it('falls back to owned for an unrecognised status', () => {
-    // Hiding something the user still owns is worse than the reverse.
+  it('모르는 상태는 보유로 떨어진다', () => {
+    // 아직 가진 것을 감추는 쪽이 그 반대보다 나쁘다.
     expect(toItem({ ...baseRow, status: 'archived' }).status).toBe('owned')
     expect(toItem({ ...baseRow, status: 'disposed' }).status).toBe('disposed')
   })
 
-  it('reroutes a retired subcategory to 기타 instead of dropping it', () => {
-    // The database only validates the group prefix, so this row is legal.
+  it('없앤 소분류를 버리지 않고 기타로 돌린다', () => {
+    // DB는 대분류 접두사만 검증하므로 이 행은 합법이다.
     expect(toItem({ ...baseRow, category_id: 'outer.poncho' }).categoryId).toBe('etc.etc')
   })
 })
 
 describe('toItemInsert', () => {
-  it('trims the title and stamps the owner', () => {
+  it('이름을 다듬고 소유자를 찍는다', () => {
     const payload = toItemInsert({ title: '  후드  ', categoryId: 'top.sweatshirt' }, 'u9')
     expect(payload.title).toBe('후드')
     expect(payload.user_id).toBe('u9')
   })
 
-  it('normalises blank optional text to null', () => {
-    // "no brand" must have one representation, not two.
+  it('비어 있는 선택 텍스트를 null로 정규화한다', () => {
+    // "브랜드 없음"의 표현이 둘이 아니라 하나여야 한다.
     const payload = toItemInsert(
       { title: '후드', categoryId: 'top.sweatshirt', brand: '   ', memo: '' },
       'u9',
@@ -90,7 +89,7 @@ describe('toItemInsert', () => {
     expect(payload.memo).toBeNull()
   })
 
-  it('defaults absent collections rather than sending undefined', () => {
+  it('없는 컬렉션은 undefined를 보내지 않고 기본값으로 채운다', () => {
     const payload = toItemInsert({ title: '후드', categoryId: 'top.sweatshirt' }, 'u9')
     expect(payload.colors).toEqual([])
     expect(payload.seasons).toEqual([])
@@ -98,21 +97,21 @@ describe('toItemInsert', () => {
     expect(payload.is_favorite).toBe(false)
   })
 
-  it('keeps a zero price instead of nulling it', () => {
-    // Free garments are real — a gift or a hand-me-down.
+  it('0원을 null로 만들지 않고 그대로 둔다', () => {
+    // 공짜 옷은 실재한다 — 선물이거나 물려받은 것.
     const payload = toItemInsert({ title: '선물', categoryId: 'top.knit', price: 0 }, 'u9')
     expect(payload.price).toBe(0)
   })
 })
 
 describe('toItemUpdate', () => {
-  it('omits user_id so ownership cannot be reassigned', () => {
-    // Sending it would at best be a no-op and at worst trip the RLS check.
+  it('소유가 재지정될 수 없도록 user_id를 뺀다', () => {
+    // 보내봐야 잘해야 무효고 잘못하면 RLS 검사에 걸린다.
     const payload = toItemUpdate({ title: '후드', categoryId: 'top.sweatshirt' })
     expect(payload).not.toHaveProperty('user_id')
   })
 
-  it('still writes the editable columns', () => {
+  it('편집 가능한 컬럼은 그대로 쓴다', () => {
     const payload = toItemUpdate({
       title: '후드',
       categoryId: 'top.sweatshirt',
@@ -138,10 +137,9 @@ describe('toImagePayload', () => {
     return { kind: 'picked', photo: { previewUrl } as ProcessedPhoto }
   }
 
-  it('keeps the form order and hands each picked entry the upload it belongs to', () => {
-    // The position in this array *is* the sort_order the function writes, so a
-    // payload that carries the right rows in the wrong order stores the photos
-    // in an order nobody chose — and nothing fails.
+  it('폼 순서를 지키고 고른 항목마다 자기 업로드를 건넨다', () => {
+    // 이 배열의 위치가 *곧* 함수가 쓰는 sort_order라, 맞는 행을 틀린 순서로 실은
+    // payload는 아무도 고르지 않은 순서로 사진을 저장한다 — 그리고 아무것도 실패하지 않는다.
     const payload = toImagePayload(
       [picked('blob:a'), stored('old1'), picked('blob:b'), stored('old2')],
       uploaded,
@@ -150,25 +148,25 @@ describe('toImagePayload', () => {
     expect(payload).toEqual([uploaded[0], { id: 'old1' }, uploaded[1], { id: 'old2' }])
   })
 
-  it('sends a stored photo as its id alone — nothing that could rewrite the row', () => {
+  it('저장본은 id만 보낸다 — 행을 다시 쓸 수 있는 것은 아무것도', () => {
     expect(toImagePayload([stored('old1')], [])).toEqual([{ id: 'old1' }])
   })
 })
 
 describe('uniqueTags', () => {
-  it('strips a leading hash and surrounding space', () => {
+  it('앞의 #과 둘레 공백을 벗긴다', () => {
     expect(uniqueTags([' #출근용 ', '러닝'])).toEqual(['출근용', '러닝'])
   })
 
-  it('de-duplicates after normalising', () => {
+  it('정규화한 뒤 중복을 없앤다', () => {
     expect(uniqueTags(['출근용', '#출근용', ' 출근용'])).toEqual(['출근용'])
   })
 
-  it('drops empties', () => {
+  it('빈 것을 버린다', () => {
     expect(uniqueTags(['', '  ', '#'])).toEqual([])
   })
 
-  it('preserves input order', () => {
+  it('입력 순서를 지킨다', () => {
     expect(uniqueTags(['b', 'a', 'b', 'c'])).toEqual(['b', 'a', 'c'])
   })
 })

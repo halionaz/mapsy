@@ -3,24 +3,15 @@ import type { ColorId } from '@/shared/config/colors'
 import type { SeasonId } from '@/shared/config/seasons'
 import type { ItemStatus } from '@/entities/item'
 
-/**
- * Wardrobe filter state — PRD §6.1.
- *
- * Lives with the filters feature rather than in `types/`, because the default
- * value is a runtime decision this feature owns, not a description of a database
- * row.
- */
+/** 옷장 필터 상태 — PRD §6.1. */
 
 /**
- * `worn` is the one axis the wear log adds, and it is deliberately alone.
+ * `worn`은 착용 기록이 더한 유일한 축이고, 혼자인 것은 의도다.
  *
- * "많이 입은순" and "오래 안 입은순" were both drafted beside it and both
- * dropped. The second is this list upside down, and a section here holds one
- * category of one wardrobe — the bottom of it is a scroll away, not a second
- * control. The first counts, and a count states a frequency the log cannot
- * honestly claim: a few unrecorded mornings move the number without moving the
- * truth. "When did I last wear this" survives a gap in the record, because it is
- * a smaller claim.
+ * "많이 입은순"과 "오래 안 입은순"이 함께 초안에 있었고 둘 다 뺐다. 뒤쪽은 이 목록을
+ * 뒤집은 것이라 스크롤 한 번이지 두 번째 컨트롤이 아니다. 앞쪽은 횟수를 세는데, 횟수는
+ * 기록이 정직하게 주장할 수 없는 빈도를 말한다 — 기록하지 않은 며칠이 진실은 그대로 둔 채
+ * 숫자만 움직인다. "마지막으로 언제 입었나"는 더 작은 주장이라 기록의 구멍을 살아남는다.
  */
 export const SORT_OPTIONS = [
   { id: 'recent', label: '최근 등록순' },
@@ -32,17 +23,14 @@ export const SORT_OPTIONS = [
 
 export type SortId = (typeof SORT_OPTIONS)[number]['id']
 
-/**
- * Values within one axis are OR'd, and the axes are AND'd together — so
- * `상의 AND (블랙 OR 네이비) AND 여름`.
- */
+/** 한 축 안의 값은 OR, 축끼리는 AND — `상의 AND (블랙 OR 네이비) AND 여름`. */
 export interface WardrobeFilters {
   query: string
   groupIds: CategoryGroupId[]
   categoryIds: SubcategoryId[]
   colors: ColorId[]
   seasons: SeasonId[]
-  /** Free-form: presets vary per category and free input is allowed. */
+  /** 자유 문자열 — 프리셋이 카테고리마다 다르고 직접 입력도 허용된다. */
   sizes: string[]
   fits: string[]
   brands: string[]
@@ -63,7 +51,7 @@ export const EMPTY_FILTERS: WardrobeFilters = {
   brands: [],
   tags: [],
   favoriteOnly: false,
-  // Disposed garments stay out of the wardrobe until explicitly asked for.
+  // 처분한 옷은 따로 요청하기 전까지 옷장 밖에 있다.
   status: 'owned',
   sort: 'recent',
 }

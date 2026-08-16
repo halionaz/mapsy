@@ -8,32 +8,29 @@ import { SIGNED_URL_TTL_SECONDS } from '@/shared/api/storage'
 import { useItemPhotos } from './useItemPhotos'
 
 /**
- * The one piece of logic this feature rewrote rather than moved.
+ * 이 기능이 옮긴 것이 아니라 다시 쓴 유일한 로직.
  *
- * `photoSlots` says in its own header that its three-line rule has been got
- * wrong twice, in both directions — and this hook is what now produces the URLs
- * it was got wrong about. What is held down here is not the rendering but the
- * four facts the screen quietly depends on: an item with no photos settles
- * rather than waiting forever, a cache patch does not re-sign, a fresh signing
- * forgives a photo that would not load, and a failure settles as failure.
+ * `photoSlots`의 세 줄짜리 규칙이 양방향으로 한 번씩 틀렸었고, 그것이 틀렸던 URL을 이제
+ * 이 훅이 만든다. 여기서 붙드는 것은 렌더링이 아니라 화면이 조용히 기대는 네 가지다 —
+ * 사진 없는 옷이 영원히 기다리지 않고 정착하는 것, 캐시 패치가 재서명하지 않는 것,
+ * 새 서명이 로드에 실패했던 사진을 용서하는 것, 실패가 실패로 정착하는 것.
  *
- * The identity assertions matter as much as the value ones. Swiping in the
- * viewer re-renders the screen on every frame, and the viewer rebuilds its key
- * handler whenever `slots` changes identity.
+ * 참조 동일성 검사가 값 검사만큼 중요하다. 뷰어에서 스와이프하면 화면이 매 프레임 다시
+ * 그려지고, 뷰어는 `slots`의 identity가 바뀔 때마다 키 핸들러를 다시 짓는다.
  */
 
 const { signPathsMock } = vi.hoisted(() => ({ signPathsMock: vi.fn() }))
 
-// The real module reaches for `getSupabase()`; only the call is replaced, so
-// SIGNED_URL_TTL_SECONDS and storageKeys stay the values the hook ships with.
+// 진짜 모듈은 `getSupabase()`를 집는다. 그 호출만 대체하므로 SIGNED_URL_TTL_SECONDS와
+// storageKeys는 훅이 실제로 쓰는 값 그대로다.
 vi.mock('@/shared/api/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/shared/api/storage')>()),
   signPaths: signPathsMock,
 }))
 
-// `isSupabaseConfigured` is computed at module load from import.meta.env, which
-// is empty under vitest — without this the query is disabled and every
-// assertion below would pass against a hook that never ran.
+// `isSupabaseConfigured`는 모듈 로드 때 import.meta.env에서 계산되고 vitest에서는
+// 비어 있다 — 이것이 없으면 쿼리가 꺼지고 아래 모든 단언이 한 번도 돌지 않은 훅을
+// 상대로 통과한다.
 vi.mock('@/shared/api/supabase', () => ({
   isSupabaseConfigured: true,
   STORAGE_BUCKET: 'wardrobe',
@@ -63,15 +60,14 @@ function image(id: string, sortOrder: number): ItemImage {
 
 function renderUseItemPhotos(
   images: readonly ItemImage[] | undefined,
-  // Passed in only by the test that leaves the screen and comes back; every
-  // other test gets a fresh client so nothing reads another test's cache.
+  // 화면을 떠났다 돌아오는 테스트만 넘긴다. 나머지는 새 클라이언트를 받아 다른
+  // 테스트의 캐시를 읽지 않는다.
   client?: QueryClient,
 ) {
   const queryClient =
     client ??
     new QueryClient({
-      // A failure has to settle within the test rather than after three
-      // attempts.
+      // 실패가 세 번 시도 뒤가 아니라 테스트 안에서 정착해야 한다.
       defaultOptions: { queries: { retry: false } },
     })
   const rendered = renderHook((props: readonly ItemImage[] | undefined) => useItemPhotos(props), {
@@ -92,8 +88,7 @@ describe('useItemPhotos', () => {
   })
 
   it('sortOrder 순으로 정렬하고 그 순서대로 URL을 짝지운다', async () => {
-    // Deliberately out of order, and with a gap — the cover is the lowest
-    // sortOrder, not literally 0.
+    // 일부러 순서를 섞고 틈을 뒀다 — 커버는 `sortOrder`가 가장 작은 것이지 0이 아니다.
     const images = [image('b', 3), image('a', 1)]
     signPathsMock.mockResolvedValue(
       new Map([
@@ -120,14 +115,13 @@ describe('useItemPhotos', () => {
     await waitFor(() => expect(result.current.slots[0].state).toBe('ready'))
     const before = result.current.slots
 
-    // Same array reference — what `{ ...entry, isFavorite }` leaves behind, and
-    // what keeps a star tap from remounting every <img>.
+    // 같은 배열 참조 — `{ ...entry, isFavorite }`가 남기는 것이고, 별 탭이 모든
+    // `<img>`를 다시 마운트하지 않게 하는 것이다.
     rerender(images)
     expect(result.current.slots).toBe(before)
 
-    // A different array with the same contents: react-query hashes the key by
-    // value, so this is still the same cache entry and still no round trip.
-    // (This is what replaced joining the paths into a string.)
+    // 내용이 같은 다른 배열 — react-query가 키를 값으로 해싱하므로 여전히 같은 캐시
+    // 엔트리이고 여전히 왕복이 없다. (경로를 문자열로 잇던 것을 이것이 대체했다.)
     rerender([...images])
     expect(signPathsMock).toHaveBeenCalledTimes(1)
     expect(result.current.slots).toEqual(before)
@@ -143,17 +137,15 @@ describe('useItemPhotos', () => {
     act(() => result.current.markUnloadable('a'))
     expect(result.current.slots[0].state).toBe('failed')
 
-    // A re-sign — what `refetchOnWindowFocus` does once the URLs are near
-    // expiry — hands out a URL that did not exist when the <img> gave up, so
-    // the verdict against the old one must not survive it.
+    // 재서명은 — URL이 만료에 가까워지면 `refetchOnWindowFocus`가 하는 일 — `<img>`가
+    // 포기했을 때 없던 URL을 내준다. 옛 URL에 대한 판정이 그것을 살아남으면 안 된다.
     signPathsMock.mockResolvedValue(new Map([[images[0].path, 'https://signed/a-fresh']]))
     await act(async () => {
       await queryClient.refetchQueries()
     })
 
-    // `waitFor`, not a bare assertion: refetchQueries resolves when the query
-    // does, and the observer notifies React after that — the reset lands a tick
-    // later than the promise.
+    // 맨 단언이 아니라 `waitFor` — refetchQueries는 쿼리가 끝날 때 resolve하고
+    // 옵저버는 그 뒤에 React에 알린다. 리셋은 promise보다 한 틱 늦게 도착한다.
     await waitFor(() =>
       expect(result.current.slots[0]).toEqual({
         id: 'a',
@@ -220,8 +212,8 @@ describe('useItemPhotos', () => {
 
     const { result } = renderUseItemPhotos(images)
 
-    // Not `pending` forever: a permanent skeleton reads as a slow network
-    // rather than as something a reload would fix.
+    // 영원한 `pending`이 아니다 — 계속 남는 스켈레톤은 새로고침으로 고쳐질 것이
+    // 아니라 느린 네트워크로 읽힌다.
     await waitFor(() => expect(result.current.slots[0].state).toBe('failed'))
     expect(result.current.slots.map((slot) => slot.state)).toEqual(['failed', 'failed'])
     expect(result.current.slots.every((slot) => slot.url === null)).toBe(true)

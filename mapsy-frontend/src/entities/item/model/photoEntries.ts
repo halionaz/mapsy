@@ -2,21 +2,20 @@ import type { ProcessedPhoto } from '@/shared/lib/image'
 import type { ItemImage } from './types'
 
 /**
- * A photo in the form — one the item already has, or one picked in this session.
+ * 폼 안의 사진 — 옷이 이미 가진 것이거나, 이번에 고른 것.
  *
- * The edit screen mixes the two in a single ordered list: adding, removing and
- * reordering all happen against the same row of tiles, and which of them is a
- * storage object and which is still a blob in memory only matters at save time.
+ * 편집 화면은 둘을 하나의 순서 있는 목록에 섞는다. 추가·삭제·재정렬이 같은 타일 행에서
+ * 일어나고, 어느 쪽이 스토리지 객체이고 어느 쪽이 아직 메모리의 blob인지는 저장할 때만
+ * 의미가 있다.
  *
- * A union rather than an object with an optional blob, for the reason `PhotoSlot`
- * is one: "already stored" and "has an id" are then the same fact to the type
- * checker, and nothing can reach for an id that does not exist yet.
+ * 선택적 blob을 가진 객체가 아니라 유니온인 것은, 그래야 "이미 저장됨"과 "id가 있음"이
+ * 타입 검사기에게 같은 사실이 되어 아직 없는 id를 집을 수 없기 때문이다.
  */
 export type PhotoEntry =
   | { kind: 'stored'; image: ItemImage }
   | { kind: 'picked'; photo: ProcessedPhoto }
 
-/** An item's photos as form entries, cover first. */
+/** 옷의 사진을 폼 항목으로. 커버가 먼저. */
 export function storedPhotoEntries(images: readonly ItemImage[]): PhotoEntry[] {
   return [...images]
     .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -24,41 +23,28 @@ export function storedPhotoEntries(images: readonly ItemImage[]): PhotoEntry[] {
 }
 
 /**
- * What identifies a photo in the form: the React key, the thing the picker
- * reorders by, and — through `samePhotoList` — what a save compares to decide
- * whether to rewrite the photo list at all.
+ * 폼에서 사진을 식별하는 값 — React 키이자, 피커가 재정렬하는 기준이자,
+ * `samePhotoList`를 통해 저장이 사진 목록을 아예 다시 쓸지 판단하는 근거다.
  *
- * That third use is the one to remember before changing this. A key made unique
- * per render (a fresh uuid, say) would look right in the list and quietly make
- * every save a rewrite, because no two lists would ever compare equal.
+ * 바꾸기 전에 기억할 것은 세 번째다. 렌더마다 고유한 키(새 uuid 같은)는 목록에서는
+ * 멀쩡해 보이면서 모든 저장을 재작성으로 만든다 — 어떤 두 목록도 같아지지 않으므로.
  *
- * A picked photo has no id until it is uploaded, so its preview URL stands in:
- * `URL.createObjectURL` hands out a distinct one per blob, and it lives exactly
- * as long as the entry does.
+ * 고른 사진은 올라가기 전까지 id가 없어서 미리보기 URL이 대신한다. blob마다 다른 값을
+ * 받고, 항목과 정확히 같은 수명을 산다.
  */
 export function photoEntryKey(entry: PhotoEntry): string {
   return entry.kind === 'stored' ? entry.image.id : entry.photo.previewUrl
 }
 
 /**
- * Whether two photo lists say the same thing — same photos, same order.
+ * 두 사진 목록이 같은 말을 하는지 — 같은 사진, 같은 순서.
  *
- * The save asks this of the list the form was opened with against the list it is
- * handing back, and the comparison has to be against **that** rather than
- * against whatever the wardrobe cache holds now. `set_item_images` writes
- * exactly the list it is given, so anything it is not told about is deleted; the
- * question worth asking is therefore "did the person touch the photos", and only
- * the form knows.
+ * 비교 대상은 옷장 캐시가 아니라 **폼이 열릴 때의 목록**이어야 한다. 캐시는 창 포커스에
+ * 다시 불러오므로, 화면이 열린 사이 다른 기기가 더한 사진이 캐시에만 있게 되고 — 메모만
+ * 고친 저장이 변경으로 읽혀 사용자가 본 적 없는 사진을 지운다.
  *
- * Comparing against the cache instead looked equivalent and was not. The cache
- * refetches on window focus, so a screen left open while another device added a
- * sixth photo comes back with six in the cache and five in the form — and a save
- * that was only ever about the memo field then reads as a change and deletes the
- * photo the user never saw.
- *
- * What this cannot answer is the same edit when the photos *were* touched: the
- * list is a whole answer, so the sixth photo goes. Refusing that needs the
- * server to compare versions, which is a different piece of work.
+ * 사진을 *정말로* 건드린 경우의 같은 문제는 이것으로 못 막는다. 목록은 통째로 하나의
+ * 답이라 그 사진은 사라지고, 막으려면 서버가 버전을 비교해야 한다.
  */
 export function samePhotoList(a: readonly PhotoEntry[], b: readonly PhotoEntry[]): boolean {
   return (
