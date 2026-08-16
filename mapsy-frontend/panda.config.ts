@@ -7,14 +7,12 @@ export default defineConfig({
   outdir: 'styled-system',
   jsxFramework: 'react',
 
-  // mapsy follows the OS colour scheme and deliberately ships no manual toggle
-  // (PRD §9), so `_dark` is re-pointed from Panda's default class-based selector
-  // to the media query. Every semantic token below then inherits OS-driven dark
-  // mode for free, and no component ever needs its own theme conditional.
+  // mapsy는 OS 설정을 따르고 수동 토글을 일부러 두지 않으므로(PRD §9), `_dark`를
+  // Panda 기본의 클래스 셀렉터에서 미디어 쿼리로 옮긴다. 아래 시맨틱 토큰이 전부 그것을
+  // 물려받고, 어떤 컴포넌트도 자기 테마 분기를 갖지 않는다.
   //
-  // The palette is designed dark-first and inverted for light, not the other way
-  // round: this is a screen full of photographs of clothes, and a near-black page
-  // is what lets the garment be the only lit thing on it.
+  // 팔레트는 라이트를 뒤집은 것이 아니라 다크를 먼저 설계했다 — 옷 사진으로 가득한
+  // 화면이고, 검정에 가까운 페이지라야 옷이 유일하게 빛나는 것이 된다.
   conditions: {
     extend: {
       dark: '@media (prefers-color-scheme: dark)',
@@ -24,10 +22,9 @@ export default defineConfig({
   theme: {
     extend: {
       keyframes: {
-        // Skeletons breathe while a photo is being fetched or decoded. Opacity
-        // only — animating a colour or a gradient position on a grid full of
-        // placeholders costs paint work on exactly the frames where the phone is
-        // already busy decoding images. Every use pairs this with `_motionReduce`.
+        // 사진을 받거나 디코드하는 동안 스켈레톤이 숨쉰다. 불투명도만 — 자리표시자로
+        // 가득한 격자에서 색이나 그라데이션 위치를 움직이면, 폰이 이미 이미지 디코딩으로
+        // 바쁜 바로 그 프레임에 페인트 비용이 든다.
         skeletonPulse: {
           '0%, 100%': { opacity: 0.35 },
           '50%': { opacity: 0.14 },
@@ -40,30 +37,29 @@ export default defineConfig({
           from: { opacity: '1' },
           to: { opacity: '0' },
         },
-        // Bottom sheet. Translated in percent of its own height so the distance
-        // is right whether the sheet holds four chips or the whole filter set.
+        // 바텀시트. 자기 높이의 퍼센트로 옮기므로, 시트가 칩 넷을 담든 필터 전체를
+        // 담든 거리가 맞는다.
         slideUp: {
           from: { transform: 'translateY(100%)' },
           to: { transform: 'translateY(0)' },
         },
         /**
-         * The sheet leaving, from wherever it currently is.
+         * 시트가 지금 있는 자리에서 떠나는 것.
          *
-         * `--drawer-translate-y` is written to the content by Ark's drawer on
-         * every frame of a swipe, so starting the keyframe from it means a sheet
-         * flicked halfway down carries on from halfway down. A fixed
-         * `from: translateY(0)` would snap it back up to the top and then play
-         * the exit — a jump on exactly the gesture this animation exists for.
+         * Ark의 drawer가 스와이프 매 프레임마다 `--drawer-translate-y`를 콘텐츠에
+         * 쓰므로, 키프레임을 거기서 시작하면 절반쯤 내려간 시트가 절반에서 이어간다.
+         * 고정된 `from: translateY(0)`은 시트를 맨 위로 되튕긴 뒤 퇴장을 재생한다 —
+         * 이 애니메이션이 존재하는 이유인 바로 그 제스처에서 튀는 것이다.
          *
-         * The fallback covers the other ways out (backdrop, Esc, 결과 보기),
-         * where nothing has been dragged and the sheet starts at rest.
+         * 대체값은 끌린 적 없이 쉬는 자리에서 시작하는 나머지 경로(백드롭, Esc,
+         * 결과 보기)를 덮는다.
          */
         drawerOut: {
           from: { transform: 'translate3d(0, var(--drawer-translate-y, 0px), 0)' },
           to: { transform: 'translate3d(0, 100%, 0)' },
         },
-        // Centred dialogs grow from slightly under full size rather than sliding:
-        // a confirm box has no edge to come from.
+        // 가운데 다이얼로그는 미끄러지지 않고 조금 작은 크기에서 자란다 — 확인 상자에는
+        // 나올 가장자리가 없다.
         popIn: {
           from: { opacity: '0', transform: 'scale(0.96)' },
           to: { opacity: '1', transform: 'scale(1)' },
@@ -86,43 +82,37 @@ export default defineConfig({
         },
 
         sizes: {
-          // The phone-width column every screen is laid out in. Lives here
-          // rather than in each screen so the app can't end up two widths wide.
+          // 모든 화면이 배치되는 폰 폭 컬럼. 화면마다가 아니라 여기 있어야 앱이 두
+          // 가지 폭을 갖지 않는다.
           app: { value: '480px' },
-          // Comfortable max for a single form control on a wide screen.
+          // 넓은 화면에서 폼 컨트롤 하나가 가질 편한 최대 폭.
           field: { value: '320px' },
           swatchSm: { value: '10px' },
           swatchMd: { value: '16px' },
-          // 44px is the smallest thing iOS Human Interface Guidelines will call
-          // a control, and what anything a thumb has to find on its own is sized
-          // to — the icon buttons in the bars, the sheet's handle. Not a line the
-          // whole app clears: chips are 36px on purpose and take their 44px band
-          // from the rail around them (`chipStyle`, and the rail in
-          // `WardrobePage`). This is the floor for what names it.
+          // 44px는 iOS HIG가 컨트롤이라 부르는 가장 작은 것이고, 엄지가 스스로 찾아야
+          // 하는 것의 크기다. 앱 전체가 넘는 선은 아니다 — 칩은 일부러 36px이고 44px
+          // 밴드를 감싸는 레일에서 받는다. 이 토큰을 부르는 것들의 바닥값이다.
           tap: { value: '44px' },
         },
 
         radii: {
-          // Photos and cards. Spotify-ish: enough curve to read as a surface,
-          // not so much that a 1:1 photograph looks like a sticker.
+          // 사진과 카드. 면으로 읽힐 만큼은 굽지만, 1:1 사진이 스티커로 보일 만큼은 아니게.
           card: { value: '10px' },
           field: { value: '12px' },
-          // Bottom sheets, which are only rounded along their top edge.
+          // 바텀시트. 위쪽 가장자리만 둥글다.
           sheet: { value: '20px' },
         },
 
         durations: {
-          // Short enough to feel immediate on a chip tap, long enough to read
-          // as a transition rather than a flicker.
+          // 칩 탭에서 즉각으로 느껴질 만큼 짧고, 깜빡임이 아니라 전환으로 읽힐 만큼 길게.
           fast: { value: '120ms' },
           normal: { value: '200ms' },
           slow: { value: '280ms' },
         },
 
         easings: {
-          // Fast out of the gate and a long settle. This is what makes a sheet
-          // read as a physical object rather than a linear slide, and it is the
-          // single curve everything in the app decelerates on.
+          // 빠르게 출발해 길게 가라앉는다. 시트가 선형 슬라이드가 아니라 물체로 읽히게
+          // 하는 것이고, 앱의 모든 감속이 타는 하나의 곡선이다.
           out: { value: 'cubic-bezier(0.16, 1, 0.3, 1)' },
           inOut: { value: 'cubic-bezier(0.65, 0, 0.35, 1)' },
         },
@@ -144,9 +134,8 @@ export default defineConfig({
         },
 
         colors: {
-          // Neutral ramp — the only greys the UI chrome is allowed to draw from.
-          // Warm rather than blue-grey: it sits under photographs of fabric, and
-          // a cold grey makes every beige and camel garment look washed out.
+          // 중립 램프 — UI 크롬이 쓸 수 있는 유일한 회색. 푸른 회색이 아니라 따뜻한
+          // 쪽이다. 옷감 사진 아래 깔리는데, 차가운 회색은 베이지와 카멜을 전부 바래 보이게 한다.
           neutral: {
             0: { value: '#FFFFFF' },
             50: { value: '#FAFAF9' },
@@ -163,12 +152,11 @@ export default defineConfig({
             950: { value: '#0C0B0A' },
           },
 
-          // Brand orange. 500 is the point colour and is the same hex in both
-          // schemes — a brand that shifts with the OS setting is not a brand.
+          // 브랜드 주황. 500이 포인트 색이고 두 스킴에서 같은 hex다 — OS 설정에 따라
+          // 바뀌는 브랜드는 브랜드가 아니다.
           //
-          // Deliberately redder than `swatch.orange` (#F97316), which is domain
-          // data: an orange garment's dot sits on cards painted in this colour,
-          // and two oranges a few degrees apart read as a rendering bug.
+          // 도메인 데이터인 `swatch.orange`보다 일부러 붉다. 주황 옷의 점이 이 색으로
+          // 칠한 카드 위에 앉는데, 몇 도 차이 나는 주황 둘은 렌더링 버그로 읽힌다.
           brand: {
             50: { value: '#FFF3ED' },
             100: { value: '#FFE2D2' },
@@ -180,9 +168,8 @@ export default defineConfig({
             700: { value: '#C63D0F' },
             800: { value: '#9C300C' },
             900: { value: '#7A2708' },
-            // Orange at 14% over the dark page. A flat hex rather than an alpha
-            // so it composites identically wherever it is used, including on top
-            // of a photograph.
+            // 어두운 페이지 위 14%의 주황. 알파가 아니라 평평한 hex라, 사진 위를 포함해
+            // 어디서 쓰이든 똑같이 합성된다.
             tintDark: { value: '#2E190F' },
           },
 
@@ -195,16 +182,14 @@ export default defineConfig({
             tintDark: { value: '#2A1414' },
           },
 
-          // ── Clothing swatches ────────────────────────────────────────────
-          // Domain data, NOT theme chrome. These are the 16 colours a garment
-          // can be tagged with (PRD §5.3). They must render identically in
-          // light and dark — a beige jacket is beige under either scheme — so
-          // they intentionally live outside `semanticTokens` and must never be
-          // given a `_dark` variant.
+          // ── 옷 색상 스와치 ───────────────────────────────────────────────
+          // 테마 크롬이 아니라 도메인 데이터다. 옷에 붙일 수 있는 16색(PRD §5.3)이고,
+          // 라이트와 다크에서 똑같이 그려져야 한다 — 베이지 자켓은 어느 스킴에서도
+          // 베이지다. 그래서 일부러 `semanticTokens` 바깥에 있고, `_dark` variant를
+          // 주면 안 된다.
           //
-          // `multi` stands for multi-colour/patterned garments. It has no single
-          // truthful colour; the swatch dot renders it as a gradient and this
-          // value is only the flat fallback.
+          // `multi`는 여러 색이거나 패턴인 옷이다. 참인 색 하나가 없어 점은 그라데이션으로
+          // 그려지고, 이 값은 평평한 대체값일 뿐이다.
           swatch: {
             black: { value: '#1A1A1A' },
             white: { value: '#FFFFFF' },
@@ -224,57 +209,52 @@ export default defineConfig({
             multi: { value: '#A3A3A3' },
           },
 
-          // ── Photo overlays ───────────────────────────────────────────────
-          // Chrome that sits on top of a photograph: the full-screen viewer, the
-          // scrim over a thumbnail that is still uploading, the gradient under a
-          // hero image. Like the swatches above these are deliberately outside
-          // `semanticTokens` — a photo viewer is dark under either colour scheme,
-          // because the point is to get everything that is not the photograph
-          // out of the way.
+          // ── 사진 오버레이 ────────────────────────────────────────────────
+          // 사진 위에 놓이는 크롬 — 전체 화면 뷰어, 업로드 중인 썸네일의 스크림, 히어로
+          // 이미지 아래 그라데이션. 위 스와치와 마찬가지로 일부러 `semanticTokens`
+          // 바깥이다. 사진 뷰어는 어느 스킴에서도 어둡다. 사진이 아닌 것을 전부 비키게
+          // 하는 것이 요점이기 때문이다.
           overlay: {
             DEFAULT: { value: 'rgba(8, 7, 7, 0.96)' },
             scrim: { value: 'rgba(8, 7, 7, 0.45)' },
-            // Behind a modal. Heavier than the thumbnail scrim because it has to
-            // push a whole screen back, not tint one tile.
+            // 모달 뒤. 타일 하나를 틴트하는 것이 아니라 화면 전체를 밀어내야 해서
+            // 썸네일 스크림보다 무겁다.
             backdrop: { value: 'rgba(6, 5, 5, 0.72)' },
             fg: { value: '#FAFAF9' },
           },
         },
       },
 
-      // Every colour a component names should come from here, so dark mode is
-      // defined once instead of being re-derived at each call site.
+      // 컴포넌트가 부르는 모든 색이 여기서 나와야 다크 모드가 호출부마다 다시
+      // 파생되지 않고 한 번만 정의된다.
       semanticTokens: {
         colors: {
           bg: {
-            // The page. Near-black rather than pure black: pure black clips
-            // against OLED and leaves an elevated surface nothing to be lighter
-            // than without looking grey.
+            // 페이지. 순수한 검정이 아니라 검정에 가까운 색이다. 순수한 검정은 OLED에서
+            // 잘리고, 그 위에 뜬 면이 회색으로 보이지 않고 밝아질 여지를 남기지 않는다.
             DEFAULT: {
               value: { base: '{colors.neutral.0}', _dark: '{colors.neutral.950}' },
             },
-            // Inset surfaces — search fields, text inputs, the well a control
-            // sits *in* rather than *on*.
+            // 파여 들어간 면 — 검색 필드, 텍스트 입력, 컨트롤이 *위*가 아니라 *안*에
+            // 앉는 우물.
             subtle: {
               value: { base: '{colors.neutral.100}', _dark: '{colors.neutral.900}' },
             },
-            // Cards, bottom sheets, dialogs — anything sitting above the page
-            // plane. One contrast step away from `bg` in both schemes, in
-            // opposite directions, so "elevated" always means "further from the
-            // page" rather than "lighter".
+            // 카드·바텀시트·다이얼로그 — 페이지 평면 위에 뜬 것. 두 스킴에서 `bg`로부터
+            // 대비 한 칸씩, 서로 반대 방향으로 떨어져 있어 "떠 있음"이 늘 "밝음"이 아니라
+            // "페이지에서 멀어짐"을 뜻한다.
             elevated: {
               value: { base: '{colors.neutral.50}', _dark: '{colors.neutral.900}' },
             },
-            // What an elevated surface becomes under the pointer. Spotify's
-            // whole card grid is built on this one move.
+            // 떠 있는 면이 포인터 아래에서 되는 것.
             elevatedHover: {
               value: { base: '{colors.neutral.100}', _dark: '{colors.neutral.800}' },
             },
           },
 
           fg: {
-            // Pure white on dark, on purpose: it is the one thing on the screen
-            // that should look printed rather than dimmed.
+            // 다크에서 순수한 흰색인 것은 의도다 — 화면에서 흐려 보이지 않고 인쇄된
+            // 것처럼 보여야 하는 유일한 것이다.
             DEFAULT: {
               value: { base: '{colors.neutral.900}', _dark: '{colors.neutral.0}' },
             },
@@ -284,7 +264,7 @@ export default defineConfig({
             subtle: {
               value: { base: '{colors.neutral.400}', _dark: '{colors.neutral.500}' },
             },
-            // Text drawn on top of an inverted fill (the secondary button).
+            // 반전된 채움 위에 그려지는 글자(보조 버튼).
             inverted: {
               value: { base: '{colors.neutral.0}', _dark: '{colors.neutral.950}' },
             },
@@ -297,35 +277,33 @@ export default defineConfig({
             subtle: {
               value: { base: '{colors.neutral.100}', _dark: '{colors.neutral.850}' },
             },
-            // A border that is meant to be seen — an unselected chip's outline.
+            // 보이라고 있는 테두리 — 선택되지 않은 칩의 외곽선.
             strong: {
               value: { base: '{colors.neutral.300}', _dark: '{colors.neutral.700}' },
             },
           },
 
           accent: {
-            // The fill. Identical in both schemes.
+            // 채움. 두 스킴에서 같다.
             DEFAULT: { value: '{colors.brand.500}' },
             hover: {
               value: { base: '{colors.brand.600}', _dark: '{colors.brand.400}' },
             },
-            // Text/icon colour that sits on top of an accent fill.
+            // 강조색 채움 위에 앉는 글자·아이콘 색.
             //
-            // Near-black in *both* schemes rather than following the theme.
-            // White on #FF6B2C is 2.8:1 and fails at any size; near-black is
-            // 7.4:1. This is also why Spotify sets black text on its green.
+            // 테마를 따르지 않고 *두 스킴 모두* 검정에 가깝다. 강조색 위의 흰색은 어느
+            // 크기에서도 대비를 통과하지 못한다.
             fg: { value: '{colors.neutral.950}' },
-            // Accent as *text* on the page background, where the fill colour is
-            // too light to pass on white. Darkened for light (5.2:1) and
-            // brightened for dark (8.1:1).
+            // 페이지 배경 위의 *글자*로서의 강조색. 채움 색은 흰 배경에서 대비가
+            // 모자라므로 라이트에서는 어둡게, 다크에서는 밝게 민다.
             text: {
               value: { base: '{colors.brand.700}', _dark: '{colors.brand.400}' },
             },
-            // A tinted surface. One user today — the preview-mode banner.
+            // 틴트된 면. 지금 쓰는 곳은 미리보기 모드 배너뿐이다.
             subtle: {
               value: { base: '{colors.brand.50}', _dark: '{colors.brand.tintDark}' },
             },
-            // The focus ring, and the only colour allowed to draw one.
+            // 포커스 링. 링을 그릴 수 있는 유일한 색이다.
             ring: { value: '{colors.brand.500}' },
           },
 
@@ -349,7 +327,7 @@ export default defineConfig({
               _dark: '0 8px 28px rgba(0, 0, 0, 0.6)',
             },
           },
-          // The FAB, which has to stay legible over an arbitrary photograph.
+          // FAB. 임의의 사진 위에서도 읽혀야 한다.
           fab: {
             value: {
               base: '0 6px 20px rgba(238, 84, 23, 0.32)',
@@ -366,14 +344,12 @@ export default defineConfig({
       },
 
       /**
-       * The type scale.
+       * 타입 스케일.
        *
-       * mapsy ships no webfont — the stack is whatever the OS calls its system
-       * sans, which on the target devices (iOS Safari 16+, Android Chrome) is
-       * already a good Korean face. So the typographic identity has to come from
-       * the scale rather than the letterforms: heavy weights, tight tracking on
-       * anything large, and a hard stop at five sizes. Negative tracking on the
-       * display sizes is most of what separates this from a default stylesheet.
+       * mapsy는 웹폰트를 싣지 않는다 — 스택은 OS가 시스템 산세리프라 부르는 것이고,
+       * 노리는 기기에서는 이미 좋은 한글 서체다. 그래서 타이포그래피의 정체성이
+       * 글자꼴이 아니라 스케일에서 나와야 한다 — 두꺼운 굵기, 큰 것에는 좁은 자간,
+       * 그리고 다섯 크기에서 끊기.
        */
       textStyles: {
         display: {
@@ -414,15 +390,14 @@ export default defineConfig({
         bodyStrong: {
           value: { fontSize: '0.9375rem', lineHeight: '1.5', fontWeight: '600' },
         },
-        // Controls: chips, buttons, tabs.
+        // 컨트롤 — 칩, 버튼, 탭.
         label: {
           value: { fontSize: '0.8125rem', lineHeight: '1.3', fontWeight: '600' },
         },
         caption: {
           value: { fontSize: '0.75rem', lineHeight: '1.4', fontWeight: '500' },
         },
-        // Field captions and eyebrows. The tracking is what stops 12px bold
-        // Korean from setting as a solid block.
+        // 필드 캡션과 눈썹 텍스트. 자간이 12px 볼드 한글이 덩어리로 뭉치는 것을 막는다.
         eyebrow: {
           value: {
             fontSize: '0.6875rem',
@@ -434,12 +409,11 @@ export default defineConfig({
       },
 
       /**
-       * The focus ring, defined once.
+       * 포커스 링, 한 번만 정의한다.
        *
-       * It was previously written out at seventeen call sites, which is
-       * seventeen chances for one of them to be 1px or the wrong colour. A layer
-       * style is the right shape for it: it carries its own `_focusVisible`
-       * condition, so applying it is `layerStyle: 'focusable'` and nothing else.
+       * 호출부마다 적어두면 그 수만큼 1px이나 다른 색이 될 기회가 생긴다. layerStyle이
+       * 맞는 모양이다 — 자기 `_focusVisible` 조건을 싣고 다녀서, 적용은
+       * `layerStyle: 'focusable'` 한 줄이면 끝난다.
        */
       layerStyles: {
         focusable: {
@@ -451,8 +425,8 @@ export default defineConfig({
             },
           },
         },
-        // Same ring drawn inside the element, for anything clipped by a
-        // scrolling ancestor — a tile in the photo strip, a chip in the rail.
+        // 같은 링을 요소 안쪽에 그린다. 스크롤되는 조상에게 잘리는 것들용 —
+        // 사진 스트립의 타일, 레일의 칩.
         focusableInset: {
           value: {
             _focusVisible: {
@@ -468,21 +442,19 @@ export default defineConfig({
 
   globalCss: {
     ':root': {
-      // index.html sets viewport-fit=cover so the layout can reach under the
-      // notch and home indicator. That is only safe if anything anchored to a
-      // screen edge pads itself back out — otherwise the FAB sits beneath the
-      // home indicator. Exposing the insets as plain custom properties (with a
-      // 0px fallback, so non-notched devices and desktop are unaffected) lets
-      // any rule compose them into a calc().
+      // index.html이 viewport-fit=cover라 레이아웃이 노치와 홈 인디케이터 아래까지
+      // 닿는다. 화면 가장자리에 붙은 것이 스스로 패딩을 되돌릴 때만 안전하다 — 아니면
+      // FAB가 홈 인디케이터 밑에 앉는다. 인셋을 평범한 커스텀 프로퍼티로(0px 대체값과
+      // 함께) 노출하면 어떤 규칙이든 calc()로 조합할 수 있다.
       '--safe-t': 'env(safe-area-inset-top, 0px)',
       '--safe-b': 'env(safe-area-inset-bottom, 0px)',
     },
     html: {
-      // Lets native controls (scrollbars, form widgets, the URL bar) follow the
-      // OS scheme too, so the chrome around our tokens doesn't fight them.
+      // 네이티브 컨트롤(스크롤바, 폼 위젯, 주소창)도 OS 스킴을 따르게 해서, 토큰
+      // 둘레의 크롬이 그것들과 싸우지 않게 한다.
       colorScheme: 'light dark',
-      // The app is a phone-width column; on a wide window the page behind it is
-      // the same near-black, so the column does not sit in a white frame.
+      // 앱은 폰 폭 컬럼이다. 넓은 창에서 그 뒤 페이지도 같은 색이라 컬럼이 흰 액자
+      // 안에 놓이지 않는다.
       bg: 'bg',
     },
     'html, body, #root': {
@@ -494,12 +466,12 @@ export default defineConfig({
       fontFamily: 'body',
       textStyle: 'body',
       WebkitFontSmoothing: 'antialiased',
-      // A tap on a chip or a card should look like the state change it causes,
-      // not like a grey rectangle flashing behind it.
+      // 칩이나 카드를 누르면 그것이 일으키는 상태 변화로 보여야지, 뒤에서 회색 사각형이
+      // 번쩍이는 것으로 보이면 안 된다.
       WebkitTapHighlightColor: 'transparent',
     },
-    // Ark UI's dialogs lock scroll by setting this attribute; without a rule for
-    // it the page behind a sheet still moves under a drag on iOS.
+    // Ark UI의 다이얼로그가 이 속성으로 스크롤을 잠근다. 규칙이 없으면 iOS에서 시트 뒤
+    // 페이지가 끌기에 여전히 움직인다.
     'body[data-scroll-locked]': {
       overflow: 'hidden',
     },

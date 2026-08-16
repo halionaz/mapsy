@@ -8,7 +8,7 @@
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
-    /* Bundler mode */
+    /* 번들러 모드 */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
@@ -16,15 +16,14 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Mirrors resolve.alias in vite.config.ts — keep the two in sync.
-       No baseUrl: TS 6 deprecates it, and paths already resolve relative to
-       this file. */
+    /* vite.config.ts의 resolve.alias를 비춘다 — 둘을 같이 고칠 것.
+       baseUrl은 없다: TS 6이 폐기했고, paths가 이미 이 파일 기준으로 풀린다. */
     "paths": {
       "styled-system/*": ["./styled-system/*"],
       "@/*": ["./src/*"]
     },
 
-    /* Linting */
+    /* 린팅 */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
