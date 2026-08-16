@@ -276,9 +276,16 @@ const tile = css({
      * attribute it hangs off. The drop reads this element's computed
      * `transition-duration` to size its wait, so anything the component writes
      * onto the element it also reads from can answer its own question. Written
-     * inline as the `transition` shorthand it did exactly that: a shorthand
-     * resets the longhands it omits, so the duration read back was 0s and every
-     * drop animation was cut on its first frame.
+     * inline as the `transition` shorthand it did exactly that. Measured in
+     * Chrome, on these four tiles:
+     *
+     *   [data-following]                 property none       duration 0.2s
+     *   inline `transition: none`        property none       duration 0s
+     *   inline `transition-property`     property none       duration 0.2s
+     *
+     * — so through the shorthand the drop read 0 and every drop animation was
+     * cut on its first frame. The rule below turns the property off and leaves
+     * the duration to the stylesheet.
      *
      * Nested rather than spelled out as one selector because it has to win on
      * specificity rather than on source order — `.tile[data-following]` inside

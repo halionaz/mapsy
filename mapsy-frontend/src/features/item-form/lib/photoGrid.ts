@@ -69,13 +69,14 @@ export function readGridGeometry(element: HTMLElement): GridGeometry | null {
  * under that setting the tiles move in 1ms, and a settle still waiting 200ms
  * would be a fifth of a second in which the drop appears to have done nothing.
  *
- * Both unit spellings are handled, and only one of them is the browser's. A
- * computed `<time>` serialises in seconds, so what a browser returns here is
- * `0.2s` whatever the stylesheet authored; `200ms` is what **jsdom** returns,
- * because it hands back the inline value unnormalised (measured). So the `ms`
- * branch is there for the tests that stand on it — the seconds branch is the one
- * production takes, and deleting it because the token reads `200ms` would make
- * every drop commit in a fifth of a millisecond.
+ * Both unit spellings are handled, and only one of them is the browser's.
+ * Measured in Chrome against these rules: a duration authored as `200ms` reads
+ * back `0.2s`, and `1ms` under `prefers-reduced-motion` reads back `0.001s` —
+ * computed times come back in seconds whatever the stylesheet said. `200ms` is
+ * what **jsdom** returns, because it hands the inline value back unnormalised
+ * (measured there too). So the `ms` branch is for the tests that stand on it;
+ * the seconds branch is the one production takes, and deleting it because the
+ * token reads `200ms` would make every drop commit in a fifth of a millisecond.
  *
  * Zero is an answer rather than a failure: a tile with no transition has nothing
  * to wait for, and committing immediately is what that means. Nothing to read at
