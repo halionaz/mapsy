@@ -7,7 +7,7 @@
  * `errorMessage`가 여기 모든 이름을 덮어야 하고 errorMessage.test.ts가 그것을 검사한다.
  * 정의 쪽은 *값*을 싣는다 — 폼이 몇몇 상한을 미리 비추므로 사진 다섯 장을 올리기 전에
  * 위반이 잡히고, limits.test.ts가 그 거울이 여전히 맞는지 본다. 이름만으로는 값이
- * 어긋나는 것을 잡지 못한다.
+ * 어긋나는 것을 잡지 못한다 — `items_price_max`가 이름은 그대로인 채 값만 어긋났다.
  */
 export const DB_CONSTRAINTS = [
   'item_images_dimensions_positive',
