@@ -13,6 +13,10 @@
  * `pnpm -r` 명령이 생기는 순간 그 명령만 조용히 건너뛴다 — 이 파일이 막으려는 것과 같은
  * 모양이다. 패키지 목록을 pnpm에게 묻는 것도 같은 이유다. 글롭은 pnpm-workspace.yaml에
  * 있고, 손으로 다시 파싱하면 가드가 자기가 지키는 도구와 다르게 읽기 시작한다.
+ *
+ * 보는 것은 "패키지가 선언했는가"까지다. 그 스크립트를 CI가 도는지는 안 본다 — 퍼뜨리는
+ * 명령이 전부 검사인 것은 아니라서(`pnpm -r dev`를 CI가 돌 이유는 없다), 그 규칙을 여기
+ * 넣으면 예외 주석이 늘고 그 예외를 다시 손으로 관리하게 된다.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -20,9 +24,12 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// `pnpm -r <script>` / `pnpm --recursive run <script>` — 퍼뜨리는 이름을 뽑는다.
+// 루트 스크립트가 부르는 pnpm 호출만 본다. `-r`이 보이는지로 판단하면 양쪽으로 틀린다 —
+// `rm -r dist`가 걸리고, `pnpm recursive run lint`와 `pnpm --filter './mapsy-*' lint`는
+// 빠진다. 뒤의 둘은 실제로 퍼뜨린다(직접 돌려 확인).
 const FANOUT = /^pnpm\s+(?:-r|--recursive)\s+(?:run\s+)?([\w:-]+)$/
-const RECURSIVE = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/
+// 패키지 하나만 지정하는 호출. 글롭 문자가 없어야 한다 — 여럿에 걸리면 그것도 퍼뜨리기다.
+const SINGLE = /^pnpm\s+--filter\s+[\w@/.-]+\s+(?:run\s+)?[\w:-]+$/
 
 const RED = '\x1b[31m'
 const BOLD = '\x1b[1m'
@@ -37,20 +44,28 @@ function fail(message) {
 
 const { scripts: rootScripts = {} } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 
-const required = []
+const fanned = new Set()
 for (const [name, command] of Object.entries(rootScripts)) {
-  if (!RECURSIVE.test(command)) continue
+  for (const segment of command.split(/&&|\|\||;/).map((s) => s.trim())) {
+    if (!/^pnpm\s/.test(segment)) continue
 
-  const match = FANOUT.exec(command.trim())
-  if (!match) {
+    const match = FANOUT.exec(segment)
+    if (match) {
+      fanned.add(match[1])
+      continue
+    }
+    if (SINGLE.test(segment)) continue
+
     fail(
-      `루트 스크립트 "${name}" — -r로 퍼뜨리는데 형태를 읽지 못했습니다: ${command}\n\n` +
-        `  이 가드는 "pnpm -r <script>" 형태만 읽습니다.\n` +
-        `  다른 형태를 쓸 거면 scripts/check-package-scripts.mjs의 FANOUT도 같이 고쳐야 합니다.`,
+      `루트 스크립트 "${name}" — pnpm 호출의 형태를 읽지 못했습니다: ${segment}\n\n` +
+        `  퍼뜨리는 명령이면(-r · --recursive · 글롭 --filter) 그 스크립트를 모든 패키지가\n` +
+        `  선언해야 합니다. 형태를 늘렸다면 scripts/check-package-scripts.mjs의\n` +
+        `  FANOUT·SINGLE도 같이 고쳐야 합니다.`,
     )
   }
-  required.push(match[1])
 }
+
+const required = [...fanned]
 
 // 하나도 없다면 루트 스크립트를 잘못 읽은 것이다. 그대로 두면 "검사할 게 없어서 통과"가 된다.
 if (required.length === 0) {
