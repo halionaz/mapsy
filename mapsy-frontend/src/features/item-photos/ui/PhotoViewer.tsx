@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import { css, cx } from 'styled-system/css'
+import { css } from 'styled-system/css'
 
 import { clamp } from '@/shared/lib/clamp'
 import { appBarBox } from '@/shared/ui/appBarStyle'
@@ -648,28 +648,25 @@ export function PhotoViewer({
           wears — so the close button sits at the height the back chevron was at
           on the screen this opened from. */}
       <div
-        className={cx(
-          appBarBox,
-          css({
-            position: 'absolute',
-            insetInline: '0',
-            top: '0',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '2',
-            px: '2',
-            // Sits over the photo, so it carries its own darkening rather than
-            // hoping the top of the picture is dark enough to read against.
-            bgGradient: 'to-b',
-            gradientFrom: '{colors.overlay.scrim}',
-            gradientTo: 'transparent',
-            // The bar spans the full width over the top of the photo. Left
-            // clickable it would swallow every swipe and pinch that started in
-            // that band, so only the button in it takes pointers.
-            pointerEvents: 'none',
-          }),
-        )}
+        className={css(appBarBox, {
+          position: 'absolute',
+          insetInline: '0',
+          top: '0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '2',
+          px: '2',
+          // Sits over the photo, so it carries its own darkening rather than
+          // hoping the top of the picture is dark enough to read against.
+          bgGradient: 'to-b',
+          gradientFrom: '{colors.overlay.scrim}',
+          gradientTo: 'transparent',
+          // The bar spans the full width over the top of the photo. Left
+          // clickable it would swallow every swipe and pinch that started in
+          // that band, so only the button in it takes pointers.
+          pointerEvents: 'none',
+        })}
       >
         <button
           type="button"

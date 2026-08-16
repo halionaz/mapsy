@@ -893,11 +893,11 @@ const page = vstack({ gap: '0', alignItems: 'stretch', flex: '1' })
  * 설정.
  *
  * Its vertical metrics are `appBarBox`, the same ones every sub-screen's bar
- * wears, so the bar does not move when you go into a garment and back out. Only
- * the horizontal inset is this screen's own — 20px, the page margin everything
- * below it lines up on.
+ * wears, so the bar keeps its place when you go into a garment and back out.
+ * Only the horizontal inset is this screen's own — 20px, the page margin
+ * everything below it lines up on.
  */
-const titleBlock = cx(appBarBox, css({ px: '5' }))
+const titleBlock = css(appBarBox, { px: '5' })
 
 /**
  * The settings button, pulled out to the screen's optical margin.
@@ -1071,9 +1071,9 @@ const listMeta = css({
  *
  * Centred rather than in a corner: this is a one-handed screen and the middle of
  * the bottom edge is the part of a phone both thumbs reach. `fixed` positions it
- * against the viewport — nothing between here and the root has a transform, so
- * the app column's own `position: relative` does not capture it — and the column
- * is centred too, which is what keeps the two agreeing.
+ * against the viewport — nothing between here and the root has a transform, and
+ * a transform is what would capture it — and the app column is centred too,
+ * which is what keeps the two agreeing.
  *
  * The glow is its alone. The wear button beside it is drawn on a surface rather
  * than in the accent, and an accent-tinted shadow under a neutral pill reads as

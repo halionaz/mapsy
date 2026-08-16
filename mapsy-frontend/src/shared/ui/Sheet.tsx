@@ -49,9 +49,9 @@ export function Sheet({ open, onOpenChange, title, footer, children }: SheetProp
         <Drawer.Backdrop className={backdrop} />
         <Drawer.Positioner className={positioner}>
           {/*
-            `draggable={false}` puts the drag back on the handle alone, and the
-            sheet is short enough (`content` below) that the handle is somewhere
-            a thumb can reach.
+            `draggable={false}` confines dragging to the handle, and the sheet is
+            short enough (`content` below) that the handle is somewhere a thumb
+            can reach.
 
             Dragging the body as well was tried, and taken back off a phone. Ark
             starts a drag once the element under the finger has no scroll left in
@@ -165,16 +165,15 @@ const content = css({
 /**
  * The drag target, sized well past the bar it contains.
  *
- * The visible handle is 36×4; a 4px-tall grab area would be a gesture only a
- * stylus could start. The padding is the affordance, and it is held to the same
- * 44px floor as every other control now that this is the only place the sheet
- * can be dragged from.
+ * The visible handle is 36×4 and it is the only place the sheet can be dragged
+ * from, so the box around it is held to the same 44px floor as every other
+ * control in the app. `minHeight` is the whole of that — the padding it replaced
+ * changed neither the height nor where the bar sits once the floor is there.
  */
 const grabber = css({
   display: 'grid',
   placeItems: 'center',
   minHeight: 'tap',
-  py: '3',
   cursor: 'grab',
   '&[data-dragging]': { cursor: 'grabbing' },
 })

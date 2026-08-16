@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { useNavigate } from 'react-router'
-import { css, cva, cx } from 'styled-system/css'
+import { css, cva } from 'styled-system/css'
 import { hstack, vstack } from 'styled-system/patterns'
 
 import { appBarBox } from './appBarStyle'
@@ -110,10 +110,11 @@ export function ScreenHeader({
 }
 
 // The vertical metrics are `appBarBox`, which the wardrobe's bar wears too — the
-// two used to state their own and disagreed.
-const bar = cx(
+// two used to state their own and disagreed. Merged rather than joined with
+// `cx`, so anything set here wins over it rather than races it; see that file.
+const bar = css(
   appBarBox,
-  hstack({
+  hstack.raw({
     position: 'sticky',
     top: '0',
     zIndex: 'header',
