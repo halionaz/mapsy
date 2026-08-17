@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 
+import { PHOTO_CORS } from '@/shared/api/photoCache'
 import * as styles from './SquarePhoto.css'
 
 /**
@@ -30,6 +31,13 @@ interface SquarePhotoProps {
   alt: string
   /** 여기서 `src == null`이 무슨 뜻인지. */
   fallback?: PhotoFallback
+  /**
+   * `src`가 도착할 때까지 그 자리에 깔 저해상도 사진. 없으면 스켈레톤만 보인다.
+   *
+   * 스켈레톤을 대신하지 않고 **덮는다** — 자리표시자 자신도 로드되지 않을 수 있고, 그때
+   * 아래에 아무것도 없으면 상자가 빈 채로 남는다.
+   */
+  placeholder?: string | null
   /** `cover`는 정사각을 채우며 자르고, `contain`은 사진 전체를 맞춘다. */
   fit?: 'cover' | 'contain'
   /** `flush`는 모서리와 실선을 없앤다 — 페이지 가장자리로 쓰이는 사진용. */
@@ -65,6 +73,7 @@ export function SquarePhoto({
   src,
   alt,
   fallback = 'pending',
+  placeholder,
   fit = 'cover',
   shape = 'card',
   loading = 'lazy',
@@ -139,11 +148,29 @@ export function SquarePhoto({
         <span className={styles.notice}>{FALLBACK_LABELS[showing]}</span>
       )}
 
+      {/* 원본보다 먼저 그려져야 원본이 그 위에 얹힌다 — 둘 다 절대 위치라 DOM 순서가
+          쌓임 순서다. 이름은 아래 `<img>`가 지므로 이것은 장식이고, 원본이 다 그려진
+          뒤에도 남지만 완전히 가려져 보이지 않는다. */}
+      {placeholder != null && !failed && (
+        <img
+          src={placeholder}
+          alt=""
+          aria-hidden="true"
+          crossOrigin={PHOTO_CORS}
+          // 원본과 같은 판정을 따른다. 자리표시자가 원본보다 먼저 오는 것이 요점이지
+          // 원본이 미루기로 한 것까지 당겨오는 것이 아니다 — 그러면 스와이프하지 않는
+          // 사람에게 썸네일 다섯 장이 순증이다.
+          loading={loading}
+          className={styles.photo({ loaded: true, fit })}
+        />
+      )}
+
       {src != null && !failed && (
         <img
           src={src}
           alt={alt}
           loading={loading}
+          crossOrigin={PHOTO_CORS}
           className={styles.photo({ loaded: outcome === 'loaded', fit })}
           onLoad={() => settle(src, 'loaded')}
           // 서명 URL은 만료되고 네트워크는 끊긴다. 이게 없으면 스켈레톤이 영원히

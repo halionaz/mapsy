@@ -21,6 +21,22 @@
       browser chrome follows suit. These two are the one place the palette is
       restated outside the config — HTML cannot read a CSS custom property here.
     -->
+    <!--
+      Supabase lives on another origin, and the first garment thumbnail is the
+      third round trip to it (wardrobe query → sign → image). The DNS and TLS in
+      front of that can finish while the app shell paints.
+
+      `crossorigin` matches the CORS requests that reach it — both supabase-js
+      fetches and the photo <img>s (see PHOTO_CORS). Browsers keep separate
+      connection pools for CORS and non-CORS, so an unannotated preconnect warms
+      a socket the first request would not reuse.
+
+      With no env set the literal survives, resolves against our own origin, and
+      does nothing — that is the preview mode this app supports (see
+      `isSupabaseConfigured`). Such a build does warn that the variable looks
+      mistyped; it isn't.
+    -->
+    <link rel="preconnect" href="%VITE_SUPABASE_URL%" crossorigin />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0C0B0A" />
     <meta name="description" content="내가 가진 옷을 한눈에 모아보는 옷장" />

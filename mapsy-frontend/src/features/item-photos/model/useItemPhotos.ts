@@ -7,10 +7,14 @@ import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { photoSlots, type PhotoSlot } from '../lib/photoSlots'
 
 /**
- * 옷의 사진을 커버 순서로, 서명된 원본 URL과 짝지어 돌려준다.
+ * 옷의 사진을 커버 순서로, 서명된 URL과 짝지어 돌려준다.
  *
- * 옷장 쿼리가 서명하는 것은 썸네일뿐이다. 원본은 여기서 서명하므로 격자가 아무도 열지
- * 않는 URL의 값을 치르지 않는다.
+ * 옷장 쿼리가 서명하는 것은 커버 썸네일 하나뿐이다. 나머지는 여기서 서명하므로 격자가
+ * 아무도 열지 않는 URL의 값을 치르지 않는다.
+ *
+ * **원본과 썸네일을 함께 서명한다.** 왕복이 아니라 경로 수가 두 배가 되는 것이고, 비용은
+ * 왕복 쪽에 있다. 그 대가로 상세 화면이 1280px을 기다리는 동안 400px을 깔 수 있고, 격자를
+ * 지나온 커버는 그것을 이미 캐시에 들고 있어 첫 프레임부터 사진이 있다.
  *
  * 두 일이 한 훅에 있는 것은 그것이 하나의 불변식이기 때문이다. URL은 사진과 **위치로**
  * 짝지어지므로, 순서를 한 곳에서 URL을 다른 곳에서 만들면 타일이 이웃의 사진을 보여준다.
@@ -44,7 +48,7 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
     () => [...(images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
     [images],
   )
-  const paths = useMemo(() => photos.map((photo) => photo.path), [photos])
+  const paths = useMemo(() => photos.flatMap((photo) => [photo.path, photo.thumbPath]), [photos])
 
   const query = useQuery({
     // 매 렌더 새 배열이어도 된다. react-query는 키를 값으로 해싱하므로 같은 경로가 같은
@@ -54,9 +58,13 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
     queryKey: storageKeys.signedUrls(paths),
     queryFn: async () => {
       const signed = await signPaths(paths)
-      // 사진마다 하나씩 순서대로 — 서명하지 못한 경로는 `null`. 슬롯을 사진과 나란히
-      // 두는 것이 타일에게 "오는 중"과 "안 왔다"를 구분하게 한다.
-      return paths.map((path) => signed.get(path) ?? null)
+      // 경로 목록이 아니라 사진 목록을 따라 접는다 — 위에서 사진마다 두 경로를 폈으므로,
+      // 그대로 돌려주면 슬롯이 이웃의 썸네일을 원본으로 읽는다. 서명하지 못한 경로는
+      // `null`이고, 그것이 타일에게 "오는 중"과 "안 왔다"를 구분하게 한다.
+      return photos.map((photo) => ({
+        url: signed.get(photo.path) ?? null,
+        thumbUrl: signed.get(photo.thumbPath) ?? null,
+      }))
     },
     enabled: isSupabaseConfigured && paths.length > 0,
     // 옷장 목록의 30분이 아니라 URL이 실제로 사는 시간에 맞춘다. 이 URL이 `<img src>`가
@@ -78,8 +86,8 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
    * 이것이 없으면 타일이 영영 스켈레톤 위에 앉아, 새로고침으로 다시 해볼 수 있는 실패가
    * 아니라 느린 네트워크로 읽힌다. (`retry`가 기본이라 시도를 다 쓴 뒤에만 닿는다.)
    */
-  const allFailed = useMemo(() => photos.map(() => null), [photos])
-  const urls = query.data ?? (query.isError ? allFailed : null)
+  const allFailed = useMemo(() => photos.map(() => ({ url: null, thumbUrl: null })), [photos])
+  const signed = query.data ?? (query.isError ? allFailed : null)
 
   const [unloadable, setUnloadable] = useState<ReadonlySet<string>>(NOTHING_UNLOADABLE)
   const [signedFor, setSignedFor] = useState(query.data)
@@ -97,7 +105,7 @@ export function useItemPhotos(images: readonly ItemImage[] | undefined): ItemPho
   // 콜백을 짓는다. 매 렌더 새 배열은 매 렌더 새 콜백이고, 거기 묶인 키 핸들러가 매번
   // 떼였다 붙는다. 뷰어에서 스와이프하면 뒤 스트립이 스크롤되어 화면이 다시 그려지므로
   // "매 렌더"는 스와이프의 매 프레임이다.
-  const slots = useMemo(() => photoSlots(photos, urls, unloadable), [photos, urls, unloadable])
+  const slots = useMemo(() => photoSlots(photos, signed, unloadable), [photos, signed, unloadable])
 
   return {
     photos,

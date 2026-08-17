@@ -405,6 +405,9 @@ function PhotoStrip({
                 alt={`${item.title} 사진 ${index + 1}`}
                 // 슬롯 자신의 상태에서 `ready`를 뺀 것 — 사진이 있어 그릴 대체물이 없는 경우다.
                 fallback={slot.state === 'ready' ? undefined : slot.state}
+                // 격자에서 들어온 커버는 이 썸네일을 이미 받아둬서, 원본이 오기 전에
+                // 첫 프레임부터 사진이 있다. 나머지 넷도 25KB가 150KB보다 먼저 온다.
+                placeholder={slot.thumbUrl}
                 // 맞추지 않고 채워 자른다. 저장된 원본은 찍힌 비율 그대로라 긴 옷의 끝이
                 // 잘리는데, 그것이 이 거래다 — 세로 사진을 레터박스로 맞추면 화면이
                 // 말하려는 하나의 것 양옆에 페이지 색 띠 둘이 생긴다. 사진 전체는 탭 한
