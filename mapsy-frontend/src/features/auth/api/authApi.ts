@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js'
 
+import { clearPhotoCache } from '@/shared/api/photoCache'
 import { getSupabase } from '@/shared/api/supabase'
 
 /** 저장된 토큰에서 읽은 현재 세션. 없으면 null. */
@@ -31,8 +32,12 @@ export async function signInWithGoogle(): Promise<void> {
  * 게이트로 다시 그려지며, 인증되지 않은 모든 방문이 처리되는 그 자리에서 /login으로 간다.
  * 옆에 `navigate`를 두면 같은 사건에 길이 둘이 되고, 로그아웃이 실패하는 첫 순간 둘이
  * 어긋난다.
+ *
+ * 사진 캐시는 세션이 실제로 끝난 뒤에만 비운다. 실패한 로그아웃은 아직 그 사람의 세션이고,
+ * 남의 것도 아닌 사진을 지울 이유가 없다.
  */
 export async function signOut(): Promise<void> {
   const { error } = await getSupabase().auth.signOut()
   if (error) throw error
+  await clearPhotoCache()
 }

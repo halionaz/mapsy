@@ -151,7 +151,25 @@ curl -sI "$BASE/sw.js" | grep -i cache-control             # max-age=0, must-rev
 - [ ] Google 로그인 왕복 성공, 원래 열려던 경로로 복귀
 - [ ] `/items/<실제 id>` 직접 입력 후 새로고침 → 상세 화면
 - [ ] 옷 등록 → 사진 업로드 → 목록 반영
+- [ ] 사진 응답에 `access-control-allow-origin`과 `cache-control: max-age=31536000`이 있다 (아래)
+- [ ] 옷장을 한 번 연 뒤 DevTools → Application → Cache Storage에 `wardrobe-photos`가 있고,
+      다시 열면 사진 요청이 `(ServiceWorker)`에서 온다
 - [ ] 새 버전 배포 후 다시 열면 갱신
+
+**두 헤더는 눈으로 확인해야 한다.** 둘 다 코드로는 알 수 없고, 둘 다 조용히 실패한다.
+
+```bash
+curl -sI '<상세 화면 <img>에서 복사한 서명 URL>' \
+  | grep -iE 'access-control-allow-origin|cache-control'
+```
+
+`access-control-allow-origin`이 **없으면 사진이 아예 안 보인다.** 사진 `<img>`는 전부
+`crossOrigin="anonymous"`이고(`SquarePhoto`의 `PHOTO_CORS`), 그것 없이는 서비스워커가 만료된
+서명의 오류를 사진과 구분하지 못한 채 캐시해 재서명으로도 풀 수 없는 상태를 만든다. 버킷을
+새로 만들거나 프로젝트를 옮겼다면 여기서 먼저 막힌다.
+
+`cache-control`이 `max-age=3600`(라이브러리 기본값)이면 업로드 때 보낸 값이 무시된 것이고,
+서명 URL이 아직 유효한 동안에도 1280px 원본이 다시 내려온다.
 
 ## 7. 알아둘 것
 

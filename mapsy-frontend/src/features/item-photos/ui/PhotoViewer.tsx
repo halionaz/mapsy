@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 
+import { PHOTO_CORS } from '@/shared/api/photoCache'
 import { clamp } from '@/shared/lib/clamp'
 import * as styles from './PhotoViewer.css'
 import { indexAfterChange } from '../lib/followSlots'
@@ -483,6 +484,9 @@ export function PhotoViewer({
                         }}
                         src={slot.url}
                         alt={`${title} 사진 ${position + 1}`}
+                        // 서비스워커 사진 캐시가 이것에 기댄다 — 없으면 응답이 opaque라
+                        // 만료된 서명의 오류가 사진과 구분되지 않는다. 근거는 상수 옆에.
+                        crossOrigin={PHOTO_CORS}
                         // 없으면 마우스 끌기가 네이티브 이미지 드래그를 시작해
                         // 스와이프가 첫 pointermove에서 죽는다.
                         draggable={false}

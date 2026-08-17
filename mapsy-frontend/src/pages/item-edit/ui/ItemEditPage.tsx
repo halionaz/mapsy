@@ -31,16 +31,23 @@ export function ItemEditPage() {
   /**
    * 옷이 이미 가진 사진의 썸네일.
    *
-   * 더 작은 썸네일 경로를 다시 서명하지 않고 상세 화면의 훅을 거친다. 이 화면은 거기서만
-   * 닿으므로 그 URL이 이미 캐시에 있고 브라우저가 이미 디코드했다 — 같은 다섯 장에 다른
-   * URL을 요구하면 전부 다시 받는다. 대가는 /edit로 바로 들어오는 딥링크이고, 그때는
-   * 작은 타일에 원본이 들어온다.
+   * 상세 화면과 같은 훅을 거친다. 이 화면은 거기서만 닿으므로 그 URL이 이미 캐시에 있고
+   * 브라우저가 이미 디코드했다 — 같은 다섯 장에 다른 URL을 요구하면 전부 다시 받는다.
    */
   const { slots } = useItemPhotos(item?.images)
   // pending 슬롯은 아예 뺀다 — 없음이 "오는 중"이고, 피커가 스켈레톤을 그리는 상태다.
   // 인라인으로 짓는다. 아래쪽에서 이것을 identity로 비교하는 것이 없다.
   const storedUrls = new Map(
-    slots.flatMap((slot) => (slot.state === 'pending' ? [] : [[slot.id, slot.url] as const])),
+    slots.flatMap((slot) =>
+      // 원본이 아니라 썸네일이다. 84px 타일에 1280px을 넣던 자리이고, 그 훅이 이제 둘 다
+      // 서명하므로 더 작은 쪽을 그냥 고를 수 있다.
+      //
+      // 원본으로 되돌아가는 것은 썸네일만 서명하지 못한 슬롯 때문이다. `ready`는 원본이
+      // 있다는 뜻일 뿐 썸네일까지 왔다는 뜻이 아니고(`createSignedUrls`는 경로별 실패를
+      // 결과에 실어 보낸다), 그 `null`을 그대로 넘기면 피커가 멀쩡한 사진에
+      // "불러오지 못함"을 그린다.
+      slot.state === 'pending' ? [] : [[slot.id, slot.thumbUrl ?? slot.url] as const],
+    ),
   )
 
   // 이 화면에 닿을 때쯤이면 옷장이 보통 이미 캐시에 있다(상세 화면에서 열린다).

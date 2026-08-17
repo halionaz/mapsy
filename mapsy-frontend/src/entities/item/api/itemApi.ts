@@ -110,6 +110,18 @@ function contentTypeOf(ext: ProcessedPhoto['ext']): string {
 }
 
 /**
+ * 올린 객체가 캐시될 시간(초). supabase-js가 이것을 `max-age`에 그대로 싣는다.
+ *
+ * 명시하는 이유는 라이브러리 기본값이 한 시간이고 그것이 서명 URL의 수명보다 짧기
+ * 때문이다 — 아직 유효한 URL을 손에 들고도 1280px 원본을 다시 받는다.
+ *
+ * 1년이 안전한 것은 경로가 내용에 묶여 있어서다. 사진마다 `newId()`로 경로를 새로 짓고,
+ * upsert하지 않으며, 교체는 새 경로에 올린 뒤 옛것을 지운다. 같은 경로가 다른 사진을
+ * 가리키는 경우가 없다.
+ */
+const PHOTO_CACHE_SECONDS = String(60 * 60 * 24 * 365)
+
+/**
  * 옷을 만들고 사진을 올린다.
  *
  * 사진이 행보다 **먼저** 올라간다. 옷 id를 클라이언트에서 만들어 DB가 아무것도 보기 전에
@@ -196,47 +208,63 @@ async function uploadPhotos(
   photos: readonly ProcessedPhoto[],
 ): Promise<{ uploaded: UploadedImage[]; paths: string[] }> {
   const storage = getSupabase().storage.from(STORAGE_BUCKET)
-  const uploaded: UploadedImage[] = []
-  const paths: string[] = []
 
-  try {
-    for (const photo of photos) {
-      const imageId = newId()
-      const base = `${userId}/${itemId}/${imageId}`
-      const path = `${base}.${photo.ext}`
-      const thumbPath = `${base}_thumb.${photo.ext}`
-      const contentType = contentTypeOf(photo.ext)
-
-      // 성공 보고 뒤가 아니라 업로드를 시도하기 전에 적는다. 실패한 요청도 객체를
-      // 남겼을 수 있고 — 끊긴 연결은 이쪽이 포기한 것이지 서버가 되돌린 것이 아니다 —
-      // 적히지 않은 경로는 아래 정리가 그냥 지나친다.
-      paths.push(path, thumbPath)
-
-      // all이 아니라 allSettled. 실패한 업로드는 보통 reject가 아니라 `{ error }`로
-      // resolve하지만(`settledError`) rejection 경로도 실재하고, `Promise.all`은 형제를
-      // 기다리지 않고 먼저 거절해 뒤늦게 올라간 객체를 놓친다.
-      const [full, thumb] = await Promise.allSettled([
-        storage.upload(path, photo.full, { contentType }),
-        storage.upload(thumbPath, photo.thumb, { contentType }),
-      ])
-      const fullError = settledError(full)
-      const thumbError = settledError(thumb)
-      if (fullError !== null) throw fullError
-      if (thumbError !== null) throw thumbError
-
-      uploaded.push({
-        id: imageId,
-        path,
-        thumb_path: thumbPath,
-        width: photo.width,
-        height: photo.height,
-      })
+  // 한 장이라도 보내기 전에 경로를 전부 짓는다. 실패한 요청도 객체를 남겼을 수 있고 —
+  // 끊긴 연결은 이쪽이 포기한 것이지 서버가 되돌린 것이 아니다 — 적히지 않은 경로는
+  // 아래 정리가 그냥 지나친다.
+  const plans = photos.map((photo) => {
+    const imageId = newId()
+    const base = `${userId}/${itemId}/${imageId}`
+    return {
+      photo,
+      imageId,
+      path: `${base}.${photo.ext}`,
+      thumbPath: `${base}_thumb.${photo.ext}`,
     }
+  })
+  const paths = plans.flatMap((plan) => [plan.path, plan.thumbPath])
 
-    return { uploaded, paths }
-  } catch (uploadError) {
+  /**
+   * 사진마다 차례로가 아니라 한꺼번에 보낸다.
+   *
+   * 폰 연결에서 값을 치르는 것은 대역폭보다 왕복이라, 사진마다 기다리면 다섯 장이 열
+   * 번의 왕복을 줄줄이 잇는다. `MAX_PHOTOS`가 동시 요청 열 개의 상한이기도 하다 — 그
+   * 상한이 없었다면 여기 동시성 제한이 필요했을 것이다.
+   *
+   * all이 아니라 allSettled. 실패한 업로드는 보통 reject가 아니라 `{ error }`로
+   * resolve하지만(`settledError`) rejection 경로도 실재하고, `Promise.all`은 형제를
+   * 기다리지 않고 먼저 거절해 뒤늦게 올라간 객체를 놓친다.
+   */
+  const results = await Promise.allSettled(
+    plans.flatMap((plan) => {
+      const options = {
+        contentType: contentTypeOf(plan.photo.ext),
+        cacheControl: PHOTO_CACHE_SECONDS,
+      }
+      return [
+        storage.upload(plan.path, plan.photo.full, options),
+        storage.upload(plan.thumbPath, plan.photo.thumb, options),
+      ]
+    }),
+  )
+
+  const failures = results.map(settledError).filter((failure) => failure !== null)
+  if (failures.length > 0) {
     await removeObjects(paths)
-    throw uploadError
+    // 하나만 알린다. 연결이 끊기면 열 개가 같은 이유로 실패하고, 화면에 같은 문장을 열
+    // 번 싣는 것은 무엇이 잘못됐는지를 더 말해주지 않는다.
+    throw failures[0]
+  }
+
+  return {
+    uploaded: plans.map((plan) => ({
+      id: plan.imageId,
+      path: plan.path,
+      thumb_path: plan.thumbPath,
+      width: plan.photo.width,
+      height: plan.photo.height,
+    })),
+    paths,
   }
 }
 

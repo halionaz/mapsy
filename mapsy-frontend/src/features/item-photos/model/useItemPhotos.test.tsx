@@ -93,7 +93,9 @@ describe('useItemPhotos', () => {
     signPathsMock.mockResolvedValue(
       new Map([
         [images[1].path, 'https://signed/a'],
+        [images[1].thumbPath, 'https://signed/a-thumb'],
         [images[0].path, 'https://signed/b'],
+        [images[0].thumbPath, 'https://signed/b-thumb'],
       ]),
     )
 
@@ -101,9 +103,16 @@ describe('useItemPhotos', () => {
     await waitFor(() => expect(result.current.slots[0].state).toBe('ready'))
 
     expect(result.current.photos.map((photo) => photo.id)).toEqual(['a', 'b'])
+    /**
+     * 원본과 썸네일이 **같은 사진 것끼리** 묶여 있는지까지 본다.
+     *
+     * 훅이 사진마다 경로 둘을 펴서 한 번에 서명하고 다시 접는데, 접는 자리에서 위치로
+     * 맞추면 두 번째 사진이 첫 번째의 썸네일을 자리표시자로 깐다. 화면에서는 "잠깐 다른
+     * 옷이 보였다"로만 드러나고, URL만 세는 단언은 그것을 통과시킨다.
+     */
     expect(result.current.slots).toEqual([
-      { id: 'a', state: 'ready', url: 'https://signed/a' },
-      { id: 'b', state: 'ready', url: 'https://signed/b' },
+      { id: 'a', state: 'ready', url: 'https://signed/a', thumbUrl: 'https://signed/a-thumb' },
+      { id: 'b', state: 'ready', url: 'https://signed/b', thumbUrl: 'https://signed/b-thumb' },
     ])
   })
 
@@ -151,6 +160,7 @@ describe('useItemPhotos', () => {
         id: 'a',
         state: 'ready',
         url: 'https://signed/a-fresh',
+        thumbUrl: null,
       }),
     )
   })

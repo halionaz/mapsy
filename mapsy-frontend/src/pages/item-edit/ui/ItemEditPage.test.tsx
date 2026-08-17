@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ItemImage, WardrobeItem } from '@/entities/item'
+import type { PhotoSlot } from '@/features/item-photos'
 import { ItemEditPage } from './ItemEditPage'
 
 /**
@@ -76,15 +77,18 @@ const item: WardrobeItem = {
   coverUrl: 'signed://a',
 }
 
-function renderPage() {
+function renderPage(slots?: PhotoSlot[]) {
   useWardrobeMock.mockReturnValue({ data: [item], isLoading: false })
   useItemPhotosMock.mockReturnValue({
     photos: item.images,
-    slots: item.images.map((entry) => ({
-      id: entry.id,
-      state: 'ready',
-      url: `signed://${entry.id}`,
-    })),
+    slots:
+      slots ??
+      item.images.map((entry) => ({
+        id: entry.id,
+        state: 'ready',
+        url: `signed://${entry.id}`,
+        thumbUrl: `signed://${entry.id}_thumb`,
+      })),
     markUnloadable: vi.fn(),
   })
 
@@ -108,6 +112,26 @@ describe('ItemEditPage', () => {
       expect.objectContaining({ photosChanged: false }),
       expect.anything(),
     )
+  })
+
+  /**
+   * 피커는 원본이 아니라 썸네일을 그리는데, `ready`는 원본이 왔다는 뜻일 뿐 썸네일까지
+   * 왔다는 뜻이 아니다 — `createSignedUrls`가 경로별 실패를 결과에 실어 보내므로 둘 중
+   * 하나만 오는 조합이 실재한다. 그 `null`을 그대로 넘기면 멀쩡한 사진에
+   * "불러오지 못함"이 뜬다.
+   */
+  it('썸네일만 서명하지 못한 사진을 원본으로 그린다', () => {
+    const { container } = renderPage([
+      { id: 'a', state: 'ready', url: 'signed://a', thumbUrl: null },
+      { id: 'b', state: 'ready', url: 'signed://b', thumbUrl: 'signed://b_thumb' },
+    ])
+
+    expect(screen.queryByText('불러오지 못함')).toBeNull()
+    const sources = [...container.querySelectorAll('img')].map((image) => image.getAttribute('src'))
+    expect(sources).toContain('signed://a')
+    // 폴백만 보면 한 줄의 절반만 잡힌다. 썸네일이 온 사진까지 원본으로 그리면 이 화면이
+    // 고치려던 자리 — 84px 타일에 1280px — 로 그대로 돌아간다.
+    expect(sources).toContain('signed://b_thumb')
   })
 
   it('재정렬됐을 때는 그렇다고 알린다', () => {

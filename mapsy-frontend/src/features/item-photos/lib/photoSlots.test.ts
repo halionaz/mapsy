@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { photoSlots } from './photoSlots'
+import { photoSlots, type SignedPhoto } from './photoSlots'
 
 const PHOTOS = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
-const URLS = ['url-a', 'url-b', 'url-c']
+
+/** 원본 URL만 적으면 썸네일은 그것을 따라간다 — 서명이 둘을 함께 내주기 때문이다. */
+const signed = (...urls: (string | null)[]): SignedPhoto[] =>
+  urls.map((url) => ({ url, thumbUrl: url == null ? null : `${url}-thumb` }))
+
+const URLS = signed('url-a', 'url-b', 'url-c')
 
 describe('photoSlots', () => {
   it('아직 서명된 것이 없으면 실패가 아니라 기다린다', () => {
@@ -26,18 +31,28 @@ describe('photoSlots', () => {
 
   it('정착한 URL을 자기 사진과 순서대로 짝짓는다', () => {
     expect(photoSlots(PHOTOS, URLS)).toEqual([
-      { id: 'a', url: 'url-a', state: 'ready' },
-      { id: 'b', url: 'url-b', state: 'ready' },
-      { id: 'c', url: 'url-c', state: 'ready' },
+      { id: 'a', url: 'url-a', thumbUrl: 'url-a-thumb', state: 'ready' },
+      { id: 'b', url: 'url-b', thumbUrl: 'url-b-thumb', state: 'ready' },
+      { id: 'c', url: 'url-c', thumbUrl: 'url-c-thumb', state: 'ready' },
     ])
   })
 
   it('URL을 서명하지 못한 사진만 실패로 만든다', () => {
-    expect(photoSlots(PHOTOS, ['url-a', null, 'url-c']).map((slot) => slot.state)).toEqual([
+    expect(photoSlots(PHOTOS, signed('url-a', null, 'url-c')).map((slot) => slot.state)).toEqual([
       'ready',
       'failed',
       'ready',
     ])
+  })
+
+  it('그릴 원본이 없는 슬롯에는 자리표시자도 남기지 않는다', () => {
+    // 원본만 서명하지 못한 경우다. 썸네일은 멀쩡히 왔지만 그것만 그리면 열 수 없는
+    // 사진이 열 수 있는 것처럼 보인다.
+    const slots = photoSlots(PHOTOS, [
+      { url: null, thumbUrl: 'url-a-thumb' },
+      ...signed('url-b', 'url-c'),
+    ])
+    expect(slots[0]).toEqual({ id: 'a', url: null, thumbUrl: null, state: 'failed' })
   })
 
   it('서명은 됐지만 로드되지 않은 사진을 실패로 만든다', () => {
@@ -48,7 +63,7 @@ describe('photoSlots', () => {
   })
 
   it('준비되지 않은 슬롯에는 URL을 돌려주지 않는다', () => {
-    const slots = photoSlots(PHOTOS, ['url-a', null, 'url-c'], new Set(['c']))
+    const slots = photoSlots(PHOTOS, signed('url-a', null, 'url-c'), new Set(['c']))
     for (const slot of slots) {
       expect(slot.url == null).toBe(slot.state !== 'ready')
     }

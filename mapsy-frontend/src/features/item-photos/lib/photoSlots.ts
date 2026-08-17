@@ -19,32 +19,44 @@ type PhotoSlotState =
   /** 서명이 실패했거나, 사진 자체가 로드되지 않았다. */
   | 'failed'
 
+/** 사진 하나가 받아 든 두 URL. 둘은 한 번의 서명에서 함께 온다. */
+export interface SignedPhoto {
+  /** 상세 화면과 뷰어가 그리는 1280px 원본. */
+  url: string | null
+  /** 원본이 도착하기 전 그 자리에 깔리는 400px 썸네일. */
+  thumbUrl: string | null
+}
+
 /**
  * 선택적 필드가 아니라 유니온이라, 타입 검사기에게도 "ready"와 "URL이 있음"이 같은
  * 사실이 된다 — URL이 있다는 것을 먼저 세우지 않고는 집을 수 없다.
+ *
+ * `thumbUrl`이 `ready`에만 실리는 것은 그것이 원본의 자리표시자이기 때문이다. 그릴 원본이
+ * 없는 슬롯에 자리표시자만 남으면, 열 수 없는 사진이 열 수 있는 것처럼 보인다.
  */
 export type PhotoSlot =
-  | { id: string; state: 'ready'; url: string }
-  | { id: string; state: Exclude<PhotoSlotState, 'ready'>; url: null }
+  | { id: string; state: 'ready'; url: string; thumbUrl: string | null }
+  | { id: string; state: Exclude<PhotoSlotState, 'ready'>; url: null; thumbUrl: null }
 
 export function photoSlots(
   photos: readonly { id: string }[],
   /** 서명이 끝나기 전에는 `null`. 끝나면 사진마다 하나씩 순서대로. */
-  urls: readonly (string | null)[] | null,
+  signed: readonly SignedPhoto[] | null,
   /** URL은 서명됐는데 사진이 로드되지 않은 id. */
   unloadable: ReadonlySet<string> = new Set(),
 ): PhotoSlot[] {
   // 길이가 다르면 그 URL은 다른 사진 집합을 서술하는 것이다 — 아직 날아오는 중이거나,
   // 이전 답이 상태에 남아 있거나. 어느 쪽이든 위치를 믿을 수 없다.
-  const settled = urls != null && urls.length === photos.length
+  const settled = signed != null && signed.length === photos.length
 
   return photos.map((photo, index) => {
-    if (!settled) return { id: photo.id, url: null, state: 'pending' }
+    if (!settled) return { id: photo.id, url: null, thumbUrl: null, state: 'pending' }
 
-    const url = urls[index] ?? null
-    if (url == null || unloadable.has(photo.id)) {
-      return { id: photo.id, url: null, state: 'failed' }
+    // 위에서 길이를 맞춰봤으므로 여기 없는 자리는 없다.
+    const entry = signed[index]
+    if (entry.url == null || unloadable.has(photo.id)) {
+      return { id: photo.id, url: null, thumbUrl: null, state: 'failed' }
     }
-    return { id: photo.id, url, state: 'ready' }
+    return { id: photo.id, url: entry.url, thumbUrl: entry.thumbUrl, state: 'ready' }
   })
 }

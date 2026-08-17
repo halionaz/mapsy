@@ -29,5 +29,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  /* `vitest.setup.ts`가 여기 실려 있는 것은 그것이 모든 테스트에서 돌기 때문이다.
+     `src` 하나만 두면 그 파일은 어느 프로그램에도 속하지 않아 오타조차 잡히지 않는다. */
+  "include": ["src", "vitest.setup.ts"]
 }
